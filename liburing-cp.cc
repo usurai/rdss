@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include <cstring>
 #include <iostream>
 #include <liburing.h>
 
@@ -14,6 +15,9 @@ int main(int argc, char* argv[]) {
     io_uring_queue_init(QD, &ring, 0);
 
     FileInfo in_file(argv[1]);
+    if (!in_file.valid) {
+        return 1;
+    }
 
     auto* sqe = io_uring_get_sqe(&ring);
     if (sqe == nullptr) {
@@ -31,7 +35,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (cqe->res <= 0) {
-        std::cerr << "readv";
+        std::cerr << "readv:" << strerror(-cqe->res) << '\n';
         return 1;
     }
     io_uring_cqe_seen(&ring, cqe);
@@ -55,7 +59,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (cqe->res <= 0) {
-        std::cerr << "writev";
+        std::cerr << "writev:" << strerror(-cqe->res) << '\n';
         return 1;
     }
     io_uring_cqe_seen(&ring, cqe);
