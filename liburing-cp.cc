@@ -8,7 +8,9 @@
 #include <liburing.h>
 #include <vector>
 
-static constexpr size_t QD = 1024;
+static constexpr size_t QD = 64;
+
+int src_fd, dest_fd;
 
 struct TransferUnit {
     enum class State { Reading, Writing };
@@ -37,18 +39,33 @@ struct TransferUnit {
     }
 };
 
+int queue_op(io_uring* ring, TransferUnit& unit) {
+    auto* sqe = io_uring_get_sqe(ring);
+    if (sqe == nullptr) {
+        std::cerr << "io_uring_get_sqe\n";
+        return 1;
+    }
+    if (unit.IsRead()) {
+        io_uring_prep_read(sqe, src_fd, unit.Buffer(), unit.Length(), unit.Offset());
+    } else {
+        io_uring_prep_write(sqe, dest_fd, unit.Buffer(), unit.Length(), unit.Offset());
+    }
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(unit.index));
+    return 0;
+};
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         return 1;
     }
 
-    const auto src_fd = open(argv[1], O_RDONLY);
+    src_fd = open(argv[1], O_RDONLY);
     if (src_fd < 0) {
         std::cerr << "open";
         return 1;
     }
 
-    const auto dest_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    dest_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (dest_fd < 0) {
         std::cerr << "open";
         close(src_fd);
@@ -87,25 +104,10 @@ int main(int argc, char* argv[]) {
         return unit_index;
     };
 
-    auto queue_op = [&](TransferUnit& unit) {
-        auto* sqe = io_uring_get_sqe(&ring);
-        if (sqe == nullptr) {
-            std::cerr << "io_uring_get_sqe\n";
-            return 1;
-        }
-        if (unit.IsRead()) {
-            io_uring_prep_read(sqe, src_fd, unit.Buffer(), unit.Length(), unit.Offset());
-        } else {
-            io_uring_prep_write(sqe, dest_fd, unit.Buffer(), unit.Length(), unit.Offset());
-        }
-        io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(unit.index));
-        return 0;
-    };
-
     bool queued_new{false};
     while (offset < file_size || written < file_size) {
         while (offset < file_size && reading + writting < QD) {
-            if (queue_op(transfer_units[new_read()])) {
+            if (queue_op(&ring, transfer_units[new_read()])) {
                 return 1;
             }
             ++reading;
@@ -131,7 +133,7 @@ int main(int argc, char* argv[]) {
         io_uring_cqe_seen(&ring, cqe);
 
         if (!unit.AdvanceCursor(cqe->res)) {
-            if (queue_op(unit)) {
+            if (queue_op(&ring, unit)) {
                 return 1;
             }
             queued_new = true;
@@ -139,7 +141,7 @@ int main(int argc, char* argv[]) {
             unit.cursor = 0;
             if (unit.IsRead()) {
                 unit.TurnWritting();
-                if (queue_op(unit)) {
+                if (queue_op(&ring, unit)) {
                     return 1;
                 }
                 --reading;
@@ -147,18 +149,20 @@ int main(int argc, char* argv[]) {
                 queued_new = true;
             } else {
                 written += unit.length;
+                --writting;
                 if (offset < file_size) {
                     new_read(unit.index);
-                    if (queue_op(unit)) {
+                    if (queue_op(&ring, unit)) {
                         return 1;
                     }
-                    --writting;
                     ++reading;
                     queued_new = true;
                 }
             }
         }
     }
+    assert(reading == 0);
+    assert(writting == 0);
 
     io_uring_queue_exit(&ring);
     close(src_fd);

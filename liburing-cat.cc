@@ -1,6 +1,7 @@
 #include "util.h"
 
 #include <cassert>
+#include <cstring>
 #include <liburing.h>
 
 static constexpr size_t QUEUE_DEPTH = 1;
@@ -12,6 +13,10 @@ int Submit(io_uring* ring, const std::string& file_path) {
     }
 
     io_uring_sqe* sqe = io_uring_get_sqe(ring);
+    if (sqe == nullptr) {
+        std::cerr << "io_uring_get_sqe\n";
+        return 1;
+    }
     io_uring_prep_readv(sqe, file_info->fd, file_info->iovecs.data(), file_info->iovecs.size(), 0);
     io_uring_sqe_set_data(sqe, file_info);
     io_uring_submit(ring);
@@ -41,7 +46,11 @@ int main(int argc, char* argv[]) {
     assert(argc >= 2);
 
     io_uring ring;
-    io_uring_queue_init(QUEUE_DEPTH, &ring, 0);
+    auto ret = io_uring_queue_init(QUEUE_DEPTH, &ring, 0);
+    if (ret) {
+        std::cerr << "io_uring_queue_init:" << strerror(-ret) << '\n';
+        return 1;
+    }
 
     for (int i = 1; i < argc; ++i) {
         if (Submit(&ring, argv[i])) {
