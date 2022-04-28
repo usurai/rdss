@@ -12,6 +12,14 @@ static constexpr size_t QD = 64;
 int sock;
 io_uring ring;
 
+void queue_multishot_accept() {
+    auto* sqe = io_uring_get_sqe(&ring);
+    assert(sqe != nullptr);
+    // TODO: use direct variant
+    io_uring_prep_multishot_accept(sqe, sock, nullptr, nullptr, 0);
+    io_uring_submit(&ring);
+}
+
 int main() {
     // socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -50,18 +58,10 @@ int main() {
         return 1;
     }
 
-    // loop
     //  queue accept
-    auto* sqe = io_uring_get_sqe(&ring);
-    assert(sqe != nullptr);
+    queue_multishot_accept();
 
-    sockaddr_in client_addr{0};
-    socklen_t client_addr_len{sizeof(client_addr)};
-    // TODO: use direct/multishot variant
-    io_uring_prep_accept(sqe, sock, reinterpret_cast<sockaddr*>(&client_addr), &client_addr_len, 0);
-    io_uring_submit(&ring);
-
-    //  wait cqe
+    // loop, wait cqe
     while (true) {
         io_uring_cqe* cqe;
         auto ret = io_uring_wait_cqe(&ring, &cqe);
@@ -73,18 +73,13 @@ int main() {
             std::cerr << "async accept: " << strerror(errno) << '\n';
             return 1;
         }
-        char buffer[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &client_addr.sin_addr, buffer, sizeof(buffer));
-        std::cout << "accepted from " << buffer << ':' << client_addr.sin_port << '\n';
+        std::cout << "accepted\n";
         close(cqe->res);
+        if (!(cqe->flags & IORING_CQE_F_MORE)) {
+            std::cout << "requeueing accept\n";
+            queue_multishot_accept();
+        }
         io_uring_cqe_seen(&ring, cqe);
-
-        auto* sqe = io_uring_get_sqe(&ring);
-        assert(sqe != nullptr);
-        // TODO: use direct/multishot variant
-        io_uring_prep_accept(
-          sqe, sock, reinterpret_cast<sockaddr*>(&client_addr), &client_addr_len, 0);
-        io_uring_submit(&ring);
     }
     //      if accept
     //          queue accept
