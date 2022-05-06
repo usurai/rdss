@@ -90,7 +90,7 @@ struct Client {
             return ParseResult::Error;
         }
 
-        int argc;
+        size_t argc{0};
         auto [_, ec] = std::from_chars(
           query_buffer.data() + cursor, query_buffer.data() + newline, argc);
         if (ec != std::errc()) {

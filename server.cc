@@ -39,7 +39,8 @@ int main() {
         return 1;
     }
 
-    sockaddr_in addr{0};
+    sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(8080);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -102,7 +103,7 @@ int main() {
             // std::cout << "Request(" << client->read_length
             //           << "):" << std::string_view(client->query_buffer.data(),
             //           client->read_length);
-            client->IncreaseReadLength(cqe->res);
+            client->IncreaseReadLength(static_cast<size_t>(cqe->res));
             // parse buffer: query_buffer->args
             const auto parse_result = client->ParseBuffer();
             switch (parse_result) {
