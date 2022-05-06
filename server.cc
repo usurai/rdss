@@ -96,6 +96,7 @@ int main() {
         }
 
         auto* client = reinterpret_cast<Client*>(cqe->user_data);
+        const auto res = cqe->res;
         io_uring_cqe_seen(&ring, cqe);
 
         bool close_client{false};
@@ -103,7 +104,7 @@ int main() {
             // std::cout << "Request(" << client->read_length
             //           << "):" << std::string_view(client->query_buffer.data(),
             //           client->read_length);
-            client->IncreaseReadLength(static_cast<size_t>(cqe->res));
+            client->IncreaseReadLength(static_cast<size_t>(res));
             // parse buffer: query_buffer->args
             const auto parse_result = client->ParseBuffer();
             switch (parse_result) {
@@ -123,7 +124,10 @@ int main() {
                 continue;
             //  3. done
             case Client::ParseResult::Success:
-                break;
+                std::cout << "Parse done, argc:" << client->arguments.size() << '\n';
+                client->SetError();
+                client->Reply("Parse done.\n");
+                continue;
             }
 
             // TODO
