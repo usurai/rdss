@@ -90,16 +90,17 @@ struct Client {
             return ParseResult::Error;
         }
 
-        size_t argc{0};
-        auto [_, ec] = std::from_chars(
+        int argc{0};
+        // TODO: This seems extremely slow for large number(INT_MAX)
+        auto [ptr, ec] = std::from_chars(
           query_buffer.data() + cursor, query_buffer.data() + newline, argc);
-        if (ec != std::errc()) {
+        if (ec != std::errc() || ptr != query_buffer.data() + newline) {
             return ParseResult::Error;
         }
-        arguments.resize(argc);
+        arguments.resize(static_cast<size_t>(argc));
         cursor = newline + 2;
 
-        std::cout << "argc:" << argc << '\n';
+        std::cout << "argc:" << argc << std::endl;
         return ParseResult::Error;
     }
 
