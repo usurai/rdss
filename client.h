@@ -104,19 +104,21 @@ struct Client {
         return ParseResult::Error;
     }
 
-    bool QueueWrite(const std::string_view& sv) {
+    bool QueueWrite() {
         auto* sqe = io_uring_get_sqe(ring);
         if (sqe == nullptr) {
             return false;
         }
-        io_uring_prep_write(sqe, fd, sv.data(), sv.size(), 0);
+        io_uring_prep_write(sqe, fd, query_buffer.data(), query_buffer.size(), 0);
         io_uring_sqe_set_data(sqe, AsData());
         io_uring_submit(ring);
         return true;
     }
 
-    // TODO: implement
-    void Reply(const std::string& reply) { assert(QueueWrite(reply)); }
+    void Reply(std::string reply) {
+        query_buffer = std::move(reply);
+        assert(QueueWrite());
+    }
 
     void SetError() { state = State::Error; }
 
