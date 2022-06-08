@@ -21,7 +21,7 @@ void queue_multishot_accept() {
     assert(sqe != nullptr);
     // TODO: use direct variant
     io_uring_prep_multishot_accept(sqe, sock, nullptr, nullptr, 0);
-    io_uring_sqe_set_data(sqe, nullptr);
+    io_uring_sqe_set_data(sqe, &ring);
     io_uring_submit(&ring);
 }
 
@@ -82,7 +82,7 @@ int main() {
         }
 
         // if accept, create client and queue read
-        if (cqe->user_data == 0) {
+        if (cqe->user_data == reinterpret_cast<uint64_t>(&ring)) {
             if (!(cqe->flags & IORING_CQE_F_MORE)) {
                 std::cout << "requeueing accept\n";
                 queue_multishot_accept();
