@@ -9,7 +9,7 @@ namespace rdss::test {
 class ClientTest : public testing::Test {
 public:
     static Client CreateClient(std::string buffer) {
-    Client c(nullptr, 0);
+        Client c(nullptr, 0);
         c.query_buffer = std::move(buffer);
         c.read_length = c.query_buffer.size();
         return c;
@@ -50,6 +50,41 @@ TEST(ClientTest, parseBufferArgc) {
     EXPECT_EQ(get_argc("*-1\r\n"), 0);
     EXPECT_EQ(get_argc("*12345a\r\n"), 0);
     EXPECT_EQ(get_argc("*x1\r\n"), 0);
+}
+
+TEST(ClientTest, parseBuffer) {
+    {
+        auto c = ClientTest::CreateClient("*1\r\n$5\r\nHELLO\r\n");
+        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_TRUE(ClientTest::CompareArgv(c, {"HELLO"}));
+    }
+
+    {
+        auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n$6\r\n WORLD\r\n");
+        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_TRUE(ClientTest::CompareArgv(c, {"HELLO", " WORLD"}));
+    }
+
+    {
+        auto c = ClientTest::CreateClient("*1\r\n$0\r\n\r\n");
+        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_TRUE(ClientTest::CompareArgv(c, {""}));
+    }
+
+    {
+        auto c = ClientTest::CreateClient("*1\r\n$5\r\nHELL\r\n");
+        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+    }
+
+    {
+        auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n");
+        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+    }
+
+    {
+        auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n$120\r\n");
+        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+    }
 }
 
 } // namespace rdss::test

@@ -76,8 +76,9 @@ struct Client {
 
     enum class ParseResult { Error, NeedsMore, Success };
 
-    // TODO: implement
-    // TODO: currently only supports one pass, add accumulate.
+    // Parse multi-bulk input.
+    // TODO: Currently only supports bulk strings type.
+    // TODO: Currently only supports one pass, add accumulate.
     ParseResult ParseBuffer() {
         assert(cursor == 0);
         if (query_buffer[cursor] != '*') {
@@ -85,22 +86,76 @@ struct Client {
         }
         ++cursor;
 
-        auto newline = query_buffer.find_first_of('\r', cursor);
-        if (newline == std::string::npos || query_buffer[newline + 1] != '\n') {
+        // Finds index of next CRLF starting from cursor. Returns 0 if not found.
+        auto next_newline = [&]() {
+            auto newline = query_buffer.find_first_of('\r', cursor);
+            if (
+              newline == std::string::npos || newline + 1 >= read_length
+              || query_buffer[newline + 1] != '\n') {
+                return 0UL;
+            }
+            return newline;
+        };
+
+        // Tries to parse query_buffer[cursor, cursor+newline] to int.
+        // Returns [success, result]: returns fail on parsed int <= 0 even if parsing succeed.
+        auto parse_int = [&](size_t newline) {
+            int argc{0};
+            // TODO: This seems extremely slow for large number(INT_MAX)
+            auto [ptr, ec] = std::from_chars(
+              query_buffer.data() + cursor, query_buffer.data() + newline, argc);
+            if (ec != std::errc() || ptr != query_buffer.data() + newline || argc < 0) {
+                return std::make_pair(false, 0UL);
+            }
+            return std::make_pair(true, static_cast<size_t>(argc));
+        };
+
+        auto newline = next_newline();
+        if (!newline) {
             return ParseResult::Error;
         }
 
-        int argc{0};
-        // TODO: This seems extremely slow for large number(INT_MAX)
-        auto [ptr, ec] = std::from_chars(
-          query_buffer.data() + cursor, query_buffer.data() + newline, argc);
-        if (ec != std::errc() || ptr != query_buffer.data() + newline) {
+        auto [success, argc] = parse_int(newline);
+        if (!success || argc == 0) {
             return ParseResult::Error;
         }
-        arguments.resize(static_cast<size_t>(argc));
+        arguments.resize(argc);
         cursor = newline + 2;
 
-        std::cout << "argc:" << argc << std::endl;
+        assert(arg_cursor == 0);
+        while (cursor < read_length) {
+            if (query_buffer[cursor] != '$') {
+                return ParseResult::Error;
+            }
+            ++cursor;
+
+            if ((newline = next_newline()) == 0) {
+                return ParseResult::Error;
+            }
+            const auto [success, str_len] = parse_int(newline);
+            if (!success) {
+                return ParseResult::Error;
+            }
+
+            cursor = newline + 2;
+            if (cursor + str_len + 2 > read_length) {
+                return ParseResult::Error;
+            }
+
+            if (
+              query_buffer[cursor + str_len] != '\r'
+              || query_buffer[cursor + str_len + 1] != '\n') {
+                return ParseResult::Error;
+            }
+
+            arguments[arg_cursor].data = query_buffer.data() + cursor;
+            arguments[arg_cursor].length = str_len;
+
+            cursor += arguments[arg_cursor].length + 2;
+            if (++arg_cursor == arguments.size()) {
+                return ParseResult::Success;
+            }
+        }
         return ParseResult::Error;
     }
 
