@@ -12,6 +12,7 @@ enable_testing()
 add_executable(
     client_test
     client_test.cc
+    ../dragonfly/io_buf.cc
 )
 
 target_include_directories(client_test PUBLIC ../)

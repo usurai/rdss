@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dragonfly/io_buf.h"
+#include "dragonfly/redis_parser.h"
 #include "server.h"
 
 #include <cassert>
@@ -13,7 +15,7 @@
 namespace rdss {
 
 // TODO: move implementation to .cpp
-struct Client {
+struct Connection {
     enum class State { Reading, Writting, Error };
 
     struct Argument {
@@ -26,6 +28,10 @@ struct Client {
     State state{State::Reading};
     int fd;
 
+    base::IoBuf buffer;
+    facade::RedisParser parser;
+    facade::RespExpr::Vec vec;
+
     std::string query_buffer;
     size_t read_length{0};
     size_t cursor{0};
@@ -33,17 +39,19 @@ struct Client {
     std::vector<Argument> arguments;
     size_t arg_cursor{0};
 
-    Client(io_uring* ring_, int fd_)
+    Connection(io_uring* ring_, int fd_)
       : ring(ring_)
-      , fd(fd_) {
+      , fd(fd_)
+      // TODO
+      , buffer(256, std::align_val_t(8)) {
         query_buffer.resize(READ_SIZE);
     }
 
-    bool Reading() const { return state == Client::State::Reading; }
+    bool Reading() const { return state == Connection::State::Reading; }
 
-    bool Writting() const { return state == Client::State::Writting; }
+    bool Writting() const { return state == Connection::State::Writting; }
 
-    bool HasError() const { return state == Client::State::Error; }
+    bool HasError() const { return state == Connection::State::Error; }
 
     bool QueueRead() {
         assert(NextReadLengthLimit() > 0);
@@ -52,7 +60,8 @@ struct Client {
         if (sqe == nullptr) {
             return false;
         }
-        io_uring_prep_read(sqe, fd, NextBufferToRead(), NextReadLengthLimit(), 0);
+        // io_uring_prep_read(sqe, fd, NextBufferToRead(), NextReadLengthLimit(), 0);
+        io_uring_prep_read(sqe, fd, buffer.AppendBuffer().data(), buffer.AppendLen(), 0);
         io_uring_sqe_set_data(sqe, AsData());
         io_uring_submit(ring);
         return true;
@@ -173,13 +182,12 @@ struct Client {
     void Reply(std::string reply) {
         query_buffer = std::move(reply);
         assert(QueueWrite());
+        state = State::Writting;
     }
 
     void SetError() { state = State::Error; }
 
-    std::string_view Command() const {
-        return std::string_view(arguments[0].data, arguments[0].length);
-    }
+    std::string Command() const { return vec[0].GetString(); }
 };
 
 } // namespace rdss

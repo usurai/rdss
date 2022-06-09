@@ -1,4 +1,4 @@
-#include "client.h"
+#include "connection.h"
 
 #include <gtest/gtest.h>
 
@@ -8,14 +8,14 @@ namespace rdss::test {
 
 class ClientTest : public testing::Test {
 public:
-    static Client CreateClient(std::string buffer) {
-        Client c(nullptr, 0);
+    static Connection CreateClient(std::string buffer) {
+        Connection c(nullptr, 0);
         c.query_buffer = std::move(buffer);
         c.read_length = c.query_buffer.size();
         return c;
     }
 
-    static bool CompareArgv(Client& c, std::vector<std::string> argvs = {}) {
+    static bool CompareArgv(Connection& c, std::vector<std::string> argvs = {}) {
         if (c.arguments.size() != argvs.size()) {
             return false;
         }
@@ -31,7 +31,7 @@ public:
 
 TEST(ClientTest, parseBufferArgc) {
     auto get_argc = [&](const std::string& buffer) {
-        Client c(nullptr, 0);
+        Connection c(nullptr, 0);
         c.query_buffer = buffer;
         c.read_length = buffer.size();
         c.ParseBuffer();
@@ -55,35 +55,35 @@ TEST(ClientTest, parseBufferArgc) {
 TEST(ClientTest, parseBuffer) {
     {
         auto c = ClientTest::CreateClient("*1\r\n$5\r\nHELLO\r\n");
-        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Success, c.ParseBuffer());
         EXPECT_TRUE(ClientTest::CompareArgv(c, {"HELLO"}));
     }
 
     {
         auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n$6\r\n WORLD\r\n");
-        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Success, c.ParseBuffer());
         EXPECT_TRUE(ClientTest::CompareArgv(c, {"HELLO", " WORLD"}));
     }
 
     {
         auto c = ClientTest::CreateClient("*1\r\n$0\r\n\r\n");
-        EXPECT_EQ(Client::ParseResult::Success, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Success, c.ParseBuffer());
         EXPECT_TRUE(ClientTest::CompareArgv(c, {""}));
     }
 
     {
         auto c = ClientTest::CreateClient("*1\r\n$5\r\nHELL\r\n");
-        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Error, c.ParseBuffer());
     }
 
     {
         auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n");
-        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Error, c.ParseBuffer());
     }
 
     {
         auto c = ClientTest::CreateClient("*2\r\n$5\r\nHELLO\r\n$120\r\n");
-        EXPECT_EQ(Client::ParseResult::Error, c.ParseBuffer());
+        EXPECT_EQ(Connection::ParseResult::Error, c.ParseBuffer());
     }
 }
 

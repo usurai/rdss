@@ -1,6 +1,8 @@
 #include "server.h"
 
-#include "client.h"
+#include "connection.h"
+#include "dragonfly/redis_parser.h"
+#include "dragonfly/resp_expr.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -11,7 +13,7 @@
 #include <iostream>
 #include <liburing.h>
 
-using rdss::Client;
+using rdss::Connection;
 
 int sock;
 io_uring ring;
@@ -88,45 +90,51 @@ int main() {
                 queue_multishot_accept();
             }
 
-            auto client = new Client(&ring, cqe->res);
+            auto connection = new Connection(&ring, cqe->res);
             // TODO: handle the case of too manu queued
-            assert(client->QueueRead());
+            assert(connection->QueueRead());
             io_uring_cqe_seen(&ring, cqe);
             continue;
         }
 
-        auto* client = reinterpret_cast<Client*>(cqe->user_data);
+        auto* connection = reinterpret_cast<Connection*>(cqe->user_data);
         const auto res = cqe->res;
         io_uring_cqe_seen(&ring, cqe);
 
         bool close_client{false};
-        if (client->Reading()) {
+        if (connection->Reading()) {
             // std::cout << "Request(" << client->read_length
             //           << "):" << std::string_view(client->query_buffer.data(),
             //           client->read_length);
-            client->IncreaseReadLength(static_cast<size_t>(res));
+            connection->buffer.CommitWrite(static_cast<size_t>(res));
+            // client->IncreaseReadLength(static_cast<size_t>(res));
             // parse buffer: query_buffer->args
-            const auto parse_result = client->ParseBuffer();
-            switch (parse_result) {
-            //  1. error: reply error, close
-            case Client::ParseResult::Error:
-                client->SetError();
-                client->Reply("Parse error.\n");
+            // const auto parse_result = client->ParseBuffer();
+
+            uint32_t consumed{0};
+            auto res = connection->parser.Parse(
+              connection->buffer.InputBuffer(), &consumed, &connection->vec);
+            if (consumed != 0) {
+                connection->buffer.ConsumeInput(consumed);
+            }
+            switch (res) {
+            case facade::RedisParser::Result::OK:
+                std::cout << "Parse done, argc:" << connection->vec.size() << '\n';
+
+                // TODO: temp
+                // connection->SetError();
+                // connection->Reply("Parse error.\n");
+                // continue;
+
+                break;
+            case facade::RedisParser::Result::INPUT_PENDING:
+                std::cout << "Needs more\n";
+                connection->buffer.EnsureCapacity(connection->buffer.Capacity());
+                connection->QueueRead();
                 continue;
-            //  2. not enough read: extent buffer, queue read again
-            case Client::ParseResult::NeedsMore:
-                if (!client->ExpandQueryBuffer()) {
-                    client->SetError();
-                    client->Reply("Exceed read limit.");
-                } else {
-                    client->QueueRead();
-                }
-                continue;
-            //  3. done
-            case Client::ParseResult::Success:
-                std::cout << "Parse done, argc:" << client->arguments.size() << '\n';
-                client->SetError();
-                client->Reply("Parse done.\n");
+            default:
+                connection->SetError();
+                connection->Reply("Parse error.\n");
                 continue;
             }
 
@@ -136,14 +144,18 @@ int main() {
             //  2. done
             // execute command
 
-            if (client->Command().compare("PING") || client->Command().compare("ping")) {
-                client->Reply("PONG\n");
-            } else if (client->Command().compare("SET") || client->Command().compare("set")) {
+            if (!connection->Command().compare("PING") || !connection->Command().compare("ping")) {
+                connection->Reply("PONG\n");
+            } else if (
+              !connection->Command().compare("SET") || !connection->Command().compare("set")) {
                 // TODO: implement
-            } else if (client->Command().compare("GET") || client->Command().compare("get")) {
+                close_client = true;
+            } else if (
+              !connection->Command().compare("GET") || !connection->Command().compare("get")) {
                 // TODO: implement
+                close_client = true;
             }
-        } else if (client->Writting()) {
+        } else if (connection->Writting()) {
             // TODO: handle short write
             close_client = true;
         } else {
@@ -152,8 +164,8 @@ int main() {
         }
 
         if (close_client) {
-            close(client->fd);
-            delete client;
+            close(connection->fd);
+            delete connection;
         }
     }
 

@@ -2,7 +2,11 @@ cmake_minimum_required(VERSION 3.14)
 
 project(rdss)
 
-set(CMAKE_CXX_STANDARD 17)
+find_package(absl REQUIRED)
+find_package (glog REQUIRED)
+
+
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -18,7 +22,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfatal-errors -Wno-unused-function")
 
 # TODO: conditional
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
 
 # TODO: gtest seems doesn't work with msan
@@ -30,11 +34,23 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
 add_executable(
     server
     server.cc
+    dragonfly/io_buf.cc
+    dragonfly/logging.cc
+    dragonfly/op_status.cc
+    dragonfly/redis_parser.cc
+    dragonfly/resp_expr.cc
 )
 
 target_link_libraries(
     server
     /usr/lib/liburing.a
+    absl::flags_parse
+    absl::strings
+    absl::symbolize
+    absl::time
+    absl::failure_signal_handler
+    absl::str_format
+    glog::glog
 )
 
 add_subdirectory(test)
