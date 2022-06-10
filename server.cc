@@ -1,5 +1,6 @@
 #include "server.h"
 
+#include "command.h"
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
 #include "dragonfly/resp_expr.h"
@@ -13,10 +14,16 @@
 #include <iostream>
 #include <liburing.h>
 
+using rdss::Command;
 using rdss::Connection;
+using CommandDictionary = std::unordered_map<std::string, Command>;
+using DataType = std::map<std::string, std::string>;
+using Result = rdss::Result;
 
 int sock;
 io_uring ring;
+CommandDictionary cmd_dict;
+DataType data;
 
 void queue_multishot_accept() {
     auto* sqe = io_uring_get_sqe(&ring);
@@ -25,6 +32,18 @@ void queue_multishot_accept() {
     io_uring_prep_multishot_accept(sqe, sock, nullptr, nullptr, 0);
     io_uring_sqe_set_data(sqe, &ring);
     io_uring_submit(&ring);
+}
+
+Result Ping() {
+    Result res;
+    res.count = 1;
+    res.results.push_back("PONG");
+    return res;
+}
+
+void RegisterCommands() {
+    cmd_dict.insert(
+      {"PING", Command("PING").SetHandler([](facade::RespExpr::Vec&) { return Ping(); })});
 }
 
 int main() {
@@ -65,6 +84,8 @@ int main() {
         std::cerr << "io_uring_queue_init: " << strerror(-ret) << '\n';
         return 1;
     }
+
+    RegisterCommands();
 
     //  queue accept
     queue_multishot_accept();
@@ -138,23 +159,20 @@ int main() {
                 continue;
             }
 
-            // TODO
-            // lookup command
-            //  1. not found: reply error, close
-            //  2. done
-            // execute command
-
-            if (!connection->Command().compare("PING") || !connection->Command().compare("ping")) {
-                connection->Reply("PONG\n");
-            } else if (
-              !connection->Command().compare("SET") || !connection->Command().compare("set")) {
-                // TODO: implement
-                close_client = true;
-            } else if (
-              !connection->Command().compare("GET") || !connection->Command().compare("get")) {
-                // TODO: implement
-                close_client = true;
+            auto cmd_itor = cmd_dict.find(connection->Command());
+            if (cmd_itor == cmd_dict.end()) {
+                connection->SetError();
+                connection->Reply("Parse error.\n");
+                continue;
             }
+
+            auto result = cmd_itor->second(connection->vec);
+
+            // TODO: result can be nil, that is count == 0
+            // TODO: support multiple results
+            // TODO: support error
+            assert(result.count == 1);
+            connection->Reply(result.results[0]);
         } else if (connection->Writting()) {
             // TODO: handle short write
             close_client = true;
