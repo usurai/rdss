@@ -19,6 +19,7 @@ using rdss::Connection;
 using CommandDictionary = std::unordered_map<std::string, Command>;
 using DataType = std::map<std::string, std::string>;
 using Result = rdss::Result;
+using ArgList = facade::RespExpr::Vec;
 
 int sock;
 io_uring ring;
@@ -41,9 +42,33 @@ Result Ping() {
     return res;
 }
 
+Result Set(ArgList& args) {
+    assert(args.size() == 3);
+    data[args[1].GetString()] = args[2].GetString();
+    Result res;
+    res.count = 1;
+    res.results.push_back("OK");
+    return res;
+}
+
+Result Get(ArgList& args) {
+    assert(args.size() == 2);
+
+    Result res;
+    res.count = 1;
+    auto it = data.find(args[1].GetString());
+    if (it == data.end()) {
+        res.results.push_back("Not found.");
+    } else {
+        res.results.push_back(it->second);
+    }
+    return res;
+}
+
 void RegisterCommands() {
-    cmd_dict.insert(
-      {"PING", Command("PING").SetHandler([](facade::RespExpr::Vec&) { return Ping(); })});
+    cmd_dict.insert({"PING", Command("PING").SetHandler([](ArgList&) { return Ping(); })});
+    cmd_dict.insert({"SET", Command("SET").SetHandler([](ArgList& args) { return Set(args); })});
+    cmd_dict.insert({"GET", Command("GET").SetHandler([](ArgList& args) { return Get(args); })});
 }
 
 int main() {
