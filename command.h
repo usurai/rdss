@@ -11,8 +11,20 @@
 namespace rdss {
 
 struct Result {
-    size_t count{0};
-    std::vector<std::string> results;
+    std::vector<std::string> data;
+    std::vector<bool> is_null;
+
+    void Add(std::string s) {
+        data.push_back(std::move(s));
+        is_null.push_back(false);
+    }
+
+    void AddNull() {
+        data.push_back({});
+        is_null.push_back(true);
+    }
+
+    size_t Size() const { return data.size(); }
 };
 
 class Command {
@@ -25,9 +37,7 @@ public:
         return *this;
     }
 
-    Result operator()(facade::RespExpr::Vec& vec) {
-        return handler_(vec);
-    }
+    Result operator()(facade::RespExpr::Vec& vec) { return handler_(vec); }
 
 private:
     const std::string name_;

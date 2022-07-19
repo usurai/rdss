@@ -37,8 +37,7 @@ void queue_multishot_accept() {
 
 Result Ping() {
     Result res;
-    res.count = 1;
-    res.results.push_back("PONG");
+    res.Add("PONG");
     return res;
 }
 
@@ -46,8 +45,7 @@ Result Set(ArgList& args) {
     assert(args.size() == 3);
     data[args[1].GetString()] = args[2].GetString();
     Result res;
-    res.count = 1;
-    res.results.push_back("OK");
+    res.Add("OK");
     return res;
 }
 
@@ -55,12 +53,11 @@ Result Get(ArgList& args) {
     assert(args.size() == 2);
 
     Result res;
-    res.count = 1;
     auto it = data.find(args[1].GetString());
     if (it == data.end()) {
-        res.results.push_back("Not found.");
+        res.AddNull();
     } else {
-        res.results.push_back(it->second);
+        res.Add(it->second);
     }
     return res;
 }
@@ -196,8 +193,8 @@ int main() {
             // TODO: result can be nil, that is count == 0
             // TODO: support multiple results
             // TODO: support error
-            assert(result.count == 1);
-            connection->Reply(result.results[0]);
+            assert(result.Size() == 1);
+            connection->Reply(result.data[0]);
         } else if (connection->Writting()) {
             // TODO: handle short write
             close_client = true;
