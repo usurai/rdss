@@ -4,6 +4,7 @@
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
 #include "dragonfly/resp_expr.h"
+#include "replier.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -189,12 +190,8 @@ int main() {
             }
 
             auto result = cmd_itor->second(connection->vec);
-
-            // TODO: result can be nil, that is count == 0
-            // TODO: support multiple results
             // TODO: support error
-            assert(result.Size() == 1);
-            connection->Reply(result.data[0]);
+            connection->Reply(rdss::Replier::BuildReply(std::move(result)));
         } else if (connection->Writting()) {
             // TODO: handle short write
             close_client = true;
