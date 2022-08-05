@@ -200,7 +200,9 @@ int main() {
             connection->Reply(rdss::Replier::BuildReply(std::move(result)));
         } else if (connection->Writting()) {
             // TODO: handle short write
-            close_client = true;
+            connection->buffer.Clear();
+            assert(connection->QueueRead());
+            connection->state = Connection::State::Reading;
         } else {
             // TODO: handle short write
             close_client = true;
