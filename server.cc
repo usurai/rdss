@@ -36,6 +36,18 @@ void queue_multishot_accept() {
     io_uring_submit(&ring);
 }
 
+Result Hello(ArgList& args) {
+    Result res;
+    if (args[1].GetString().compare("3")) {
+        res.Add("Error");
+    } else {
+        res.Add("OK");
+    }
+    return res;
+}
+
+Result Blockhole() { return Result{}; }
+
 Result Ping() {
     Result res;
     res.Add("PONG");
@@ -64,9 +76,13 @@ Result Get(ArgList& args) {
 }
 
 void RegisterCommands() {
+    cmd_dict.insert(
+      {"HELLO", Command("HELLO").SetHandler([](ArgList& args) { return Hello(args); })});
     cmd_dict.insert({"PING", Command("PING").SetHandler([](ArgList&) { return Ping(); })});
     cmd_dict.insert({"SET", Command("SET").SetHandler([](ArgList& args) { return Set(args); })});
     cmd_dict.insert({"GET", Command("GET").SetHandler([](ArgList& args) { return Get(args); })});
+    cmd_dict.insert(
+      {"COMMAND", Command("COMMAND").SetHandler([](ArgList&) { return Blockhole(); })});
 }
 
 int main() {
