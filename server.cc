@@ -145,6 +145,12 @@ int main() {
         const auto res = cqe->res;
         io_uring_cqe_seen(&ring, cqe);
 
+        if (res == 0) {
+            close(connection->fd);
+            delete connection;
+            continue;
+        }
+
         bool close_client{false};
         if (connection->Reading()) {
             // std::cout << "Request(" << client->read_length
