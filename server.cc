@@ -86,6 +86,8 @@ void RegisterCommands() {
 }
 
 int main() {
+    // TODO: Make these flags.
+    const bool poll_mode{false};
     // socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
@@ -118,7 +120,17 @@ int main() {
     }
 
     // setup ring
-    auto ret = io_uring_queue_init(rdss::QD, &ring, 0);
+    int ret;
+    if (poll_mode) {
+        io_uring_params p = {};
+        p.sq_entries = rdss::QD;
+        p.cq_entries = rdss::QD * 8;
+        p.flags |= IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP;
+        p.flags |= IORING_SETUP_SQPOLL;
+        ret = io_uring_queue_init_params(rdss::QD, &ring, &p);
+    } else {
+        ret = io_uring_queue_init(rdss::QD, &ring, 0);
+    }
     if (ret) {
         std::cerr << "io_uring_queue_init: " << strerror(-ret) << '\n';
         return 1;
