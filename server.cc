@@ -85,9 +85,69 @@ void RegisterCommands() {
       {"COMMAND", Command("COMMAND").SetHandler([](ArgList&) { return Blockhole(); })});
 }
 
+void HandleAccept(io_uring_cqe* cqe) {
+    if (!(cqe->flags & IORING_CQE_F_MORE)) {
+        std::cout << "requeueing accept\n";
+        queue_multishot_accept();
+    }
+
+    auto connection = new Connection(&ring, cqe->res);
+    // TODO: handle the case of too manu queued
+    assert(connection->QueueRead());
+    io_uring_cqe_seen(&ring, cqe);
+}
+
+void HandleRead(Connection* connection, int32_t bytes) {
+    connection->buffer.CommitWrite(static_cast<size_t>(bytes));
+
+    // std::cout << "Request("
+    //           << "):"
+    //           << std::string_view(
+    //                reinterpret_cast<char*>(connection->buffer.InputBuffer().data()),
+    //                connection->buffer.InputLen())
+    //           << '\n';
+    // client->IncreaseReadLength(static_cast<size_t>(res));
+    // parse buffer: query_buffer->args
+    // const auto parse_result = client->ParseBuffer();
+
+    uint32_t consumed{0};
+    auto res = connection->parser.Parse(
+      connection->buffer.InputBuffer(), &consumed, &connection->vec);
+    if (consumed != 0) {
+        connection->buffer.ConsumeInput(consumed);
+    }
+    switch (res) {
+    case facade::RedisParser::Result::OK:
+        // std::cout << "Parse done, argc:" << connection->vec.size() << '\n';
+        break;
+    case facade::RedisParser::Result::INPUT_PENDING:
+        std::cout << "Needs more\n";
+        connection->buffer.EnsureCapacity(connection->buffer.Capacity());
+        connection->QueueRead();
+        return;
+    default:
+        connection->SetError();
+        connection->Reply("Parse error.\n");
+        return;
+    }
+
+    auto cmd_itor = cmd_dict.find(connection->Command());
+    if (cmd_itor == cmd_dict.end()) {
+        connection->SetError();
+        connection->Reply("Command not found.\n");
+        return;
+    }
+
+    auto result = cmd_itor->second(connection->vec);
+    // TODO: support error
+    connection->Reply(rdss::Replier::BuildReply(std::move(result)));
+}
+
 int main() {
     // TODO: Make these flags.
     const bool poll_mode{false};
+    const bool drain_cq{true};
+
     // socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
@@ -143,102 +203,74 @@ int main() {
 
     // loop, wait cqe
     while (true) {
+        assert(!io_uring_cq_has_overflow(&ring));
+
         io_uring_cqe* cqe;
         auto ret = io_uring_wait_cqe(&ring, &cqe);
         if (ret) {
             std::cerr << "io_uring_wait_cqe: " << strerror(-ret) << '\n';
             return 1;
         }
-        // TODO: don't quit here
-        if (cqe->res < 0) {
-            std::cerr << "async op: " << strerror(-cqe->res) << '\n';
-            return 1;
-        }
 
-        // if accept, create client and queue read
-        if (cqe->user_data == reinterpret_cast<uint64_t>(&ring)) {
-            if (!(cqe->flags & IORING_CQE_F_MORE)) {
-                std::cout << "requeueing accept\n";
-                queue_multishot_accept();
+        int32_t submitted{0};
+        while (true) {
+            // TODO: don't quit here
+            if (cqe->res < 0) {
+                std::cerr << "async op: " << strerror(-cqe->res) << '\n';
+                return 1;
+            }
+            // if accept, create client and queue read
+            if (cqe->user_data == reinterpret_cast<uint64_t>(&ring)) {
+                HandleAccept(cqe);
+                ++submitted;
+            } else {
+                auto* connection = reinterpret_cast<Connection*>(cqe->user_data);
+                const auto res = cqe->res;
+                io_uring_cqe_seen(&ring, cqe);
+
+                bool close_client{false};
+                if (res == 0) {
+                    close_client = true;
+                } else {
+                    if (connection->Reading()) {
+                        HandleRead(connection, res);
+                        ++submitted;
+                    } else if (connection->Writting()) {
+                        // TODO: handle short write
+                        connection->buffer.Clear();
+                        assert(connection->QueueRead());
+                        connection->state = Connection::State::Reading;
+                        ++submitted;
+                    } else {
+                        // TODO: handle short write
+                        close_client = true;
+                    }
+                }
+                if (close_client) {
+                    close(connection->fd);
+                    delete connection;
+                }
             }
 
-            auto connection = new Connection(&ring, cqe->res);
-            // TODO: handle the case of too manu queued
-            assert(connection->QueueRead());
-            io_uring_cqe_seen(&ring, cqe);
-            continue;
-        }
-
-        auto* connection = reinterpret_cast<Connection*>(cqe->user_data);
-        const auto res = cqe->res;
-        io_uring_cqe_seen(&ring, cqe);
-
-        if (res == 0) {
-            close(connection->fd);
-            delete connection;
-            continue;
-        }
-
-        bool close_client{false};
-        if (connection->Reading()) {
-            // std::cout << "Request(" << client->read_length
-            //           << "):" << std::string_view(client->query_buffer.data(),
-            //           client->read_length);
-            connection->buffer.CommitWrite(static_cast<size_t>(res));
-            // client->IncreaseReadLength(static_cast<size_t>(res));
-            // parse buffer: query_buffer->args
-            // const auto parse_result = client->ParseBuffer();
-
-            uint32_t consumed{0};
-            auto res = connection->parser.Parse(
-              connection->buffer.InputBuffer(), &consumed, &connection->vec);
-            if (consumed != 0) {
-                connection->buffer.ConsumeInput(consumed);
-            }
-            switch (res) {
-            case facade::RedisParser::Result::OK:
-                std::cout << "Parse done, argc:" << connection->vec.size() << '\n';
-
-                // TODO: temp
-                // connection->SetError();
-                // connection->Reply("Parse error.\n");
-                // continue;
-
+            if (!drain_cq) {
                 break;
-            case facade::RedisParser::Result::INPUT_PENDING:
-                std::cout << "Needs more\n";
-                connection->buffer.EnsureCapacity(connection->buffer.Capacity());
-                connection->QueueRead();
-                continue;
-            default:
-                connection->SetError();
-                connection->Reply("Parse error.\n");
-                continue;
             }
 
-            auto cmd_itor = cmd_dict.find(connection->Command());
-            if (cmd_itor == cmd_dict.end()) {
-                connection->SetError();
-                connection->Reply("Parse error.\n");
-                continue;
+            if (io_uring_sq_space_left(&ring) == 0) {
+                break;
             }
-
-            auto result = cmd_itor->second(connection->vec);
-            // TODO: support error
-            connection->Reply(rdss::Replier::BuildReply(std::move(result)));
-        } else if (connection->Writting()) {
-            // TODO: handle short write
-            connection->buffer.Clear();
-            assert(connection->QueueRead());
-            connection->state = Connection::State::Reading;
-        } else {
-            // TODO: handle short write
-            close_client = true;
+            auto ret = io_uring_peek_cqe(&ring, &cqe);
+            if (!ret) {
+                continue;
+            } else if (ret == -EAGAIN) {
+                break;
+            } else {
+                std::cerr << "io_uring_peek_cqe: " << strerror(-ret) << '\n';
+                return 1;
+            }
         }
-
-        if (close_client) {
-            close(connection->fd);
-            delete connection;
+        if (submitted) {
+            io_uring_submit(&ring);
         }
     }
 
