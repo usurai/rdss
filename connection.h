@@ -63,6 +63,9 @@ struct Connection {
         // io_uring_prep_read(sqe, fd, NextBufferToRead(), NextReadLengthLimit(), 0);
         io_uring_prep_read(sqe, fd, buffer.AppendBuffer().data(), buffer.AppendLen(), 0);
         io_uring_sqe_set_data(sqe, AsData());
+        if (SQE_ASYNC) {
+            io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+        }
         // io_uring_submit(ring);
         return true;
     }
@@ -175,6 +178,9 @@ struct Connection {
         }
         io_uring_prep_write(sqe, fd, query_buffer.data(), query_buffer.size(), 0);
         io_uring_sqe_set_data(sqe, AsData());
+        if (SQE_ASYNC) {
+            io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+        }
         // assert(io_uring_submit(ring) == 1);
         // io_uring_submit(ring);
         return true;
