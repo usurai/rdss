@@ -144,10 +144,6 @@ void HandleRead(Connection* connection, int32_t bytes) {
 }
 
 int main() {
-    // TODO: Make these flags.
-    const bool poll_mode{false};
-    const bool drain_cq{true};
-
     // socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
@@ -181,7 +177,7 @@ int main() {
 
     // setup ring
     int ret;
-    if (poll_mode) {
+    if (rdss::SQ_POLL) {
         io_uring_params p = {};
         p.sq_entries = rdss::QD;
         p.cq_entries = rdss::QD * 8;
@@ -252,7 +248,7 @@ int main() {
                 }
             }
 
-            if (!drain_cq) {
+            if (!rdss::DRAIN_CQ) {
                 break;
             }
 
