@@ -16,7 +16,7 @@ namespace rdss {
 
 // TODO: move implementation to .cpp
 struct Connection {
-    enum class State { Reading, Writting, Error };
+    enum class State { Alive, Closing };
 
     struct Argument {
         char* data;
@@ -24,8 +24,9 @@ struct Connection {
     };
 
     io_uring* ring;
+    io_uring* write_ring;
 
-    State state{State::Reading};
+    State state{State::Alive};
     int fd;
 
     base::IoBuf buffer;
@@ -39,19 +40,14 @@ struct Connection {
     std::vector<Argument> arguments;
     size_t arg_cursor{0};
 
-    Connection(io_uring* ring_, int fd_)
+    Connection(io_uring* ring_, io_uring* write_ring_, int fd_)
       : ring(ring_)
+      , write_ring(write_ring_)
       , fd(fd_)
       // TODO
       , buffer(256, std::align_val_t(8)) {
         query_buffer.resize(READ_SIZE);
     }
-
-    bool Reading() const { return state == Connection::State::Reading; }
-
-    bool Writting() const { return state == Connection::State::Writting; }
-
-    bool HasError() const { return state == Connection::State::Error; }
 
     bool QueueRead() {
         assert(NextReadLengthLimit() > 0);
@@ -171,8 +167,8 @@ struct Connection {
         return ParseResult::Error;
     }
 
-    bool QueueWrite() {
-        auto* sqe = io_uring_get_sqe(ring);
+    bool QueueWrite(bool link = false) {
+        auto* sqe = io_uring_get_sqe(write_ring);
         if (sqe == nullptr) {
             return false;
         }
@@ -181,18 +177,44 @@ struct Connection {
         if (SQE_ASYNC) {
             io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
         }
+        if (link) {
+            sqe->flags |= IOSQE_IO_LINK;
+        }
         // assert(io_uring_submit(ring) == 1);
-        // io_uring_submit(ring);
+        io_uring_submit(write_ring);
         return true;
     }
 
     void Reply(std::string reply) {
         query_buffer = std::move(reply);
         assert(QueueWrite());
-        state = State::Writting;
+        // state = State::Writting;
     }
 
-    void SetError() { state = State::Error; }
+    bool Close() {
+        auto* sqe = io_uring_get_sqe(write_ring);
+        if (sqe == nullptr) {
+            return false;
+        }
+        io_uring_prep_close(sqe, fd);
+        io_uring_sqe_set_data(sqe, AsData());
+        return true;
+    }
+
+    void ReplyAndClose(std::string reply) {
+        query_buffer = std::move(reply);
+        assert(QueueWrite(true));
+        assert(Close());
+        SetClosing();
+    }
+
+    void SetClosing() {
+        state = State::Closing;
+    }
+
+    bool Alive() const {
+        return state == State::Alive;
+    }
 
     std::string Command() const { return vec[0].GetString(); }
 };

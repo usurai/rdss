@@ -9,7 +9,7 @@ namespace rdss::test {
 class ClientTest : public testing::Test {
 public:
     static Connection CreateClient(std::string buffer) {
-        Connection c(nullptr, 0);
+        Connection c(nullptr, nullptr, 0);
         c.query_buffer = std::move(buffer);
         c.read_length = c.query_buffer.size();
         return c;
@@ -31,7 +31,7 @@ public:
 
 TEST(ClientTest, parseBufferArgc) {
     auto get_argc = [&](const std::string& buffer) {
-        Connection c(nullptr, 0);
+        Connection c(nullptr, nullptr, 0);
         c.query_buffer = buffer;
         c.read_length = buffer.size();
         c.ParseBuffer();

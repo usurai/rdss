@@ -24,10 +24,13 @@ using ArgList = facade::RespExpr::Vec;
 
 int sock;
 io_uring ring;
+constexpr size_t num_write_rings{4};
+size_t next_write_ring{0};
+std::vector<io_uring> write_rings;
 CommandDictionary cmd_dict;
 DataType data;
 
-void queue_multishot_accept() {
+void QueueMultishotAccept() {
     auto* sqe = io_uring_get_sqe(&ring);
     assert(sqe != nullptr);
     // TODO: use direct variant
@@ -88,13 +91,15 @@ void RegisterCommands() {
 void HandleAccept(io_uring_cqe* cqe) {
     if (!(cqe->flags & IORING_CQE_F_MORE)) {
         std::cout << "requeueing accept\n";
-        queue_multishot_accept();
+        QueueMultishotAccept();
     }
 
-    auto connection = new Connection(&ring, cqe->res);
+    auto connection = new Connection(&ring, &write_rings[next_write_ring], cqe->res);
+    if (++next_write_ring == num_write_rings) {
+        next_write_ring = 0;
+    }
     // TODO: handle the case of too manu queued
     assert(connection->QueueRead());
-    io_uring_cqe_seen(&ring, cqe);
 }
 
 void HandleRead(Connection* connection, int32_t bytes) {
@@ -126,21 +131,21 @@ void HandleRead(Connection* connection, int32_t bytes) {
         connection->QueueRead();
         return;
     default:
-        connection->SetError();
-        connection->Reply("Parse error.\n");
+        connection->ReplyAndClose("Parse error.\n");
         return;
     }
 
     auto cmd_itor = cmd_dict.find(connection->Command());
     if (cmd_itor == cmd_dict.end()) {
-        connection->SetError();
-        connection->Reply("Command not found.\n");
+        connection->ReplyAndClose("Command not found.\n");
         return;
     }
 
     auto result = cmd_itor->second(connection->vec);
     // TODO: support error
     connection->Reply(rdss::Replier::BuildReply(std::move(result)));
+    connection->buffer.Clear();
+    connection->QueueRead();
 }
 
 int main() {
@@ -170,18 +175,19 @@ int main() {
     }
 
     // listen
-    if (listen(sock, 10) < 0) {
+    if (listen(sock, 1000) < 0) {
         std::cerr << "listen: " << strerror(errno) << '\n';
         return 1;
     }
 
     // setup ring
+    // TODO: consolidate
     int ret;
     if (rdss::SQ_POLL) {
         io_uring_params p = {};
-        p.sq_entries = rdss::QD;
-        p.cq_entries = rdss::QD * 8;
-        p.flags |= IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP;
+        // p.sq_entries = rdss::QD;
+        // p.cq_entries = rdss::QD * 8;
+        // p.flags |= IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP;
         p.flags |= IORING_SETUP_SQPOLL;
         ret = io_uring_queue_init_params(rdss::QD, &ring, &p);
     } else {
@@ -192,10 +198,26 @@ int main() {
         return 1;
     }
 
+    io_uring_params p = {};
+    p.flags |= IORING_SETUP_SQPOLL;
+    write_rings.resize(num_write_rings);
+    for (size_t i = 0; i < num_write_rings; ++i) {
+        ret = io_uring_queue_init_params(rdss::QD, &write_rings[i], &p);
+    }
+
     RegisterCommands();
 
     //  queue accept
-    queue_multishot_accept();
+    QueueMultishotAccept();
+
+    // Submit poll write_ring
+    for (size_t i = 0; i < num_write_rings; ++i) {
+        auto* sqe = io_uring_get_sqe(&ring);
+        assert(sqe != nullptr);
+        io_uring_prep_poll_multishot(sqe, write_rings[i].ring_fd, POLL_IN);
+        io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(i));
+        io_uring_submit(&ring);
+    }
 
     // loop, wait cqe
     while (true) {
@@ -218,33 +240,40 @@ int main() {
             // if accept, create client and queue read
             if (cqe->user_data == reinterpret_cast<uint64_t>(&ring)) {
                 HandleAccept(cqe);
+                io_uring_cqe_seen(&ring, cqe);
                 ++submitted;
+            } else if (cqe->user_data < num_write_rings) {
+                assert(cqe->flags & IORING_CQE_F_MORE);
+
+                auto& write_ring{write_rings[cqe->user_data]};
+                io_uring_cqe_seen(&ring, cqe);
+
+                // TODO: use io_uring_peek_batch_cqe
+                while (true) {
+                    io_uring_cqe* write_cqe;
+                    if (io_uring_peek_cqe(&write_ring, &write_cqe)) {
+                        break;
+                    }
+                    if (write_cqe->res < 0) {
+                        std::cerr << "async op: " << strerror(-write_cqe->res) << '\n';
+                        return 1;
+                    }
+                    io_uring_cqe_seen(&write_ring, write_cqe);
+                }
             } else {
                 auto* connection = reinterpret_cast<Connection*>(cqe->user_data);
                 const auto res = cqe->res;
                 io_uring_cqe_seen(&ring, cqe);
 
-                bool close_client{false};
-                if (res == 0) {
-                    close_client = true;
-                } else {
-                    if (connection->Reading()) {
-                        HandleRead(connection, res);
-                        ++submitted;
-                    } else if (connection->Writting()) {
-                        // TODO: handle short write
-                        connection->buffer.Clear();
-                        assert(connection->QueueRead());
-                        connection->state = Connection::State::Reading;
-                        ++submitted;
-                    } else {
-                        // TODO: handle short write
-                        close_client = true;
-                    }
-                }
-                if (close_client) {
-                    close(connection->fd);
+                if (!connection->Alive()) {
                     delete connection;
+                } else {
+                    if (res == 0) {
+                        connection->SetClosing();
+                    } else {
+                        HandleRead(connection, res);
+                    }
+                    ++submitted;
                 }
             }
 
