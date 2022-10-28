@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <liburing.h>
+#include <queue>
 #include <vector>
 
 constexpr size_t QD = 1024;
@@ -22,7 +23,7 @@ std::vector<std::array<char, BUFFER_SIZE>> buffers(MAX_CONNECTION);
 std::vector<size_t> read_sizes(MAX_CONNECTION);
 std::vector<int> conn_fds(MAX_CONNECTION);
 
-uint64_t next_conn{0};
+std::queue<size_t> free_conns;
 size_t next_rring{0};
 size_t next_wring{0};
 
@@ -47,6 +48,10 @@ int main() {
     AddRings(&agg);
     io_uring_submit(&agg);
 
+    for (size_t i = 0; i < MAX_CONNECTION; ++i) {
+        free_conns.push(i);
+    }
+
     while (true) {
         io_uring_cqe* cqe;
         if (auto ret = io_uring_wait_cqe(&agg, &cqe)) {
@@ -63,8 +68,9 @@ int main() {
         io_uring_cqe_seen(&agg, cqe);
 
         if (ud == 1024) {
-            assert((next_conn < MAX_CONNECTION) && "Max connection exceeded");
-            const auto conn = next_conn++;
+            assert((!free_conns.empty()) && "Max connection exceeded");
+            const auto conn = free_conns.front();
+            free_conns.pop();
 
             const auto fd = res;
             conn_fds[conn] = fd;
@@ -97,11 +103,11 @@ int main() {
             io_uring_cqe* rcqe;
             assert(!io_uring_peek_cqe(read_ring, &rcqe));
             const auto conn = rcqe->user_data;
-            assert(conn < next_conn);
             const size_t bytes_read = static_cast<size_t>(rcqe->res);
             // std::cout << "read " << rcqe->res << " bytes from " << conn_fds[conn] << '\n';
             if (bytes_read == 0) {
                 QueueClose(&agg, conn);
+                free_conns.push(conn);
             } else {
                 read_sizes[conn] = bytes_read;
                 QueueWrite(conn);
