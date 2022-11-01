@@ -22,22 +22,16 @@ using DataType = std::map<std::string, std::string>;
 using Result = rdss::Result;
 using ArgList = facade::RespExpr::Vec;
 
-int sock;
 io_uring ring;
-constexpr size_t num_write_rings{4};
+int listen_sock;
+constexpr size_t num_write_rings{2};
 size_t next_write_ring{0};
 std::vector<io_uring> write_rings;
 CommandDictionary cmd_dict;
 DataType data;
 
-void QueueMultishotAccept() {
-    auto* sqe = io_uring_get_sqe(&ring);
-    assert(sqe != nullptr);
-    // TODO: use direct variant
-    io_uring_prep_multishot_accept(sqe, sock, nullptr, nullptr, 0);
-    io_uring_sqe_set_data(sqe, &ring);
-    io_uring_submit(&ring);
-}
+int SetupListening();
+void QueueMultishotAccept(io_uring* ring, int socket);
 
 Result Hello(ArgList& args) {
     Result res;
@@ -91,7 +85,7 @@ void RegisterCommands() {
 void HandleAccept(io_uring_cqe* cqe) {
     if (!(cqe->flags & IORING_CQE_F_MORE)) {
         std::cout << "requeueing accept\n";
-        QueueMultishotAccept();
+        QueueMultishotAccept(&ring, listen_sock);
     }
 
     auto connection = new Connection(&ring, &write_rings[next_write_ring], cqe->res);
@@ -149,34 +143,8 @@ void HandleRead(Connection* connection, int32_t bytes) {
 }
 
 int main() {
-    // socket
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock == -1) {
-        std::cerr << "socket: " << strerror(errno) << '\n';
-        return 1;
-    }
-
-    int enable{1};
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-        std::cerr << "setsockopt" << strerror(errno) << '\n';
-        return 1;
-    }
-
-    sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(8080);
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    // bind
-    if (bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) {
-        std::cerr << "bind: " << strerror(errno) << '\n';
-        return 1;
-    }
-
-    // listen
-    if (listen(sock, 1000) < 0) {
-        std::cerr << "listen: " << strerror(errno) << '\n';
+    listen_sock = SetupListening();
+    if (listen_sock == 0) {
         return 1;
     }
 
@@ -208,7 +176,7 @@ int main() {
     RegisterCommands();
 
     //  queue accept
-    QueueMultishotAccept();
+    QueueMultishotAccept(&ring, listen_sock);
 
     // Submit poll write_ring
     for (size_t i = 0; i < num_write_rings; ++i) {
@@ -216,8 +184,8 @@ int main() {
         assert(sqe != nullptr);
         io_uring_prep_poll_multishot(sqe, write_rings[i].ring_fd, POLL_IN);
         io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(i));
-        io_uring_submit(&ring);
     }
+    io_uring_submit(&ring);
 
     // loop, wait cqe
     while (true) {
@@ -238,7 +206,7 @@ int main() {
                 return 1;
             }
             // if accept, create client and queue read
-            if (cqe->user_data == reinterpret_cast<uint64_t>(&ring)) {
+            if (cqe->user_data == 1024) {
                 HandleAccept(cqe);
                 io_uring_cqe_seen(&ring, cqe);
                 ++submitted;
@@ -300,4 +268,47 @@ int main() {
     }
 
     return 0;
+}
+
+int SetupListening() {
+    // socket
+    auto sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
+        std::cerr << "socket: " << strerror(errno) << '\n';
+        return 0;
+    }
+
+    int enable{1};
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+        std::cerr << "setsockopt" << strerror(errno) << '\n';
+        return 0;
+    }
+
+    sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    // bind
+    if (bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) {
+        std::cerr << "bind: " << strerror(errno) << '\n';
+        return 0;
+    }
+
+    // listen
+    if (listen(sock, 1000) < 0) {
+        std::cerr << "listen: " << strerror(errno) << '\n';
+        return 0;
+    }
+
+    return sock;
+}
+
+void QueueMultishotAccept(io_uring* ring, int socket) {
+    auto* sqe = io_uring_get_sqe(ring);
+    assert(sqe != nullptr);
+    // TODO: use direct variant
+    io_uring_prep_multishot_accept(sqe, socket, nullptr, nullptr, 0);
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1024));
 }
