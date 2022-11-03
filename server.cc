@@ -30,6 +30,8 @@ std::vector<io_uring> write_rings;
 CommandDictionary cmd_dict;
 DataType data;
 
+io_uring NewRing(bool polling = false);
+void AddRings(io_uring* ring);
 int SetupListening();
 void QueueMultishotAccept(io_uring* ring, int socket);
 
@@ -143,49 +145,19 @@ void HandleRead(Connection* connection, int32_t bytes) {
 }
 
 int main() {
+    // setup ring
+    ring = NewRing(rdss::SQ_POLL);
+
     listen_sock = SetupListening();
     if (listen_sock == 0) {
         return 1;
     }
 
-    // setup ring
-    // TODO: consolidate
-    int ret;
-    if (rdss::SQ_POLL) {
-        io_uring_params p = {};
-        // p.sq_entries = rdss::QD;
-        // p.cq_entries = rdss::QD * 8;
-        // p.flags |= IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP;
-        p.flags |= IORING_SETUP_SQPOLL;
-        ret = io_uring_queue_init_params(rdss::QD, &ring, &p);
-    } else {
-        ret = io_uring_queue_init(rdss::QD, &ring, 0);
-    }
-    if (ret) {
-        std::cerr << "io_uring_queue_init: " << strerror(-ret) << '\n';
-        return 1;
-    }
-
-    io_uring_params p = {};
-    p.flags |= IORING_SETUP_SQPOLL;
-    write_rings.resize(num_write_rings);
-    for (size_t i = 0; i < num_write_rings; ++i) {
-        ret = io_uring_queue_init_params(rdss::QD, &write_rings[i], &p);
-    }
+    AddRings(&ring);
+    QueueMultishotAccept(&ring, listen_sock);
+    io_uring_submit(&ring);
 
     RegisterCommands();
-
-    //  queue accept
-    QueueMultishotAccept(&ring, listen_sock);
-
-    // Submit poll write_ring
-    for (size_t i = 0; i < num_write_rings; ++i) {
-        auto* sqe = io_uring_get_sqe(&ring);
-        assert(sqe != nullptr);
-        io_uring_prep_poll_multishot(sqe, write_rings[i].ring_fd, POLL_IN);
-        io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(i));
-    }
-    io_uring_submit(&ring);
 
     // loop, wait cqe
     while (true) {
@@ -311,4 +283,32 @@ void QueueMultishotAccept(io_uring* ring, int socket) {
     // TODO: use direct variant
     io_uring_prep_multishot_accept(sqe, socket, nullptr, nullptr, 0);
     io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1024));
+}
+
+io_uring NewRing(bool polling) {
+    io_uring ring;
+    if (polling) {
+        io_uring_params p = {};
+        p.flags |= IORING_SETUP_SQPOLL;
+        if (auto ret = io_uring_queue_init_params(rdss::QD, &ring, &p)) {
+            std::cerr << "io_uring_queue_init_params: " << strerror(-ret) << '\n';
+            std::terminate();
+        }
+    } else {
+        if (auto ret = io_uring_queue_init(rdss::QD, &ring, 0)) {
+            std::cerr << "io_uring_queue_init: " << strerror(-ret) << '\n';
+            std::terminate();
+        }
+    }
+    return ring;
+}
+
+void AddRings(io_uring* agg) {
+    for (size_t i = 0; i < num_write_rings; ++i) {
+        write_rings.push_back(NewRing(true));
+        auto* sqe = io_uring_get_sqe(agg);
+        assert(sqe != nullptr);
+        io_uring_prep_poll_multishot(sqe, write_rings[i].ring_fd, POLL_IN);
+        io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(i));
+    }
 }
