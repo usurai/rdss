@@ -12,7 +12,7 @@
 #include <vector>
 
 constexpr size_t QD = 1024;
-constexpr size_t wrings = 2;
+constexpr size_t wrings = 1;
 constexpr size_t rrings = 1;
 constexpr size_t MAX_CONNECTION = 4096;
 constexpr size_t BUFFER_SIZE = 1024;
@@ -38,7 +38,9 @@ void QueueWrite(size_t conn);
 void QueueClose(io_uring* ring, size_t conn);
 
 int main() {
-    auto agg = NewPollingRing();
+    // auto agg = NewPollingRing();
+    io_uring agg;
+    io_uring_queue_init(QD, &agg, 0);
 
     const auto listen_sock = SetupListening();
     if (listen_sock == 0) {
@@ -82,15 +84,16 @@ int main() {
 
             auto* write_ring = &write_rings[ud];
             io_uring_cqe* wcqe;
-            assert(!io_uring_peek_cqe(write_ring, &wcqe));
+            while (!io_uring_peek_cqe(write_ring, &wcqe)) {
+                const auto conn = wcqe->user_data;
+                assert(static_cast<size_t>(wcqe->res) == read_sizes[conn]);
+                // std::cout << "written " << wcqe->res << " bytes from " << conn_fds[conn] << '\n';
 
-            const auto conn = wcqe->user_data;
-            assert(static_cast<size_t>(wcqe->res) == read_sizes[conn]);
-            // std::cout << "written " << wcqe->res << " bytes from " << conn_fds[conn] << '\n';
+                QueueRead(conn);
 
-            QueueRead(conn);
+                io_uring_cqe_seen(write_ring, wcqe);
+            }
 
-            io_uring_cqe_seen(write_ring, wcqe);
             auto sqe = io_uring_get_sqe(&agg);
             assert(sqe != nullptr);
             io_uring_prep_poll_add(sqe, write_ring->ring_fd, POLL_IN);
@@ -101,19 +104,20 @@ int main() {
 
             auto* read_ring = &read_rings[ud - wrings];
             io_uring_cqe* rcqe;
-            assert(!io_uring_peek_cqe(read_ring, &rcqe));
-            const auto conn = rcqe->user_data;
-            const size_t bytes_read = static_cast<size_t>(rcqe->res);
-            // std::cout << "read " << rcqe->res << " bytes from " << conn_fds[conn] << '\n';
-            if (bytes_read == 0) {
-                QueueClose(&agg, conn);
-                free_conns.push(conn);
-            } else {
-                read_sizes[conn] = bytes_read;
-                QueueWrite(conn);
-            }
+            while (!io_uring_peek_cqe(read_ring, &rcqe)) {
+                const auto conn = rcqe->user_data;
+                const size_t bytes_read = static_cast<size_t>(rcqe->res);
+                // std::cout << "read " << rcqe->res << " bytes from " << conn_fds[conn] << '\n';
+                if (bytes_read == 0) {
+                    QueueClose(&agg, conn);
+                    free_conns.push(conn);
+                } else {
+                    read_sizes[conn] = bytes_read;
+                    QueueWrite(conn);
+                }
 
-            io_uring_cqe_seen(read_ring, rcqe);
+                io_uring_cqe_seen(read_ring, rcqe);
+            }
             auto sqe = io_uring_get_sqe(&agg);
             assert(sqe != nullptr);
             io_uring_prep_poll_add(sqe, read_ring->ring_fd, POLL_IN);

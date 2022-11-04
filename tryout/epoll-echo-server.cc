@@ -172,7 +172,7 @@ int main(int argc, char* argv[]) {
     }
 
     // const auto thread_count{GetThreadCount()};
-    const auto thread_count{8};
+    const auto thread_count{16};
     std::vector<std::thread> threads;
     for (int i = 0; i < thread_count; ++i) {
         threads.emplace_back(ThreadFunction, i, listen_fd);
