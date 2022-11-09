@@ -13,9 +13,11 @@ public:
     void Allocate(size_t n) { counter_ += n; }
     void Deallocate(size_t n) { counter_ -= n; }
     size_t GetAllocated() const { return counter_; }
+
 protected:
     MemoryTracker() = default;
     static MemoryTracker* instance_;
+
 private:
     size_t counter_ = 0;
 };
@@ -56,7 +58,7 @@ struct Mallocator {
     }
 
 private:
-    void report(T* p, std::size_t n, bool alloc = true) const {
+    void report([[maybe_unused]] T* p, std::size_t n, bool alloc = true) const {
         const auto bytes = sizeof(T) * n;
         // std::cout << (alloc ? "Alloc: " : "Dealloc: ") << bytes << " bytes at " << std::hex
         //           << std::showbase << reinterpret_cast<void*>(p) << std::dec << '\n';
@@ -80,7 +82,7 @@ bool operator!=(const Mallocator<T>&, const Mallocator<U>&) {
 
 int main() {
     using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
-    using ValueType = std::map<TrackingString, TrackingString>;
+    using ValueType = std::pair<const TrackingString, TrackingString>;
 
     std::map<TrackingString, TrackingString, std::less<>, Mallocator<ValueType>> m;
     const TrackingString sample_value(128, 'x');
