@@ -58,8 +58,8 @@ struct Mallocator {
 private:
     void report(T* p, std::size_t n, bool alloc = true) const {
         const auto bytes = sizeof(T) * n;
-        std::cout << (alloc ? "Alloc: " : "Dealloc: ") << bytes << " bytes at " << std::hex
-                  << std::showbase << reinterpret_cast<void*>(p) << std::dec << '\n';
+        // std::cout << (alloc ? "Alloc: " : "Dealloc: ") << bytes << " bytes at " << std::hex
+        //           << std::showbase << reinterpret_cast<void*>(p) << std::dec << '\n';
         if (alloc) {
             MemoryTracker::GetInstance().Allocate(bytes);
         } else {
@@ -83,12 +83,18 @@ int main() {
     using ValueType = std::map<TrackingString, TrackingString>;
 
     std::map<TrackingString, TrackingString, std::less<>, Mallocator<ValueType>> m;
+    const TrackingString sample_value(128, 'x');
+
+    for (size_t i = 0; i < 1000; ++i) {
+        m[TrackingString(std::to_string(i))] = sample_value;
+    }
+
     std::cout << MemoryTracker::GetInstance().GetAllocated() << '\n';
 
-    m["abc"] = "abcdasasjdkf;adff";
-    std::cout << MemoryTracker::GetInstance().GetAllocated() << '\n';
-
-    m["efg"] = "lkasdjf;laskdfjasdklfsdajsdklfjsdafklasdufaflkanfiwjaiefbnaokdvadsnfsdfsdfsdfasd;"
-               "lvnaeijfnasjdkfl;asdkjfasdkfla;sdlkfjasskdl;faskdjfasl;dfasd;lkfasdjfl;aksdfjsksd";
+    size_t i = 0;
+    while (MemoryTracker::GetInstance().GetAllocated() > 100000) {
+        std::cout << MemoryTracker::GetInstance().GetAllocated() << '\n';
+        m.erase(TrackingString(std::to_string(i++)));
+    }
     std::cout << MemoryTracker::GetInstance().GetAllocated() << '\n';
 }
