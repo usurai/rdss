@@ -34,3 +34,7 @@
 build/
 compile_commands.json
 *.code-workspace
+
+payload*
+copied*
+perfs/
