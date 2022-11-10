@@ -4,6 +4,7 @@
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
 #include "dragonfly/resp_expr.h"
+#include "memory.h"
 #include "replier.h"
 
 #include <arpa/inet.h>
@@ -17,18 +18,26 @@
 
 using rdss::Command;
 using rdss::Connection;
+using rdss::Mallocator;
+
 using CommandDictionary = std::unordered_map<std::string, Command>;
-using DataType = std::map<std::string, std::string>;
+using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
+using Map = std::map<TrackingString, TrackingString>;
+using TrackingMap = std::map<
+  TrackingString,
+  TrackingString,
+  std::less<>,
+  Mallocator<std::pair<const TrackingString, TrackingString>>>;
 using Result = rdss::Result;
 using ArgList = facade::RespExpr::Vec;
 
 io_uring ring;
 int listen_sock;
-constexpr size_t num_write_rings{2};
+constexpr size_t num_write_rings{8};
 size_t next_write_ring{0};
 std::vector<io_uring> write_rings;
 CommandDictionary cmd_dict;
-DataType data;
+TrackingMap data;
 
 io_uring NewRing(bool polling = false);
 void AddRings(io_uring* ring);
@@ -55,7 +64,7 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    data[args[1].GetString()] = args[2].GetString();
+    data[TrackingString(args[1].GetString())] = TrackingString("xxx");
     Result res;
     res.Add("OK");
     return res;
@@ -65,11 +74,11 @@ Result Get(ArgList& args) {
     assert(args.size() == 2);
 
     Result res;
-    auto it = data.find(args[1].GetString());
+    auto it = data.find(TrackingString(args[1].GetString()));
     if (it == data.end()) {
         res.AddNull();
     } else {
-        res.Add(it->second);
+        res.Add(std::string(it->second));
     }
     return res;
 }
@@ -122,7 +131,7 @@ void HandleRead(Connection* connection, int32_t bytes) {
         // std::cout << "Parse done, argc:" << connection->vec.size() << '\n';
         break;
     case facade::RedisParser::Result::INPUT_PENDING:
-        std::cout << "Needs more\n";
+        // std::cout << "Needs more\n";
         connection->buffer.EnsureCapacity(connection->buffer.Capacity());
         connection->QueueRead();
         return;

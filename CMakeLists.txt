@@ -25,6 +25,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+
 # TODO: gtest seems doesn't work with msan
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer")
 
@@ -32,8 +34,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weffc++")
 
 add_executable(
-    server
+    rdss
     server.cc
+    memory.cc
     dragonfly/io_buf.cc
     dragonfly/logging.cc
     dragonfly/op_status.cc
@@ -42,7 +45,7 @@ add_executable(
 )
 
 target_link_libraries(
-    server
+    rdss
     /usr/lib/liburing.a
     absl::flags_parse
     absl::strings
