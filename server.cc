@@ -64,7 +64,7 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    data[TrackingString(args[1].GetString())] = TrackingString("xxx");
+    data[TrackingString(args[1].GetString())] = TrackingString(args[2].GetString());
     Result res;
     res.Add("OK");
     return res;
