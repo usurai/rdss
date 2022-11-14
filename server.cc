@@ -64,6 +64,8 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
+    std::cout << "set " << args[1].GetString() << " to " << args[2].GetString() << " ("
+              << args[1].GetString().size() << ":" << args[2].GetString().size() << ")\n";
     data[TrackingString(args[1].GetString())] = TrackingString(args[2].GetString());
     Result res;
     res.Add("OK");
@@ -109,17 +111,6 @@ void HandleAccept(io_uring_cqe* cqe) {
 
 void HandleRead(Connection* connection, int32_t bytes) {
     connection->buffer.CommitWrite(static_cast<size_t>(bytes));
-
-    // std::cout << "Request("
-    //           << "):"
-    //           << std::string_view(
-    //                reinterpret_cast<char*>(connection->buffer.InputBuffer().data()),
-    //                connection->buffer.InputLen())
-    //           << '\n';
-    // client->IncreaseReadLength(static_cast<size_t>(res));
-    // parse buffer: query_buffer->args
-    // const auto parse_result = client->ParseBuffer();
-
     uint32_t consumed{0};
     auto res = connection->parser.Parse(
       connection->buffer.InputBuffer(), &consumed, &connection->vec);
@@ -151,6 +142,8 @@ void HandleRead(Connection* connection, int32_t bytes) {
     connection->Reply(rdss::Replier::BuildReply(std::move(result)));
     connection->buffer.Clear();
     connection->QueueRead();
+
+    std::cout << rdss::MemoryTracker::GetInstance().GetAllocated() << '\n';
 }
 
 int main() {
