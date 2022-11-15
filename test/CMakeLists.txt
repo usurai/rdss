@@ -15,12 +15,25 @@ add_executable(
     ../dragonfly/io_buf.cc
 )
 
+add_executable(
+    hash_table_test
+    HashTableTest.cc
+    ../memory.cc
+)
+
 target_include_directories(client_test PUBLIC ../)
+
+target_include_directories(hash_table_test PUBLIC ../)
 
 target_link_libraries(
     client_test
     gtest_main
     /usr/lib/liburing.a
+)
+
+target_link_libraries(
+    hash_table_test
+    gtest_main
 )
 
 include(GoogleTest)
