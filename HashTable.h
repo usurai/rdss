@@ -31,21 +31,12 @@ public:
 
     // TODO: parameter
     std::pair<EntryPointer, bool> Insert(KeyType key, ValueType value) {
-        if (auto entry = Find(key)) {
-            return {entry, false};
-        }
-
-        if (Expand() == ExpandResult::FAIL) {
-            return {nullptr, false};
-        }
-
-        auto bucket = FindBucket(key);
-        auto result_pointer = InsertIntoBucket(bucket, std::move(key), std::move(value));
-        ++entries_;
-        return {result_pointer, true};
+        return Add(std::move(key), std::move(value), false);
     }
 
-    // bool Upsert(KeyType key, ValueType value);
+    std::pair<EntryPointer, bool> InsertOrAssign(KeyType key, ValueType value) {
+        return Add(std::move(key), std::move(value), true);
+    }
 
     EntryPointer Find(const KeyType& key) {
         if (buckets_[0].empty()) {
@@ -68,6 +59,8 @@ public:
 
     size_t Count() const { return entries_; }
 
+    // TODO: clear
+
     // TODO
     // bool IsRehashing() const;
     // void RehashStep(size_t steps) const;
@@ -76,6 +69,25 @@ public:
     // TODO: mem-related APIs
 
 private:
+    std::pair<EntryPointer, bool> Add(KeyType key, ValueType value, bool replace) {
+        if (auto entry = Find(key)) {
+            if (!replace) {
+                return {entry, false};
+            }
+            entry->value = std::move(value);
+            return {entry, true};
+        }
+
+        if (Expand() == ExpandResult::FAIL) {
+            return {nullptr, false};
+        }
+
+        auto bucket = FindBucket(key);
+        auto result_pointer = InsertIntoBucket(bucket, std::move(key), std::move(value));
+        ++entries_;
+        return {result_pointer, true};
+    }
+
     uint64_t Hash(const KeyType& key) { return std::hash<KeyType>{}(key); }
 
     // Assumes the table is not empty.

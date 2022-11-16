@@ -34,10 +34,11 @@ TEST(HashTableTest, basic) {
     constexpr size_t value_length = 512;
     constexpr size_t n = 1024 * 16;
 
-    // Insert / erase random key value pair against the hash table.
+    // Insert / assign / erase random key value pair against the hash table.
     std::unordered_map<std::string, std::string> fact;
     for (size_t i = 0; i < n; ++i) {
-        if (fact.empty() || static_cast<double>(std::rand()) / RAND_MAX > 0.2) {
+        const auto r = static_cast<double>(std::rand()) / RAND_MAX;
+        if (fact.empty() || r > 0.5) {
             auto key = HashTableTest::GenRandomString(key_length);
             while (fact.contains(key)) {
                 key = HashTableTest::GenRandomString(key_length);
@@ -54,8 +55,21 @@ TEST(HashTableTest, basic) {
             EXPECT_NE(find_result, nullptr);
             EXPECT_EQ(find_result->key, key);
             EXPECT_EQ(find_result->value, value);
+        } else if (r > 0.2) {
+            auto it = fact.begin();
+            auto value = HashTableTest::GenRandomString(value_length);
+            EXPECT_NE(hash_table.Find(it->first), nullptr);
+            it->second = value;
+            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, it->second);
+            EXPECT_NE(entry, nullptr);
+            EXPECT_TRUE(replaced);
+
+            auto find_result = hash_table.Find(it->first);
+            EXPECT_NE(find_result, nullptr);
+            EXPECT_EQ(find_result->key, it->first);
+            EXPECT_EQ(find_result->value, it->second);
         } else {
-            hash_table.Erase(fact.begin()->first);
+            EXPECT_TRUE(hash_table.Erase(fact.begin()->first));
             auto find_result = hash_table.Find(fact.begin()->first);
             EXPECT_EQ(find_result, nullptr);
             fact.erase(fact.begin());
