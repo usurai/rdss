@@ -59,6 +59,15 @@ public:
 
     size_t Count() const { return entries_; }
 
+    size_t BucketCount() const { return buckets_[0].size(); }
+
+    double LoadFactor() const {
+        if (BucketCount() == 0) {
+            return 0;
+        }
+        return static_cast<double>(Count()) / BucketCount();
+    }
+
     // TODO: clear
 
     // TODO
