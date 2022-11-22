@@ -27,7 +27,7 @@ public:
 
 public:
     HashTable() = default;
-    ~HashTable() = default;
+    ~HashTable() { Clear(); }
 
     // TODO: parameter
     std::pair<EntryPointer, bool> Insert(KeyType key, ValueType value) {
@@ -68,7 +68,22 @@ public:
         return static_cast<double>(Count()) / BucketCount();
     }
 
-    // TODO: clear
+    void Clear() {
+        for (auto& buckets : buckets_) {
+            for (auto& bucket : buckets) {
+                if (bucket == nullptr) {
+                    continue;
+                }
+                auto entry = bucket;
+                while (entry) {
+                    auto next = entry->next;
+                    entry->~HashTableEntry();
+                    entry_allocator_.deallocate(entry, 1);
+                    entry = next;
+                }
+            }
+        }
+    }
 
     // TODO
     // bool IsRehashing() const;
@@ -132,6 +147,7 @@ private:
         auto entry = *bucket;
         if (entry->key == key) {
             *bucket = entry->next;
+            entry->~HashTableEntry();
             entry_allocator_.deallocate(entry, 1);
             return true;
         }
@@ -146,6 +162,7 @@ private:
             entry = entry->next;
         }
         *prev_next = entry->next;
+        entry->~HashTableEntry();
         entry_allocator_.deallocate(entry, 1);
         return true;
     }
