@@ -1,5 +1,7 @@
 #include "server.h"
 
+// TODO: Unify the naming.
+#include "HashTable.h"
 #include "command.h"
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
@@ -22,12 +24,7 @@ using rdss::Mallocator;
 
 using CommandDictionary = std::unordered_map<std::string, Command>;
 using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
-using Map = std::map<TrackingString, TrackingString>;
-using TrackingMap = std::map<
-  TrackingString,
-  TrackingString,
-  std::less<>,
-  Mallocator<std::pair<const TrackingString, TrackingString>>>;
+using TrackingMap = rdss::HashTable<TrackingString, TrackingString>;
 using Result = rdss::Result;
 using ArgList = facade::RespExpr::Vec;
 
@@ -64,9 +61,7 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    std::cout << "set " << args[1].GetString() << " to " << args[2].GetString() << " ("
-              << args[1].GetString().size() << ":" << args[2].GetString().size() << ")\n";
-    data[TrackingString(args[1].GetString())] = TrackingString(args[2].GetString());
+    data.InsertOrAssign(TrackingString(args[1].GetString()), TrackingString(args[2].GetString()));
     Result res;
     res.Add("OK");
     return res;
@@ -76,11 +71,11 @@ Result Get(ArgList& args) {
     assert(args.size() == 2);
 
     Result res;
-    auto it = data.find(TrackingString(args[1].GetString()));
-    if (it == data.end()) {
+    auto entry = data.Find(TrackingString(args[1].GetString()));
+    if (entry == nullptr) {
         res.AddNull();
     } else {
-        res.Add(std::string(it->second));
+        res.Add(std::string(entry->value));
     }
     return res;
 }
@@ -142,8 +137,6 @@ void HandleRead(Connection* connection, int32_t bytes) {
     connection->Reply(rdss::Replier::BuildReply(std::move(result)));
     connection->buffer.Clear();
     connection->QueueRead();
-
-    std::cout << rdss::MemoryTracker::GetInstance().GetAllocated() << '\n';
 }
 
 int main() {

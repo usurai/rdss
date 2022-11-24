@@ -47,6 +47,7 @@ add_executable(
 target_link_libraries(
     rdss
     /usr/lib/liburing.a
+    /usr/lib/x86_64-linux-gnu/libxxhash.a
     absl::flags_parse
     absl::strings
     absl::symbolize
