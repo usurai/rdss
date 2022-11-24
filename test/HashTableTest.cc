@@ -9,15 +9,17 @@
 
 namespace rdss::test {
 
+using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
+
 class HashTableTest : public testing::Test {
 public:
     void SetUp() override { std::srand(std::time(nullptr)); }
 
-    static std::string GenRandomString(size_t len) {
+    static TrackingString GenRandomString(size_t len) {
         static const char alphanum[] = "0123456789"
                                        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                        "abcdefghijklmnopqrstuvwxyz";
-        std::string result;
+        TrackingString result;
         result.reserve(len);
         for (size_t i = 0; i < len; ++i) {
             result += alphanum[std::rand() % (sizeof(alphanum) - 1)];
@@ -27,7 +29,7 @@ public:
 };
 
 TEST(HashTableTest, basic) {
-    HashTable<std::string, std::string> hash_table;
+    HashTable<TrackingString, TrackingString> hash_table;
     EXPECT_EQ(hash_table.Count(), 0);
 
     constexpr size_t key_length = 64;
@@ -35,7 +37,7 @@ TEST(HashTableTest, basic) {
     constexpr size_t n = 1024 * 16;
 
     // Insert / assign / erase random key value pair against the hash table.
-    std::unordered_map<std::string, std::string> fact;
+    std::map<TrackingString, TrackingString> fact;
     for (size_t i = 0; i < n; ++i) {
         const auto r = static_cast<double>(std::rand()) / RAND_MAX;
         if (fact.empty() || r > 0.5) {

@@ -5,8 +5,7 @@
 #include <cassert>
 #include <functional>
 #include <vector>
-// TODO: enable after use xxhash
-// #include <xxhash.h>
+#include <xxhash.h>
 
 namespace rdss {
 
@@ -112,7 +111,7 @@ private:
         return {result_pointer, true};
     }
 
-    uint64_t Hash(const KeyType& key) { return std::hash<KeyType>{}(key); }
+    uint64_t Hash(const KeyType& key) { return XXH64(key.data(), key.size(), 0); }
 
     // Assumes the table is not empty.
     BucketVector::iterator FindBucket(const KeyType& key) {
