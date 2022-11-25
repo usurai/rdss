@@ -1,11 +1,11 @@
 #include "server.h"
 
 // TODO: Unify the naming.
-#include "HashTable.h"
 #include "command.h"
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
 #include "dragonfly/resp_expr.h"
+#include "hash_table.h"
 #include "memory.h"
 #include "replier.h"
 

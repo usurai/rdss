@@ -17,7 +17,7 @@ add_executable(
 
 add_executable(
     hash_table_test
-    HashTableTest.cc
+    hash_table_test.cc
     ../memory.cc
 )
 
