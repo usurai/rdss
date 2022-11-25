@@ -3,6 +3,8 @@
 #include "memory.h"
 
 #include <cassert>
+#include <cstdlib>
+#include <ctime>
 #include <functional>
 #include <vector>
 #include <xxhash.h>
@@ -25,7 +27,7 @@ public:
     using BucketVector = std::vector<EntryPointer, Mallocator<EntryPointer>>;
 
 public:
-    HashTable() = default;
+    HashTable() { std::srand(std::time(nullptr)); }
     ~HashTable() { Clear(); }
 
     // TODO: parameter
@@ -43,6 +45,22 @@ public:
         }
         auto bucket = FindBucket(key);
         return FindEntryInBucket(bucket, key);
+    }
+
+    EntryPointer GetRandomEntry() {
+        if (buckets_[0].empty()) {
+            return nullptr;
+        }
+        if (!IsRehashing()) {
+            EntryPointer bucket{nullptr};
+            while (bucket == nullptr) {
+                const auto bucket_index = std::rand() % buckets_[0].size();
+                bucket = buckets_[0][bucket_index];
+            }
+            return GetRandomEntryInBucket(bucket);
+        }
+        // TODO: rehash case
+        return nullptr;
     }
 
     // const ValueType& GetValue(KeyType key);
@@ -84,10 +102,9 @@ public:
         }
     }
 
-    // TODO
-    // bool IsRehashing() const;
-    // void RehashStep(size_t steps) const;
+    bool IsRehashing() const { return (rehash_index_ >= 0); }
 
+    // TODO: void RehashStep(size_t steps) const;
     // TODO: iterate
     // TODO: mem-related APIs
 
@@ -134,6 +151,21 @@ private:
             if (entry->next == nullptr) {
                 return nullptr;
             }
+            entry = entry->next;
+        }
+        return entry;
+    }
+
+    EntryPointer GetRandomEntryInBucket(EntryPointer bucket) {
+        size_t bucket_length{1};
+        auto entry = bucket;
+        while (entry->next) {
+            ++bucket_length;
+            entry = entry->next;
+        }
+        const size_t target_entry = rand() % bucket_length;
+        entry = bucket;
+        for (size_t i = 0; i < target_entry; ++i) {
             entry = entry->next;
         }
         return entry;

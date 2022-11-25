@@ -87,4 +87,31 @@ TEST(HashTableTest, basic) {
     }
 }
 
+// TODO: find a way to test randomness
+TEST(HashTableTest, getRandomEntry) {
+    constexpr size_t key_length = 64;
+    constexpr size_t value_length = 512;
+    constexpr size_t n = 1024 * 16;
+
+    HashTable<TrackingString, TrackingString> hash_table;
+    for (size_t i = 0; i < n; ++i) {
+        auto key = HashTableTest::GenRandomString(key_length);
+        auto value = HashTableTest::GenRandomString(value_length);
+        hash_table.Insert(key, value);
+    }
+
+    std::map<TrackingString, size_t> count;
+    for (size_t i = 0; i < n; ++i) {
+        auto entry = hash_table.GetRandomEntry();
+        EXPECT_NE(entry, nullptr);
+        ++count[entry->key];
+    }
+
+    size_t max_count{0};
+    for (const auto& [_, c] : count) {
+        max_count = std::max(max_count, c);
+    }
+    EXPECT_LE(max_count, 16);
+}
+
 } // namespace rdss::test
