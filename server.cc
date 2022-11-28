@@ -2,6 +2,7 @@
 
 // TODO: Unify the naming.
 #include "command.h"
+#include "config.h"
 #include "connection.h"
 #include "dragonfly/redis_parser.h"
 #include "dragonfly/resp_expr.h"
@@ -35,6 +36,8 @@ size_t next_write_ring{0};
 std::vector<io_uring> write_rings;
 CommandDictionary cmd_dict;
 TrackingMap data;
+
+rdss::Config config;
 
 io_uring NewRing(bool polling = false);
 void AddRings(io_uring* ring);
@@ -139,7 +142,16 @@ void HandleRead(Connection* connection, int32_t bytes) {
     connection->QueueRead();
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc > 2) {
+        std::cerr << "Too many arguments\n";
+        return 1;
+    }
+    if (argc == 2) {
+        config.ReadFromFile(argv[1]);
+        std::cout << "Config: " << config.ToString() << '\n';
+    }
+
     // setup ring
     ring = NewRing(rdss::SQ_POLL);
 
