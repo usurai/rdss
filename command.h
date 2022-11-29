@@ -37,10 +37,18 @@ public:
         return *this;
     }
 
+    Command& SetIsWriteCommand() {
+        is_write_command_ = true;
+        return *this;
+    }
+
+    bool IsWriteCommand() const { return is_write_command_; }
+
     Result operator()(facade::RespExpr::Vec& vec) { return handler_(vec); }
 
 private:
     const std::string name_;
+    bool is_write_command_ = false;
     std::function<Result(facade::RespExpr::Vec& vec)> handler_;
 };
 

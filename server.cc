@@ -87,7 +87,9 @@ void RegisterCommands() {
     cmd_dict.insert(
       {"HELLO", Command("HELLO").SetHandler([](ArgList& args) { return Hello(args); })});
     cmd_dict.insert({"PING", Command("PING").SetHandler([](ArgList&) { return Ping(); })});
-    cmd_dict.insert({"SET", Command("SET").SetHandler([](ArgList& args) { return Set(args); })});
+    cmd_dict.insert(
+      {"SET",
+       Command("SET").SetHandler([](ArgList& args) { return Set(args); }).SetIsWriteCommand()});
     cmd_dict.insert({"GET", Command("GET").SetHandler([](ArgList& args) { return Get(args); })});
     cmd_dict.insert(
       {"COMMAND", Command("COMMAND").SetHandler([](ArgList&) { return Blockhole(); })});
@@ -135,9 +137,18 @@ void HandleRead(Connection* connection, int32_t bytes) {
         return;
     }
 
-    auto result = cmd_itor->second(connection->vec);
-    // TODO: support error
-    connection->Reply(rdss::Replier::BuildReply(std::move(result)));
+    if (
+      config.maxmemory != 0 && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory
+      && cmd_itor->second.IsWriteCommand()) {
+        connection->Reply(
+          "error: OOM command not allowd when used memory > 'maxmemory', ("
+          + std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) + " vs "
+          + std::to_string(config.maxmemory) + ").\n");
+    } else {
+        // TODO: support error
+        auto result = cmd_itor->second(connection->vec);
+        connection->Reply(rdss::Replier::BuildReply(std::move(result)));
+    }
     connection->buffer.Clear();
     connection->QueueRead();
 }
