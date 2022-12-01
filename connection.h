@@ -198,6 +198,7 @@ struct Connection {
         }
         io_uring_prep_close(sqe, fd);
         io_uring_sqe_set_data(sqe, AsData());
+        io_uring_submit(write_ring);
         return true;
     }
 
