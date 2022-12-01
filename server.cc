@@ -109,48 +109,49 @@ void HandleAccept(io_uring_cqe* cqe) {
     assert(connection->QueueRead());
 }
 
-void HandleRead(Connection* connection, int32_t bytes) {
-    connection->buffer.CommitWrite(static_cast<size_t>(bytes));
+void HandleRead(Connection* conn, int32_t bytes) {
+    conn->buffer.CommitWrite(static_cast<size_t>(bytes));
     uint32_t consumed{0};
-    auto res = connection->parser.Parse(
-      connection->buffer.InputBuffer(), &consumed, &connection->vec);
+    auto res = conn->parser.Parse(conn->buffer.InputBuffer(), &consumed, &conn->vec);
     if (consumed != 0) {
-        connection->buffer.ConsumeInput(consumed);
+        conn->buffer.ConsumeInput(consumed);
     }
     switch (res) {
     case facade::RedisParser::Result::OK:
-        // std::cout << "Parse done, argc:" << connection->vec.size() << '\n';
+        // std::cout << "Parse done, argc:" << conn->vec.size() << '\n';
         break;
     case facade::RedisParser::Result::INPUT_PENDING:
         // std::cout << "Needs more\n";
-        connection->buffer.EnsureCapacity(connection->buffer.Capacity());
-        connection->QueueRead();
+        conn->buffer.EnsureCapacity(conn->buffer.Capacity());
+        conn->QueueRead();
         return;
     default:
-        connection->ReplyAndClose("Parse error.\n");
+        conn->ReplyAndClose("Parse error.\n");
         return;
     }
 
-    auto cmd_itor = cmd_dict.find(connection->Command());
+    auto cmd_itor = cmd_dict.find(conn->Command());
     if (cmd_itor == cmd_dict.end()) {
-        connection->ReplyAndClose("Command not found.\n");
+        conn->Reply("Command not found.\n");
+        conn->buffer.Clear();
+        conn->QueueRead();
         return;
     }
 
     if (
       config.maxmemory != 0 && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory
       && cmd_itor->second.IsWriteCommand()) {
-        connection->Reply(
+        conn->Reply(
           "error: OOM command not allowd when used memory > 'maxmemory', ("
           + std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) + " vs "
           + std::to_string(config.maxmemory) + ").\n");
     } else {
         // TODO: support error
-        auto result = cmd_itor->second(connection->vec);
-        connection->Reply(rdss::Replier::BuildReply(std::move(result)));
+        auto result = cmd_itor->second(conn->vec);
+        conn->Reply(rdss::Replier::BuildReply(std::move(result)));
     }
-    connection->buffer.Clear();
-    connection->QueueRead();
+    conn->buffer.Clear();
+    conn->QueueRead();
 }
 
 int main(int argc, char* argv[]) {
