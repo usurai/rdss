@@ -109,6 +109,52 @@ void HandleAccept(io_uring_cqe* cqe) {
     assert(connection->QueueRead());
 }
 
+bool IsOOM() {
+    // TODO: turn this into log.
+    std::cout << std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) << " vs "
+              << std::to_string(config.maxmemory) + ").\n";
+    return (
+      config.maxmemory != 0
+      && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory);
+}
+
+bool evict() {
+    if (data.Count() == 0) {
+        return false;
+    }
+
+    // Random evict
+    auto entry = data.GetRandomEntry();
+    if (entry == nullptr) {
+        return false;
+    }
+    data.Erase(entry->key);
+    return true;
+}
+
+void ProcessCommand(Connection* conn, Command& cmd) {
+    bool evictCannotSolveOOM = false;
+    while (IsOOM()) {
+        if (!evict()) {
+            evictCannotSolveOOM = true;
+            break;
+        }
+    }
+
+    if (evictCannotSolveOOM && cmd.IsWriteCommand()) {
+        conn->Reply(
+          "error: OOM command not allowd when used memory > 'maxmemory', ("
+          + std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) + " vs "
+          + std::to_string(config.maxmemory) + ").\n");
+    } else {
+        // TODO: support error
+        auto result = cmd(conn->vec);
+        conn->Reply(rdss::Replier::BuildReply(std::move(result)));
+    }
+    conn->buffer.Clear();
+    conn->QueueRead();
+}
+
 void HandleRead(Connection* conn, int32_t bytes) {
     conn->buffer.CommitWrite(static_cast<size_t>(bytes));
     uint32_t consumed{0};
@@ -138,20 +184,7 @@ void HandleRead(Connection* conn, int32_t bytes) {
         return;
     }
 
-    if (
-      config.maxmemory != 0 && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory
-      && cmd_itor->second.IsWriteCommand()) {
-        conn->Reply(
-          "error: OOM command not allowd when used memory > 'maxmemory', ("
-          + std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) + " vs "
-          + std::to_string(config.maxmemory) + ").\n");
-    } else {
-        // TODO: support error
-        auto result = cmd_itor->second(conn->vec);
-        conn->Reply(rdss::Replier::BuildReply(std::move(result)));
-    }
-    conn->buffer.Clear();
-    conn->QueueRead();
+    ProcessCommand(conn, cmd_itor->second);
 }
 
 int main(int argc, char* argv[]) {
