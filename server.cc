@@ -11,6 +11,7 @@
 #include "replier.h"
 
 #include <arpa/inet.h>
+#include <glog/logging.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -97,7 +98,7 @@ void RegisterCommands() {
 
 void HandleAccept(io_uring_cqe* cqe) {
     if (!(cqe->flags & IORING_CQE_F_MORE)) {
-        std::cout << "requeueing accept\n";
+        LOG(INFO) << "requeueing accept";
         QueueMultishotAccept(&ring, listen_sock);
     }
 
@@ -111,8 +112,8 @@ void HandleAccept(io_uring_cqe* cqe) {
 
 bool IsOOM() {
     // TODO: turn this into log.
-    std::cout << std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated()) << " vs "
-              << std::to_string(config.maxmemory) + ").\n";
+    LOG(INFO) << "OOM: " << std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated())
+              << " vs " << std::to_string(config.maxmemory);
     return (
       config.maxmemory != 0
       && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory);
@@ -164,10 +165,8 @@ void HandleRead(Connection* conn, int32_t bytes) {
     }
     switch (res) {
     case facade::RedisParser::Result::OK:
-        // std::cout << "Parse done, argc:" << conn->vec.size() << '\n';
         break;
     case facade::RedisParser::Result::INPUT_PENDING:
-        // std::cout << "Needs more\n";
         conn->buffer.EnsureCapacity(conn->buffer.Capacity());
         conn->QueueRead();
         return;
@@ -188,13 +187,16 @@ void HandleRead(Connection* conn, int32_t bytes) {
 }
 
 int main(int argc, char* argv[]) {
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = 1;
+
     if (argc > 2) {
-        std::cerr << "Too many arguments\n";
+        LOG(ERROR) << "Too many arguments";
         return 1;
     }
     if (argc == 2) {
         config.ReadFromFile(argv[1]);
-        std::cout << "Config: " << config.ToString() << '\n';
+        LOG(INFO) << "Config: " << config.ToString();
     }
 
     // setup ring
@@ -218,7 +220,7 @@ int main(int argc, char* argv[]) {
         io_uring_cqe* cqe;
         auto ret = io_uring_wait_cqe(&ring, &cqe);
         if (ret) {
-            std::cerr << "io_uring_wait_cqe: " << strerror(-ret) << '\n';
+            LOG(ERROR) << "io_uring_wait_cqe: " << strerror(-ret);
             return 1;
         }
 
@@ -226,7 +228,7 @@ int main(int argc, char* argv[]) {
         while (true) {
             // TODO: don't quit here
             if (cqe->res < 0) {
-                std::cerr << "async op: " << strerror(-cqe->res) << '\n';
+                LOG(ERROR) << "async op: " << strerror(-cqe->res);
                 return 1;
             }
             // if accept, create client and queue read
@@ -247,7 +249,7 @@ int main(int argc, char* argv[]) {
                         break;
                     }
                     if (write_cqe->res < 0) {
-                        std::cerr << "async op: " << strerror(-write_cqe->res) << '\n';
+                        LOG(ERROR) << "async op: " << strerror(-write_cqe->res);
                         return 1;
                     }
                     io_uring_cqe_seen(&write_ring, write_cqe);
@@ -282,7 +284,7 @@ int main(int argc, char* argv[]) {
             } else if (ret == -EAGAIN) {
                 break;
             } else {
-                std::cerr << "io_uring_peek_cqe: " << strerror(-ret) << '\n';
+                LOG(ERROR) << "io_uring_peek_cqe: " << strerror(-ret);
                 return 1;
             }
         }
@@ -298,13 +300,13 @@ int SetupListening() {
     // socket
     auto sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
-        std::cerr << "socket: " << strerror(errno) << '\n';
+        LOG(ERROR) << "socket: " << strerror(errno);
         return 0;
     }
 
     int enable{1};
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
-        std::cerr << "setsockopt" << strerror(errno) << '\n';
+        LOG(ERROR) << "setsockopt" << strerror(errno);
         return 0;
     }
 
@@ -316,13 +318,13 @@ int SetupListening() {
 
     // bind
     if (bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) {
-        std::cerr << "bind: " << strerror(errno) << '\n';
+        LOG(ERROR) << "bind: " << strerror(errno);
         return 0;
     }
 
     // listen
     if (listen(sock, 1000) < 0) {
-        std::cerr << "listen: " << strerror(errno) << '\n';
+        LOG(ERROR) << "listen: " << strerror(errno);
         return 0;
     }
 
@@ -343,12 +345,12 @@ io_uring NewRing(bool polling) {
         io_uring_params p = {};
         p.flags |= IORING_SETUP_SQPOLL;
         if (auto ret = io_uring_queue_init_params(rdss::QD, &ring, &p)) {
-            std::cerr << "io_uring_queue_init_params: " << strerror(-ret) << '\n';
+            LOG(ERROR) << "io_uring_queue_init_params: " << strerror(-ret);
             std::terminate();
         }
     } else {
         if (auto ret = io_uring_queue_init(rdss::QD, &ring, 0)) {
-            std::cerr << "io_uring_queue_init: " << strerror(-ret) << '\n';
+            LOG(ERROR) << "io_uring_queue_init: " << strerror(-ret);
             std::terminate();
         }
     }
