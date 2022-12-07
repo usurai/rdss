@@ -119,8 +119,12 @@ bool IsOOM() {
       && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory);
 }
 
-bool evict() {
+bool Evict() {
     if (data.Count() == 0) {
+        return false;
+    }
+
+    if (config.maxmemory_policy == rdss::MaxmemoryPolicy::kNoEviction) {
         return false;
     }
 
@@ -136,7 +140,7 @@ bool evict() {
 void ProcessCommand(Connection* conn, Command& cmd) {
     bool evictCannotSolveOOM = false;
     while (IsOOM()) {
-        if (!evict()) {
+        if (!Evict()) {
             evictCannotSolveOOM = true;
             break;
         }
@@ -196,7 +200,7 @@ int main(int argc, char* argv[]) {
     }
     if (argc == 2) {
         config.ReadFromFile(argv[1]);
-        LOG(INFO) << "Config: " << config.ToString();
+        LOG(INFO) << config.ToString();
     }
 
     // setup ring
