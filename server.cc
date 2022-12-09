@@ -84,6 +84,26 @@ Result Get(ArgList& args) {
     return res;
 }
 
+Result Exists(ArgList& args) {
+    Result res;
+    int32_t cnt{0};
+    for (size_t i = 1; i < args.size(); ++i) {
+        auto entry = data.Find(TrackingString(args[i].GetString()));
+        if (entry != nullptr) {
+            ++cnt;
+        }
+    }
+    res.Add(cnt);
+    return res;
+}
+
+Result Dbsize() {
+    Result res;
+    res.Add(data.Count());
+    return res;
+}
+
+// TODO: Handle upper/lower case in a reasonable way.
 void RegisterCommands() {
     cmd_dict.insert(
       {"HELLO", Command("HELLO").SetHandler([](ArgList& args) { return Hello(args); })});
@@ -91,9 +111,18 @@ void RegisterCommands() {
     cmd_dict.insert(
       {"SET",
        Command("SET").SetHandler([](ArgList& args) { return Set(args); }).SetIsWriteCommand()});
+    cmd_dict.insert(
+      {"set",
+       Command("SET").SetHandler([](ArgList& args) { return Set(args); }).SetIsWriteCommand()});
     cmd_dict.insert({"GET", Command("GET").SetHandler([](ArgList& args) { return Get(args); })});
+    cmd_dict.insert({"get", Command("GET").SetHandler([](ArgList& args) { return Get(args); })});
     cmd_dict.insert(
       {"COMMAND", Command("COMMAND").SetHandler([](ArgList&) { return Blockhole(); })});
+    cmd_dict.insert(
+      {"EXISTS", Command("EXISTS").SetHandler([](ArgList& args) { return Exists(args); })});
+    cmd_dict.insert(
+      {"exists", Command("EXISTS").SetHandler([](ArgList& args) { return Exists(args); })});
+    cmd_dict.insert({"dbsize", Command("DBSIZE").SetHandler([](ArgList&) { return Dbsize(); })});
 }
 
 void HandleAccept(io_uring_cqe* cqe) {
