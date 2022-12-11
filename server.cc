@@ -346,7 +346,7 @@ int SetupListening() {
     sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(8080);
+    addr.sin_port = htons(config.port);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // bind
