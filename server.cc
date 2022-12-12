@@ -106,6 +106,12 @@ Result Dbsize() {
     return res;
 }
 
+Result Info() {
+	Result res;
+    res.Add("# Memory\r\nevicted_keys:" + std::to_string(evicted_keys));
+	return res;
+}
+
 // TODO: Handle upper/lower case in a reasonable way.
 void RegisterCommands() {
     cmd_dict.insert(
@@ -126,6 +132,7 @@ void RegisterCommands() {
     cmd_dict.insert(
       {"exists", Command("EXISTS").SetHandler([](ArgList& args) { return Exists(args); })});
     cmd_dict.insert({"dbsize", Command("DBSIZE").SetHandler([](ArgList&) { return Dbsize(); })});
+    cmd_dict.insert({"info", Command("INFO").SetHandler([](ArgList&) { return Info(); })});
 }
 
 void HandleAccept(io_uring_cqe* cqe) {
