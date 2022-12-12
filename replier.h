@@ -11,8 +11,11 @@ public:
     static std::string BuildReply(Result result) {
         std::stringstream stream;
 
+
         if (result.type == Result::Type::kString) {
-            stream << '*' << result.Size() << "\r\n";
+		if (result.Size() > 1) {
+			stream << '*' << result.Size() << "\r\n";
+		}
             for (size_t i = 0; i < result.Size(); ++i) {
                 if (result.is_null[i]) {
                     stream << "$-1\r\n";
