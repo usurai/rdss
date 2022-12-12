@@ -40,6 +40,9 @@ TrackingMap data;
 
 rdss::Config config;
 
+// TODO: Make a stat struct.
+int64_t evicted_keys = 0;
+
 io_uring NewRing(bool polling = false);
 void AddRings(io_uring* ring);
 int SetupListening();
@@ -163,6 +166,7 @@ bool Evict() {
         return false;
     }
     data.Erase(entry->key);
+    ++evicted_keys;
     return true;
 }
 
