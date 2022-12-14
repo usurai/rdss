@@ -39,6 +39,7 @@ CommandDictionary cmd_dict;
 TrackingMap data;
 
 rdss::Config config;
+__kernel_timespec ts = {.tv_sec = 1, .tv_nsec = 0};
 
 // TODO: Make a stat struct.
 int64_t evicted_keys = 0;
@@ -107,9 +108,9 @@ Result Dbsize() {
 }
 
 Result Info() {
-	Result res;
+    Result res;
     res.Add("# Memory\r\nevicted_keys:" + std::to_string(evicted_keys));
-	return res;
+    return res;
 }
 
 // TODO: Handle upper/lower case in a reasonable way.
@@ -230,6 +231,10 @@ void HandleRead(Connection* conn, int32_t bytes) {
     ProcessCommand(conn, cmd_itor->second);
 }
 
+void Cron();
+void QueueCron(io_uring*);
+void UpdateTimeSpec();
+
 int main(int argc, char* argv[]) {
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = 1;
@@ -243,6 +248,8 @@ int main(int argc, char* argv[]) {
         LOG(INFO) << config.ToString();
     }
 
+    UpdateTimeSpec();
+
     // setup ring
     ring = NewRing(rdss::SQ_POLL);
 
@@ -253,6 +260,7 @@ int main(int argc, char* argv[]) {
 
     AddRings(&ring);
     QueueMultishotAccept(&ring, listen_sock);
+    QueueCron(&ring);
     io_uring_submit(&ring);
 
     RegisterCommands();
@@ -271,7 +279,7 @@ int main(int argc, char* argv[]) {
         int32_t submitted{0};
         while (true) {
             // TODO: don't quit here
-            if (cqe->res < 0) {
+            if (cqe->res < 0 && cqe->user_data != 1025) {
                 LOG(ERROR) << "async op: " << strerror(-cqe->res);
                 return 1;
             }
@@ -279,6 +287,11 @@ int main(int argc, char* argv[]) {
             if (cqe->user_data == 1024) {
                 HandleAccept(cqe);
                 io_uring_cqe_seen(&ring, cqe);
+                ++submitted;
+            } else if (cqe->user_data == 1025) {
+                Cron();
+                io_uring_cqe_seen(&ring, cqe);
+                QueueCron(&ring);
                 ++submitted;
             } else if (cqe->user_data < num_write_rings) {
                 assert(cqe->flags & IORING_CQE_F_MORE);
@@ -339,6 +352,29 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+void UpdateTimeSpec() {
+    if (config.hz < 1 || config.hz > 500) {
+        LOG(FATAL) << "hz is out of range(1~500):" << config.hz;
+    }
+
+    if (config.hz == 1) {
+        ts.tv_sec = 1;
+        ts.tv_nsec = 0;
+    } else {
+        ts.tv_sec = 0;
+        ts.tv_nsec = (1000 / config.hz) * 1000000LL;
+    }
+}
+
+void QueueCron(io_uring* ring) {
+    auto* sqe = io_uring_get_sqe(ring);
+    assert(sqe != nullptr);
+    io_uring_prep_timeout(sqe, &ts, 1, IORING_TIMEOUT_ETIME_SUCCESS);
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1025));
+}
+
+void Cron() { LOG(INFO) << "Cron..."; }
 
 int SetupListening() {
     // socket

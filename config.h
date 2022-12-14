@@ -36,6 +36,7 @@ std::string MaxmemoryPolicyEnumToStr(MaxmemoryPolicy policy) {
 
 struct Config {
     uint32_t port = 6379;
+    uint32_t hz = 10;
     uint64_t maxmemory = 0;
     MaxmemoryPolicy maxmemory_policy = MaxmemoryPolicy::kNoEviction;
 
@@ -48,6 +49,8 @@ struct Config {
         auto global_section = ini[""];
 
         port = global_section["port"] | 6379;
+
+        hz = global_section["hz"] | 10;
 
         maxmemory = global_section["maxmemory"] | maxmemory;
 
