@@ -11,7 +11,7 @@
 
 namespace rdss {
 
-enum class MaxmemoryPolicy { kNoEviction, kAllKeysRandom };
+enum class MaxmemoryPolicy { kNoEviction, kAllKeysRandom, kAllKeysLru };
 
 MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str) {
     if (str == "noeviction") {
@@ -19,6 +19,9 @@ MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str) {
     }
     if (!str.compare("allkeys-random")) {
         return MaxmemoryPolicy::kAllKeysRandom;
+    }
+    if (!str.compare("allkeys-lru")) {
+        return MaxmemoryPolicy::kAllKeysLru;
     }
     LOG(FATAL) << "Unknown maxmemory-policy: " << str;
 }
@@ -29,6 +32,8 @@ std::string MaxmemoryPolicyEnumToStr(MaxmemoryPolicy policy) {
         return "noeviction";
     case MaxmemoryPolicy::kAllKeysRandom:
         return "allkeys-random";
+    case MaxmemoryPolicy::kAllKeysLru:
+        return "allkeys-lru";
     default:
         return "Unknown policy";
     }

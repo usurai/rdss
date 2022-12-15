@@ -16,6 +16,8 @@ struct HashTableEntry {
     using pointer = HashTableEntry*;
     KeyType key;
     ValueType value;
+    // TODO: Give it a more reasonable name.
+    int64_t lru = 0;
     pointer next = nullptr;
 };
 

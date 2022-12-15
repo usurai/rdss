@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <liburing.h>
@@ -29,6 +30,7 @@ using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocato
 using TrackingMap = rdss::HashTable<TrackingString, TrackingString>;
 using Result = rdss::Result;
 using ArgList = facade::RespExpr::Vec;
+using DurationCount = int64_t;
 
 io_uring ring;
 int listen_sock;
@@ -39,7 +41,18 @@ CommandDictionary cmd_dict;
 TrackingMap data;
 
 rdss::Config config;
-__kernel_timespec ts = {.tv_sec = 1, .tv_nsec = 0};
+__kernel_timespec ts = {.tv_sec = 0, .tv_nsec = 1};
+DurationCount lru_clock = 0;
+
+// TODO: Key field should be reference to the key in hash table to avoid copy.
+using LRUEntry = std::pair<DurationCount, std::string>;
+struct CompareLRUEntry {
+    constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
+        return lhs.first < rhs.first;
+    }
+};
+std::set<LRUEntry, CompareLRUEntry> eviction_pool;
+constexpr size_t kEvictionPoolLimit = 16;
 
 // TODO: Make a stat struct.
 int64_t evicted_keys = 0;
@@ -69,7 +82,10 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    data.InsertOrAssign(TrackingString(args[1].GetString()), TrackingString(args[2].GetString()));
+    auto [entry, inserted] = data.InsertOrAssign(
+      TrackingString(args[1].GetString()), TrackingString(args[2].GetString()));
+    entry->lru = lru_clock;
+    LOG(INFO) << "Set with lru: " << entry->lru;
     Result res;
     res.Add("OK");
     return res;
@@ -83,6 +99,7 @@ Result Get(ArgList& args) {
     if (entry == nullptr) {
         res.AddNull();
     } else {
+        entry->lru = lru_clock;
         res.Add(std::string(entry->value));
     }
     return res;
@@ -94,6 +111,7 @@ Result Exists(ArgList& args) {
     for (size_t i = 1; i < args.size(); ++i) {
         auto entry = data.Find(TrackingString(args[i].GetString()));
         if (entry != nullptr) {
+            entry->lru = lru_clock;
             ++cnt;
         }
     }
@@ -151,7 +169,6 @@ void HandleAccept(io_uring_cqe* cqe) {
 }
 
 bool IsOOM() {
-    // TODO: turn this into log.
     LOG(INFO) << "OOM: " << std::to_string(rdss::MemoryTracker::GetInstance().GetAllocated())
               << " vs " << std::to_string(config.maxmemory);
     return (
@@ -159,34 +176,93 @@ bool IsOOM() {
       && rdss::MemoryTracker::GetInstance().GetAllocated() >= config.maxmemory);
 }
 
+size_t MemoryToFree() {
+    if (config.maxmemory == 0) {
+        return 0;
+    }
+
+    const auto allocated = rdss::MemoryTracker::GetInstance().GetAllocated();
+    if (allocated > config.maxmemory) {
+        return allocated - config.maxmemory;
+    }
+    return 0;
+}
+
+// TODO: Current implementation doesn't care execution time. Consider stop eviction after some time
+// or attempts.
+TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
+    assert(eviction_pool.size() < kEvictionPoolLimit);
+    assert(data.Count() > 0);
+
+    TrackingMap::EntryPointer result{nullptr};
+    while (result == nullptr) {
+        for (size_t i = 0; i < std::min(samples, data.Count()); ++i) {
+            auto entry = data.GetRandomEntry();
+            assert(entry != nullptr);
+            eviction_pool.emplace(entry->lru, std::string(entry->key.data(), entry->key.size()));
+        }
+
+        while (eviction_pool.size() > kEvictionPoolLimit) {
+            auto it = eviction_pool.end();
+            --it;
+            eviction_pool.erase(it);
+        }
+
+        while (!eviction_pool.empty()) {
+            auto& [lru, key] = *eviction_pool.begin();
+            auto entry = data.Find(TrackingString(key));
+            if (entry == nullptr || entry->lru != lru) {
+                eviction_pool.erase(eviction_pool.begin());
+                continue;
+            }
+            result = entry;
+            eviction_pool.erase(eviction_pool.begin());
+            break;
+        }
+    }
+    return result;
+}
+
+// Returns if it's still OOM after eviction.
 bool Evict() {
-    if (data.Count() == 0) {
-        return false;
+    const auto to_free = MemoryToFree();
+    if (to_free == 0) {
+        return true;
     }
 
-    if (config.maxmemory_policy == rdss::MaxmemoryPolicy::kNoEviction) {
-        return false;
-    }
+    size_t freed = 0;
+    while (freed < to_free) {
+        if (data.Count() == 0) {
+            return false;
+        }
 
-    // Random evict
-    auto entry = data.GetRandomEntry();
-    if (entry == nullptr) {
-        return false;
+        if (config.maxmemory_policy == rdss::MaxmemoryPolicy::kNoEviction) {
+            return false;
+        }
+
+        TrackingMap::EntryPointer entry{nullptr};
+        if (config.maxmemory_policy == rdss::MaxmemoryPolicy::kAllKeysRandom) {
+            entry = data.GetRandomEntry();
+        } else {
+            // allkeys-lru
+            // TODO: make samples configurable: maxmemory-samples
+            entry = GetSomeOldEntry(5);
+        }
+
+        if (entry == nullptr) {
+            return false;
+        }
+        auto delta = rdss::MemoryTracker::GetInstance().GetAllocated();
+        data.Erase(entry->key);
+        ++evicted_keys;
+        delta -= rdss::MemoryTracker::GetInstance().GetAllocated();
+        freed += delta;
     }
-    data.Erase(entry->key);
-    ++evicted_keys;
     return true;
 }
 
 void ProcessCommand(Connection* conn, Command& cmd) {
-    bool evictCannotSolveOOM = false;
-    while (IsOOM()) {
-        if (!Evict()) {
-            evictCannotSolveOOM = true;
-            break;
-        }
-    }
-
+    const bool evictCannotSolveOOM = !Evict();
     if (evictCannotSolveOOM && cmd.IsWriteCommand()) {
         conn->Reply(
           "error: OOM command not allowd when used memory > 'maxmemory', ("
@@ -204,6 +280,9 @@ void ProcessCommand(Connection* conn, Command& cmd) {
 void HandleRead(Connection* conn, int32_t bytes) {
     conn->buffer.CommitWrite(static_cast<size_t>(bytes));
     uint32_t consumed{0};
+    // LOG(INFO) << std::string_view(
+    //   reinterpret_cast<char*>(conn->buffer.InputBuffer().data()),
+    //   conn->buffer.InputBuffer().size());
     auto res = conn->parser.Parse(conn->buffer.InputBuffer(), &consumed, &conn->vec);
     if (consumed != 0) {
         conn->buffer.ConsumeInput(consumed);
@@ -374,7 +453,17 @@ void QueueCron(io_uring* ring) {
     io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(1025));
 }
 
-void Cron() { LOG(INFO) << "Cron..."; }
+int64_t GetLruClock() {
+    auto now = std::chrono::system_clock::now();
+    auto epoch = now.time_since_epoch();
+    return epoch.count();
+}
+
+void Cron() {
+    // TODO: Support lru resolution.
+    auto clock = GetLruClock();
+    lru_clock = clock;
+}
 
 int SetupListening() {
     // socket
