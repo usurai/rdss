@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <string>
@@ -13,7 +14,7 @@ using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocato
 
 class HashTableTest : public testing::Test {
 public:
-    void SetUp() override { std::srand(std::time(nullptr)); }
+    void SetUp() override { std::srand(static_cast<unsigned int>(time(nullptr))); }
 
     static TrackingString GenRandomString(size_t len) {
         static const char alphanum[] = "0123456789"

@@ -29,7 +29,7 @@ public:
     using BucketVector = std::vector<EntryPointer, Mallocator<EntryPointer>>;
 
 public:
-    HashTable() { std::srand(std::time(nullptr)); }
+    HashTable() { std::srand(static_cast<unsigned int>(time(nullptr))); }
     ~HashTable() { Clear(); }
 
     // TODO: parameter
@@ -135,7 +135,7 @@ private:
     // Assumes the table is not empty.
     BucketVector::iterator FindBucket(const KeyType& key) {
         const auto hash = Hash(key);
-        const int32_t index = hash % buckets_[0].size();
+        const int32_t index = static_cast<int32_t>(hash % buckets_[0].size());
         if (index >= rehash_index_) {
             return buckets_[0].begin() + index;
         }

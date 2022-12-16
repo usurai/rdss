@@ -121,7 +121,7 @@ Result Exists(ArgList& args) {
 
 Result Dbsize() {
     Result res;
-    res.Add(data.Count());
+    res.Add(static_cast<int>(data.Count()));
     return res;
 }
 
@@ -482,7 +482,7 @@ int SetupListening() {
     sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(config.port);
+    addr.sin_port = htons(static_cast<uint16_t>(config.port));
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // bind
