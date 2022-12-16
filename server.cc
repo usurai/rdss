@@ -246,7 +246,7 @@ bool Evict() {
         } else {
             // allkeys-lru
             // TODO: make samples configurable: maxmemory-samples
-            entry = GetSomeOldEntry(5);
+            entry = GetSomeOldEntry(config.maxmemory_samples);
         }
 
         if (entry == nullptr) {

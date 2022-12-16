@@ -44,6 +44,7 @@ struct Config {
     uint32_t hz = 10;
     uint64_t maxmemory = 0;
     MaxmemoryPolicy maxmemory_policy = MaxmemoryPolicy::kNoEviction;
+    uint32_t maxmemory_samples = 5;
 
     void ReadFromFile(const std::string& file_name) {
         std::ifstream in(file_name);
@@ -61,6 +62,8 @@ struct Config {
 
         auto maxmemory_policy_str = global_section["maxmemory-policy"] | "noeviction";
         maxmemory_policy = MaxmemoryPolicyStrToEnum(maxmemory_policy_str);
+
+        maxmemory_samples = global_section["maxmemory-samples"] | 5;
     }
 
     std::string ToString() const {
@@ -68,7 +71,8 @@ struct Config {
         stream << "Configs: [";
         stream << "port:" << port << ", ";
         stream << "maxmemory:" << maxmemory << ", ";
-        stream << "maxmemory-policy:" << MaxmemoryPolicyEnumToStr(maxmemory_policy);
+        stream << "maxmemory-policy:" << MaxmemoryPolicyEnumToStr(maxmemory_policy) << ", ";
+        stream << "maxmemory-samples:" << maxmemory_samples;
         stream << "].";
         return stream.str();
     }
