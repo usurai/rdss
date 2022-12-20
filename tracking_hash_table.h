@@ -17,6 +17,13 @@ struct TSPComparator {
         assert(lhs != nullptr && rhs != nullptr);
         return lhs->compare(*rhs) == 0;
     }
+
+    bool operator()(const TrackingStringPtr& lhs, const std::string_view& rhs) const {
+        if (lhs == nullptr) {
+            return rhs.empty();
+        }
+        return lhs->compare(rhs) == 0;
+    }
 };
 
 struct TSPHashAdapter {

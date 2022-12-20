@@ -83,11 +83,10 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    auto key_str = std::make_shared<TrackingString>(args[1].GetString());
-    auto value_str = std::make_shared<TrackingString>(args[2].GetString());
-    auto [entry, inserted] = data.InsertOrAssign(std::move(key_str), std::move(value_str));
+    auto key_ptr = std::make_shared<TrackingString>(args[1].GetString());
+    auto value_ptr = std::make_shared<TrackingString>(args[2].GetString());
+    auto [entry, inserted] = data.InsertOrAssign(std::move(key_ptr), std::move(value_ptr));
     entry->lru = lru_clock;
-    // LOG(INFO) << "Set with lru: " << entry->lru;
     Result res;
     res.Add("OK");
     return res;
@@ -98,8 +97,7 @@ Result Get(ArgList& args) {
 
     Result res;
     // TODO: Add support to Find by std::string_view
-    auto key_str = std::make_shared<TrackingString>(args[1].GetString());
-    auto entry = data.Find(key_str);
+    auto entry = data.Find(args[1].GetString());
     if (entry == nullptr) {
         res.AddNull();
     } else {
@@ -113,8 +111,7 @@ Result Exists(ArgList& args) {
     Result res;
     int32_t cnt{0};
     for (size_t i = 1; i < args.size(); ++i) {
-        auto key_str = std::make_shared<TrackingString>(args[i].GetString());
-        auto entry = data.Find(key_str);
+        auto entry = data.Find(args[i].GetString());
         if (entry != nullptr) {
             entry->lru = lru_clock;
             ++cnt;
@@ -193,8 +190,8 @@ size_t MemoryToFree() {
     return 0;
 }
 
-// TODO: Current implementation doesn't care execution time. Consider stop eviction after some time
-// or attempts.
+// TODO: Current implementation doesn't care execution time. Consider stop eviction after some
+// time or attempts.
 TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
     assert(eviction_pool.size() < kEvictionPoolLimit);
     assert(data.Count() > 0);
@@ -215,8 +212,7 @@ TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
 
         while (!eviction_pool.empty()) {
             auto& [lru, key] = *eviction_pool.begin();
-            auto key_str = std::make_shared<TrackingString>(key);
-            auto entry = data.Find(key_str);
+            auto entry = data.Find(key);
             if (entry == nullptr || entry->lru != lru) {
                 eviction_pool.erase(eviction_pool.begin());
                 continue;
@@ -259,7 +255,7 @@ bool Evict() {
             return false;
         }
         auto delta = rdss::MemoryTracker::GetInstance().GetAllocated();
-        data.Erase(entry->key);
+        data.Erase(std::string_view(entry->key->data(), entry->key->size()));
         ++evicted_keys;
         delta -= rdss::MemoryTracker::GetInstance().GetAllocated();
         freed += delta;

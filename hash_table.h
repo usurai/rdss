@@ -42,7 +42,7 @@ public:
         return Add(std::move(key), std::move(value), true);
     }
 
-    EntryPointer Find(const KeyType& key) {
+    EntryPointer Find(const std::string_view& key) {
         if (buckets_[0].empty()) {
             return nullptr;
         }
@@ -68,7 +68,7 @@ public:
 
     // const ValueType& GetValue(KeyType key);
 
-    bool Erase(const KeyType& key) {
+    bool Erase(const std::string_view& key) {
         auto bucket = FindBucket(key);
         const auto erased = EraseEntryInBucket(bucket, key);
         if (erased) {
@@ -114,7 +114,8 @@ public:
 
 private:
     std::pair<EntryPointer, bool> Add(KeyType key, ValueType value, bool replace) {
-        if (auto entry = Find(key)) {
+        std::string_view key_view{key->data(), key->size()};
+        if (auto entry = Find(key_view)) {
             if (!replace) {
                 return {entry, false};
             }
@@ -126,7 +127,7 @@ private:
             return {nullptr, false};
         }
 
-        auto bucket = FindBucket(key);
+        auto bucket = FindBucket(key_view);
         auto result_pointer = InsertIntoBucket(bucket, std::move(key), std::move(value));
         ++entries_;
         return {result_pointer, true};
@@ -137,8 +138,12 @@ private:
         return XXH64(val.data(), val.size(), 0);
     }
 
+    uint64_t Hash(const std::string_view& key) {
+        return XXH64(key.data(), key.size(), 0);
+    }
+
     // Assumes the table is not empty.
-    BucketVector::iterator FindBucket(const KeyType& key) {
+    BucketVector::iterator FindBucket(const std::string_view& key) {
         const auto hash = Hash(key);
         const int32_t index = static_cast<int32_t>(hash % buckets_[0].size());
         if (index >= rehash_index_) {
@@ -148,7 +153,7 @@ private:
         return buckets_[1].begin() + (hash % buckets_[1].size());
     }
 
-    EntryPointer FindEntryInBucket(BucketVector::iterator bucket, const KeyType& key) {
+    EntryPointer FindEntryInBucket(BucketVector::iterator bucket, const std::string_view& key) {
         if (*bucket == nullptr) {
             return nullptr;
         }
@@ -178,7 +183,7 @@ private:
         return entry;
     }
 
-    bool EraseEntryInBucket(BucketVector::iterator bucket, const KeyType& key) {
+    bool EraseEntryInBucket(BucketVector::iterator bucket, const std::string_view& key) {
         if (*bucket == nullptr) {
             return false;
         }
