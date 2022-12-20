@@ -1,4 +1,5 @@
 #include "hash_table.h"
+#include "tracking_hash_table.h"
 
 #include <gtest/gtest.h>
 
@@ -30,7 +31,7 @@ public:
 };
 
 TEST(HashTableTest, basic) {
-    HashTable<TrackingString, TrackingString> hash_table;
+    TrackingMap hash_table;
     EXPECT_EQ(hash_table.Count(), 0);
 
     constexpr size_t key_length = 64;
@@ -49,31 +50,38 @@ TEST(HashTableTest, basic) {
             auto value = HashTableTest::GenRandomString(value_length);
             fact.insert({key, value});
 
-            EXPECT_EQ(hash_table.Find(key), nullptr);
-            auto [entry, inserted] = hash_table.Insert(key, value);
+            auto key_ptr = std::make_shared<TrackingString>(key);
+            auto value_ptr = std::make_shared<TrackingString>(value);
+            EXPECT_EQ(hash_table.Find(key_ptr), nullptr);
+            auto [entry, inserted] = hash_table.Insert(key_ptr, value_ptr);
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(inserted);
 
-            auto find_result = hash_table.Find(key);
+            auto find_result = hash_table.Find(key_ptr);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_EQ(find_result->key, key);
-            EXPECT_EQ(find_result->value, value);
+            EXPECT_EQ(*(find_result->key), key);
+            EXPECT_EQ(*(find_result->value), value);
         } else if (r > 0.2) {
             auto it = fact.begin();
             auto value = HashTableTest::GenRandomString(value_length);
-            EXPECT_NE(hash_table.Find(it->first), nullptr);
+
+            auto key_ptr = std::make_shared<TrackingString>(it->first);
+            auto value_ptr = std::make_shared<TrackingString>(value);
+
+            EXPECT_NE(hash_table.Find(key_ptr), nullptr);
             it->second = value;
-            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, it->second);
+            auto [entry, replaced] = hash_table.InsertOrAssign(key_ptr, value_ptr);
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(replaced);
 
-            auto find_result = hash_table.Find(it->first);
+            auto find_result = hash_table.Find(key_ptr);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_EQ(find_result->key, it->first);
-            EXPECT_EQ(find_result->value, it->second);
+            EXPECT_EQ(*(find_result->key), it->first);
+            EXPECT_EQ(*(find_result->value), it->second);
         } else {
-            EXPECT_TRUE(hash_table.Erase(fact.begin()->first));
-            auto find_result = hash_table.Find(fact.begin()->first);
+            auto key_ptr = std::make_shared<TrackingString>(fact.begin()->first);
+            EXPECT_TRUE(hash_table.Erase(key_ptr));
+            auto find_result = hash_table.Find(key_ptr);
             EXPECT_EQ(find_result, nullptr);
             fact.erase(fact.begin());
         }
@@ -81,10 +89,10 @@ TEST(HashTableTest, basic) {
     EXPECT_EQ(hash_table.Count(), fact.size());
 
     for (const auto& [key, value] : fact) {
-        auto find_result = hash_table.Find(key);
+        auto find_result = hash_table.Find(std::make_shared<TrackingString>(key));
         EXPECT_NE(find_result, nullptr);
-        EXPECT_EQ(find_result->key, key);
-        EXPECT_EQ(find_result->value, value);
+        EXPECT_EQ(*(find_result->key), key);
+        EXPECT_EQ(*(find_result->value), value);
     }
 }
 
@@ -94,18 +102,20 @@ TEST(HashTableTest, getRandomEntry) {
     constexpr size_t value_length = 512;
     constexpr size_t n = 1024 * 16;
 
-    HashTable<TrackingString, TrackingString> hash_table;
+    TrackingMap hash_table;
     for (size_t i = 0; i < n; ++i) {
         auto key = HashTableTest::GenRandomString(key_length);
         auto value = HashTableTest::GenRandomString(value_length);
-        hash_table.Insert(key, value);
+        auto key_ptr = std::make_shared<TrackingString>(key);
+        auto value_ptr = std::make_shared<TrackingString>(value);
+        hash_table.Insert(key_ptr, value_ptr);
     }
 
     std::map<TrackingString, size_t> count;
     for (size_t i = 0; i < n; ++i) {
         auto entry = hash_table.GetRandomEntry();
         EXPECT_NE(entry, nullptr);
-        ++count[entry->key];
+        ++count[*(entry->key)];
     }
 
     size_t max_count{0};

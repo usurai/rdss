@@ -21,7 +21,8 @@ struct HashTableEntry {
     pointer next = nullptr;
 };
 
-template<typename KeyType, typename ValueType>
+// TODO: Consider a better solution for HashAdapter
+template<typename KeyType, typename ValueType, typename Comparator, typename HashAdapter>
 class HashTable {
 public:
     using EntryType = HashTableEntry<KeyType, ValueType>;
@@ -102,6 +103,7 @@ public:
                 }
             }
         }
+        rehash_index_ = -1;
     }
 
     bool IsRehashing() const { return (rehash_index_ >= 0); }
@@ -130,7 +132,10 @@ private:
         return {result_pointer, true};
     }
 
-    uint64_t Hash(const KeyType& key) { return XXH64(key.data(), key.size(), 0); }
+    uint64_t Hash(const KeyType& key) {
+        auto val = HashAdapter()(key);
+        return XXH64(val.data(), val.size(), 0);
+    }
 
     // Assumes the table is not empty.
     BucketVector::iterator FindBucket(const KeyType& key) {
@@ -149,7 +154,7 @@ private:
         }
 
         auto entry = *bucket;
-        while (entry->key != key) {
+        while (!comparator_(entry->key, key)) {
             if (entry->next == nullptr) {
                 return nullptr;
             }
@@ -178,7 +183,7 @@ private:
             return false;
         }
         auto entry = *bucket;
-        if (entry->key == key) {
+        if (comparator_(entry->key, key)) {
             *bucket = entry->next;
             entry->~HashTableEntry();
             entry_allocator_.deallocate(entry, 1);
@@ -187,7 +192,7 @@ private:
 
         EntryPointer* prev_next = &(entry->next);
         entry = entry->next;
-        while (entry->key != key) {
+        while (!comparator_(entry->key, key)) {
             if (entry->next == nullptr) {
                 return false;
             }
@@ -258,6 +263,7 @@ private:
     }
 
 private:
+    Comparator comparator_;
     Mallocator<EntryType> entry_allocator_;
     BucketVector buckets_[2];
     size_t entries_ = 0;

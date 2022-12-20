@@ -9,6 +9,7 @@
 #include "hash_table.h"
 #include "memory.h"
 #include "replier.h"
+#include "tracking_hash_table.h"
 
 #include <arpa/inet.h>
 #include <glog/logging.h>
@@ -24,11 +25,11 @@
 using rdss::Command;
 using rdss::Connection;
 using rdss::Mallocator;
+using rdss::Result;
+using rdss::TrackingMap;
+using rdss::TrackingString;
 
 using CommandDictionary = std::unordered_map<std::string, Command>;
-using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
-using TrackingMap = rdss::HashTable<TrackingString, TrackingString>;
-using Result = rdss::Result;
 using ArgList = facade::RespExpr::Vec;
 using DurationCount = int64_t;
 
@@ -82,10 +83,11 @@ Result Ping() {
 
 Result Set(ArgList& args) {
     assert(args.size() == 3);
-    auto [entry, inserted] = data.InsertOrAssign(
-      TrackingString(args[1].GetString()), TrackingString(args[2].GetString()));
+    auto key_str = std::make_shared<TrackingString>(args[1].GetString());
+    auto value_str = std::make_shared<TrackingString>(args[2].GetString());
+    auto [entry, inserted] = data.InsertOrAssign(std::move(key_str), std::move(value_str));
     entry->lru = lru_clock;
-    LOG(INFO) << "Set with lru: " << entry->lru;
+    // LOG(INFO) << "Set with lru: " << entry->lru;
     Result res;
     res.Add("OK");
     return res;
@@ -95,12 +97,14 @@ Result Get(ArgList& args) {
     assert(args.size() == 2);
 
     Result res;
-    auto entry = data.Find(TrackingString(args[1].GetString()));
+    // TODO: Add support to Find by std::string_view
+    auto key_str = std::make_shared<TrackingString>(args[1].GetString());
+    auto entry = data.Find(key_str);
     if (entry == nullptr) {
         res.AddNull();
     } else {
         entry->lru = lru_clock;
-        res.Add(std::string(entry->value));
+        res.Add(std::string(*(entry->value)));
     }
     return res;
 }
@@ -109,7 +113,8 @@ Result Exists(ArgList& args) {
     Result res;
     int32_t cnt{0};
     for (size_t i = 1; i < args.size(); ++i) {
-        auto entry = data.Find(TrackingString(args[i].GetString()));
+        auto key_str = std::make_shared<TrackingString>(args[i].GetString());
+        auto entry = data.Find(key_str);
         if (entry != nullptr) {
             entry->lru = lru_clock;
             ++cnt;
@@ -199,7 +204,7 @@ TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
         for (size_t i = 0; i < std::min(samples, data.Count()); ++i) {
             auto entry = data.GetRandomEntry();
             assert(entry != nullptr);
-            eviction_pool.emplace(entry->lru, std::string(entry->key.data(), entry->key.size()));
+            eviction_pool.emplace(entry->lru, std::string(entry->key->data(), entry->key->size()));
         }
 
         while (eviction_pool.size() > kEvictionPoolLimit) {
@@ -210,7 +215,8 @@ TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
 
         while (!eviction_pool.empty()) {
             auto& [lru, key] = *eviction_pool.begin();
-            auto entry = data.Find(TrackingString(key));
+            auto key_str = std::make_shared<TrackingString>(key);
+            auto entry = data.Find(key_str);
             if (entry == nullptr || entry->lru != lru) {
                 eviction_pool.erase(eviction_pool.begin());
                 continue;
