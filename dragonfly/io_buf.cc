@@ -38,7 +38,8 @@ void IoBuf::Reserve(size_t sz) {
     if (sz < capacity_) return;
 
     sz = absl::bit_ceil(sz);
-    uint8_t* nb = new (std::align_val_t{alignment_}) uint8_t[sz];
+    // Zero-initialize here to surpress valgrind error.
+    uint8_t* nb = new (std::align_val_t{alignment_}) uint8_t[sz]();
     if (buf_) {
         if (size_ > offs_) {
             memcpy(nb, buf_ + offs_, size_ - offs_);
