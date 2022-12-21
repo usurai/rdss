@@ -45,8 +45,7 @@ rdss::Config config;
 __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = 1};
 DurationCount lru_clock = 0;
 
-// TODO: Key field should be reference to the key in hash table to avoid copy.
-using LRUEntry = std::pair<DurationCount, std::string>;
+using LRUEntry = std::pair<DurationCount, rdss::TrackingStringPtr>;
 struct CompareLRUEntry {
     constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
         return lhs.first < rhs.first;
@@ -201,7 +200,7 @@ TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
         for (size_t i = 0; i < std::min(samples, data.Count()); ++i) {
             auto entry = data.GetRandomEntry();
             assert(entry != nullptr);
-            eviction_pool.emplace(entry->lru, std::string(entry->key->data(), entry->key->size()));
+            eviction_pool.emplace(entry->lru, entry->key);
         }
 
         while (eviction_pool.size() > kEvictionPoolLimit) {
@@ -212,7 +211,7 @@ TrackingMap::EntryPointer GetSomeOldEntry(size_t samples) {
 
         while (!eviction_pool.empty()) {
             auto& [lru, key] = *eviction_pool.begin();
-            auto entry = data.Find(key);
+            auto entry = data.Find({key->data(), key->size()});
             if (entry == nullptr || entry->lru != lru) {
                 eviction_pool.erase(eviction_pool.begin());
                 continue;
