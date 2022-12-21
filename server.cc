@@ -21,6 +21,7 @@
 #include <cstring>
 #include <iostream>
 #include <liburing.h>
+#include <set>
 
 using rdss::Command;
 using rdss::Connection;

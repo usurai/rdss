@@ -5,10 +5,8 @@
 
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 
-#include "heap_size.h"
-#include "logging.h"
-
 #include <absl/strings/numbers.h>
+#include <glog/logging.h>
 
 namespace facade {
 
@@ -461,10 +459,6 @@ void RedisParser::ExtendLastString(Buffer str) {
     memcpy(nb.data() + last_str.size(), str.data(), str.size());
     last_str = RespExpr::Buffer{nb.data(), last_str.size() + str.size()};
     buf_stash_.back() = std::move(nb);
-}
-
-size_t RedisParser::UsedMemory() const {
-    return dfly::HeapSize(parse_stack_) + dfly::HeapSize(stash_) + dfly::HeapSize(buf_stash_);
 }
 
 } // namespace facade

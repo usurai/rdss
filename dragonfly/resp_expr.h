@@ -11,10 +11,13 @@
 #include <string_view>
 #include <variant>
 #include <vector>
-
-#include "facade_types.h"
+#include <span>
 
 namespace facade {
+
+using MutableSlice = std::span<char>;
+using CmdArgList = std::span<MutableSlice>;
+using CmdArgVec = std::vector<MutableSlice>;
 
 class RespExpr {
  public:

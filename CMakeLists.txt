@@ -40,8 +40,6 @@ add_executable(
     server.cc
     memory.cc
     dragonfly/io_buf.cc
-    dragonfly/logging.cc
-    dragonfly/op_status.cc
     dragonfly/redis_parser.cc
     dragonfly/resp_expr.cc
 )

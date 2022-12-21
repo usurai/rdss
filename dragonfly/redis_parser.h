@@ -61,8 +61,6 @@ class RedisParser {
     return stash_;
   }
 
-  size_t UsedMemory() const;
-
  private:
   void InitStart(uint8_t prefix_b, RespVec* res);
   void StashState(RespVec* res);
