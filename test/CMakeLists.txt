@@ -21,9 +21,16 @@ add_executable(
     ../memory.cc
 )
 
+add_executable(
+    redis_parser_test
+    redis_parser_test.cc
+)
+
 target_include_directories(client_test PUBLIC ../)
 
 target_include_directories(hash_table_test PUBLIC ../)
+
+target_include_directories(redis_parser_test PUBLIC ../)
 
 target_link_libraries(
     client_test
@@ -37,5 +44,12 @@ target_link_libraries(
     /usr/lib/x86_64-linux-gnu/libxxhash.a
 )
 
+target_link_libraries(
+    redis_parser_test
+    gtest_main
+)
+
 include(GoogleTest)
 gtest_discover_tests(client_test)
+gtest_discover_tests(hash_table_test)
+gtest_discover_tests(redis_parser_test)
