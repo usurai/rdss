@@ -4,6 +4,8 @@ FetchContent_Declare(
     URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
 )
 
+find_package (glog REQUIRED)
+
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
@@ -47,6 +49,7 @@ target_link_libraries(
 target_link_libraries(
     redis_parser_test
     gtest_main
+    glog::glog
 )
 
 include(GoogleTest)
