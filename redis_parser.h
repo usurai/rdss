@@ -36,6 +36,8 @@ public:
         assert(buffer_ != nullptr);
     }
 
+    virtual ~RedisParser() = default;
+
     virtual ParsingResult Parse() = 0;
 
     void Reset() { state_ = State::kInit; }
@@ -51,6 +53,8 @@ class InlineParser : public RedisParser {
 public:
     explicit InlineParser(Buffer* buffer)
       : RedisParser(buffer) {}
+
+    virtual ~InlineParser() = default;
 
     ParsingResult Parse() {
         // TODO: naming
@@ -90,43 +94,88 @@ public:
     }
 };
 
-    virtual ParsingResult Parse(size_t bytes_read) override {
-        assert(bytes_read > 0);
-        assert(state_ == State::kInit || state_ == State::kParsing);
-        assert(!buffer_.empty());
-        assert(cursor_ + bytes_read <= buffer_.size());
+class MultiBulkParser : public RedisParser {
+public:
+    explicit MultiBulkParser(Buffer* buffer)
+      : RedisParser(buffer)
+      , args_{0} {}
 
-        bytes_to_parse_ += bytes_read;
+    virtual ~MultiBulkParser() = default;
 
-        const auto crlf = buffer_.find("\r\n", cursor_);
-        if (crlf == Buffer::npos || crlf >= bytes_to_parse_ - 1) {
-            if (bytes_to_parse_ > kMaxInlineBufferSize) {
-                state_ = State::kError;
-            } else {
-                state_ = State::kParsing;
-            }
-            return {state_, 0, {}};
+    virtual ParsingResult Parse() override {
+        assert(state_ != State::kError);
+
+        auto buffer = buffer_->Stored();
+        if (buffer.empty()) {
+            return {state_, {}};
         }
 
-        const auto old_cursor{cursor_};
-        // TODO: support quote and single quote.
-        while (cursor_ < crlf) {
-            if (std::isspace(buffer_[cursor_])) {
-                ++cursor_;
-                continue;
+        // assert first char is *
+        // parse args
+        size_t cursor{0};
+        if (state_ == State::kInit) {
+            assert(buffer[0] == '*');
+            auto crlf = buffer.find("\r\n", 1);
+            if (crlf == Buffer::BufferView::npos) {
+                return {state_, {}};
             }
-            auto next_space = cursor_ + 1;
-            while (next_space < crlf && !std::isspace(buffer_[next_space])) {
-                ++next_space;
+            auto [_, ec] = std::from_chars(buffer.data() + 1, buffer.data() + crlf, args_);
+            if (ec != std::errc() || args_ < 0) {
+                state_ = State::kError;
+                return {state_, {}};
             }
-            parsed_.emplace_back(buffer_.data() + cursor_, next_space - cursor_);
-            cursor_ = next_space;
+            LOG(INFO) << "args:" << args_;
+            state_ = State::kParsing;
+            args_to_parse_ = args_;
+            cursor = crlf + 2;
+            buffer_->Consume(cursor);
+        }
+
+        // while args_to_parse
+        // parse string_len
+        // parse string[i]
+        while (args_to_parse_) {
+            if (cursor >= buffer.size()) {
+                return {state_, {}};
+            }
+
+            if (buffer[cursor] != '$') {
+                state_ = State::kError;
+                return {state_, {}};
+            }
+            auto crlf = buffer.find("\r\n", cursor);
+            if (crlf == cursor + 1) {
+                state_ = State::kError;
+                return {state_, {}};
+            }
+            if (crlf == Buffer::BufferView::npos) {
+                return {state_, {}};
+            }
+            int str_len;
+            auto [_, ec] = std::from_chars(
+              buffer.data() + cursor + 1, buffer.data() + crlf, str_len);
+            if (ec != std::errc() || str_len < 0) {
+                state_ = State::kError;
+                return {state_, {}};
+            }
+            const auto old_cursor = cursor;
+            cursor = crlf + 2;
+            if (cursor + static_cast<size_t>(str_len) > buffer.size()) {
+                return {state_, {}};
+            }
+            result_.emplace_back(buffer.data() + cursor, str_len);
+            cursor += static_cast<size_t>(str_len);
+            --args_to_parse_;
+            buffer_->Consume(cursor - old_cursor);
         }
         state_ = State::kDone;
-        cursor_ = crlf + 2;
-        bytes_to_parse_ -= cursor_ - old_cursor;
-        return {state_, cursor_, std::move(parsed_)};
+        return {state_, std::move(result_)};
     }
+
+private:
+    int32_t args_;
+    int32_t args_to_parse_;
+    Strings result_;
 };
 
 } // namespace rdss
