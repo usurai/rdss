@@ -39,6 +39,7 @@ add_executable(
     rdss
     server.cc
     memory.cc
+    connection.cc
     dragonfly/io_buf.cc
     dragonfly/redis_parser.cc
     dragonfly/resp_expr.cc

@@ -14,6 +14,7 @@ enable_testing()
 add_executable(
     client_test
     client_test.cc
+    ../connection.cc
     ../dragonfly/io_buf.cc
 )
 
