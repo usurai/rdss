@@ -95,7 +95,7 @@ TEST(RedisParserTest, mbulkBasic) {
     VectorBuffer buffer(kBufferCapacity);
 
     {
-        const std::string content = "*1\r\n$4\r\nPING";
+        const std::string content = "*1\r\n$4\r\nPING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());
@@ -106,7 +106,7 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*3\r\n$3\r\nSET$2\r\nK0$6\r\nFOOBAR";
+        const std::string content = "*3\r\n$3\r\nSET\r\n$2\r\nK0\r\n$6\r\nFOOBAR\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());
@@ -117,20 +117,23 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*3\r\n$3\r\nSET$2\r\nK0$6\r\nFOOBAR";
+        const std::string content = "*3\r\n$3\r\nSET\r\n$2\r\nK0\r\n$6\r\nFOOBAR\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
 
         for (size_t i = 4; i < content.size() - 1; ++i) {
             buffer.Reset();
+            memcpy(buffer.Data(), content.data(), i);
             buffer.CommitWrite(i);
             MultiBulkParser parser(&buffer);
             auto res = parser.Parse();
             EXPECT_EQ(res.first, State::kParsing);
 
+            memcpy(buffer.Data(), content.data() + i, content.size() - i);
             buffer.CommitWrite(content.size() - i);
             auto res1 = parser.Parse();
-            EXPECT_EQ(res1.first, State::kDone);
+            EXPECT_EQ(res1.first, State::kDone)
+              << "Committed buffer:'" << content.substr(0, i) << "'";
             EXPECT_THAT(res1.second, testing::ElementsAre("SET", "K0", "FOOBAR"));
         }
     }
@@ -147,7 +150,7 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*1\r\n4\r\nPING";
+        const std::string content = "*1\r\n4\r\nPING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());
@@ -157,7 +160,7 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*-1\r\n$4\r\nPING";
+        const std::string content = "*-1\r\n$4\r\nPING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());
@@ -167,7 +170,7 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*1\r\n$-4\r\nPING";
+        const std::string content = "*1\r\n$-4\r\nPING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());
@@ -177,7 +180,7 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*1\r\n$6\r\nPING";
+        const std::string content = "*1\r\n$6\r\nPING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.CommitWrite(content.size());

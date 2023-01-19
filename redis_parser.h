@@ -103,9 +103,13 @@ public:
     virtual ~MultiBulkParser() = default;
 
     virtual ParsingResult Parse() override {
-        assert(state_ != State::kError);
+        // assert(state_ != State::kError);
+        if (state_ != State::kParsing) {
+            Reset();
+        }
 
         auto buffer = buffer_->Stored();
+        // LOG(INFO) << "Parsing:'" << buffer << "'";
         if (buffer.empty()) {
             return {state_, {}};
         }
@@ -124,7 +128,7 @@ public:
                 state_ = State::kError;
                 return {state_, {}};
             }
-            LOG(INFO) << "args:" << args_;
+            // LOG(INFO) << "args:" << args_;
             state_ = State::kParsing;
             args_to_parse_ = args_;
             cursor = crlf + 2;
@@ -160,16 +164,23 @@ public:
             }
             const auto old_cursor = cursor;
             cursor = crlf + 2;
-            if (cursor + static_cast<size_t>(str_len) > buffer.size()) {
+            if (cursor + static_cast<size_t>(str_len) + 2 > buffer.size()) {
+                return {state_, {}};
+            }
+            const auto expected_crlf = cursor + static_cast<size_t>(str_len);
+            if (buffer[expected_crlf] != '\r' || buffer[expected_crlf + 1] != '\n') {
+                state_ = State::kError;
                 return {state_, {}};
             }
             result_.emplace_back(buffer.data() + cursor, str_len);
-            cursor += static_cast<size_t>(str_len);
+            cursor += static_cast<size_t>(str_len) + 2;
             --args_to_parse_;
             buffer_->Consume(cursor - old_cursor);
         }
-        state_ = State::kDone;
-        return {state_, std::move(result_)};
+        state_ = State::kInit;
+        return {State::kDone, std::move(result_)};
+    }
+
     }
 
 private:
