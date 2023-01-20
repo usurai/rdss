@@ -12,13 +12,6 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 
 add_executable(
-    client_test
-    client_test.cc
-    ../connection.cc
-    ../dragonfly/io_buf.cc
-)
-
-add_executable(
     hash_table_test
     hash_table_test.cc
     ../memory.cc
@@ -29,17 +22,9 @@ add_executable(
     redis_parser_test.cc
 )
 
-target_include_directories(client_test PUBLIC ../)
-
 target_include_directories(hash_table_test PUBLIC ../)
 
 target_include_directories(redis_parser_test PUBLIC ../)
-
-target_link_libraries(
-    client_test
-    gtest_main
-    /usr/lib/liburing.a
-)
 
 target_link_libraries(
     hash_table_test
@@ -54,6 +39,5 @@ target_link_libraries(
 )
 
 include(GoogleTest)
-gtest_discover_tests(client_test)
 gtest_discover_tests(hash_table_test)
 gtest_discover_tests(redis_parser_test)

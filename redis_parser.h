@@ -40,7 +40,9 @@ public:
 
     virtual ParsingResult Parse() = 0;
 
-    void Reset() { state_ = State::kInit; }
+    virtual void Reset() { state_ = State::kInit; }
+
+    virtual bool InProgress() const { return false; }
 
     // UpdateBuffer();
 
@@ -55,6 +57,11 @@ public:
       : RedisParser(buffer) {}
 
     virtual ~InlineParser() = default;
+
+    static ParsingResult ParseInline(Buffer* buffer) {
+        InlineParser parser(buffer);
+        return parser.Parse();
+    }
 
     ParsingResult Parse() {
         // TODO: naming
@@ -181,6 +188,12 @@ public:
         return {State::kDone, std::move(result_)};
     }
 
+    virtual bool InProgress() const override { return state_ == State::kParsing; }
+
+    virtual void Reset() override {
+        RedisParser::Reset();
+        args_ = 0;
+        args_to_parse_ = 0;
     }
 
 private:

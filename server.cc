@@ -8,6 +8,7 @@
 #include "dragonfly/resp_expr.h"
 #include "hash_table.h"
 #include "memory.h"
+#include "redis_parser.h"
 #include "replier.h"
 #include "tracking_hash_table.h"
 
@@ -272,44 +273,45 @@ void ProcessCommand(Connection* conn, Command& cmd) {
           + std::to_string(config.maxmemory) + ").\n");
     } else {
         // TODO: support error
-        auto result = cmd(conn->vec);
-        conn->Reply(rdss::Replier::BuildReply(std::move(result)));
+        // auto result = cmd(conn->vec);
+        // conn->Reply(rdss::Replier::BuildReply(std::move(result)));
     }
-    conn->buffer.Clear();
     conn->QueueRead();
 }
 
-void HandleRead(Connection* conn, int32_t bytes) {
-    conn->buffer.CommitWrite(static_cast<size_t>(bytes));
-    uint32_t consumed{0};
+void HandleRead(Connection* conn, size_t bytes) {
+    conn->read_buffer->CommitWrite(bytes);
+
     // LOG(INFO) << std::string_view(
     //   reinterpret_cast<char*>(conn->buffer.InputBuffer().data()),
     //   conn->buffer.InputBuffer().size());
-    auto res = conn->parser.Parse(conn->buffer.InputBuffer(), &consumed, &conn->vec);
-    if (consumed != 0) {
-        conn->buffer.ConsumeInput(consumed);
+    const bool is_mbulk_start = (conn->read_buffer->Stored().at(0) == '*');
+    if (conn->parser == nullptr && is_mbulk_start) {
+        conn->InitParser();
     }
+    const auto is_mbulk
+      = (is_mbulk_start || (conn->parser != nullptr && conn->parser->InProgress()));
+
+    VLOG(1) << "Using mbulk parser:" << is_mbulk;
+    auto [res, args] = is_mbulk ? conn->parser->Parse()
+                                : rdss::InlineParser::ParseInline(conn->read_buffer.get());
     switch (res) {
-    case facade::RedisParser::Result::OK:
+    case rdss::RedisParser::State::kInit:
+        return;
+    case rdss::RedisParser::State::kError:
+        conn->Reply("Parse error.\n");
+        conn->read_buffer->Reset();
+        return;
+    case rdss::RedisParser::State::kParsing:
+        return;
+    case rdss::RedisParser::State::kDone:
         break;
-    case facade::RedisParser::Result::INPUT_PENDING:
-        conn->buffer.EnsureCapacity(conn->buffer.Capacity());
-        conn->QueueRead();
-        return;
-    default:
-        conn->ReplyAndClose("Parse error.\n");
-        return;
     }
 
-    auto cmd_itor = cmd_dict.find(conn->Command());
-    if (cmd_itor == cmd_dict.end()) {
-        conn->Reply("Command not found.\n");
-        conn->buffer.Clear();
-        conn->QueueRead();
-        return;
+    VLOG(1) << "Received command:";
+    for (const auto& arg : args) {
+        VLOG(1) << arg;
     }
-
-    ProcessCommand(conn, cmd_itor->second);
 }
 
 void Cron();
@@ -403,7 +405,8 @@ int main(int argc, char* argv[]) {
                     if (res == 0) {
                         connection->SetClosing();
                     } else {
-                        HandleRead(connection, res);
+                        HandleRead(connection, static_cast<size_t>(res));
+                        connection->QueueRead();
                     }
                     ++submitted;
                 }
