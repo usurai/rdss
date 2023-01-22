@@ -280,12 +280,12 @@ void ProcessCommand(Connection* conn, Command& cmd) {
 }
 
 void HandleRead(Connection* conn, size_t bytes) {
-    conn->read_buffer->CommitWrite(bytes);
+    conn->read_buffer->Produce(bytes);
 
     // LOG(INFO) << std::string_view(
     //   reinterpret_cast<char*>(conn->buffer.InputBuffer().data()),
     //   conn->buffer.InputBuffer().size());
-    const bool is_mbulk_start = (conn->read_buffer->Stored().at(0) == '*');
+    const bool is_mbulk_start = (conn->read_buffer->Source().at(0) == '*');
     if (conn->parser == nullptr && is_mbulk_start) {
         conn->InitParser();
     }

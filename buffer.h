@@ -2,9 +2,9 @@
 
 #include <cassert>
 #include <cstddef>
+#include <span>
 #include <string_view>
 #include <vector>
-#include <span>
 
 namespace rdss {
 
@@ -20,85 +20,42 @@ Usage:
     auto sink = buf.Sink();
     auto nread = read(sink.data(), sink.size(), BUF_SIZE);
     if (nread == 0) ...
-    else buf.CommitWrite(nread);
+    else buf.Proceduce(nread);
 2. Read from the buffer:
-    auto to_consume = buf.Stored();
-    auto bytes_consumed = process(to_consume);
+    auto source = buf.Source();
+    auto bytes_consumed = process(source);
     buf.Consume(bytes_consumed);
 ***/
 class Buffer {
 public:
-    using BufferView = std::string_view;
+    using View = std::string_view;
 
 public:
-    virtual ~Buffer() = default;
+    Buffer() = default;
 
-    virtual void EnsureAvailable(size_t n) = 0;
-    virtual char* Data() = 0;
-    virtual size_t Available() const = 0;
-    virtual std::span<char> Sink() = 0;
-    virtual void CommitWrite(size_t n) = 0;
-
-    /***
-    ***/
-    virtual size_t NumWritten() const = 0;
-    virtual BufferView Stored() const = 0;
-    virtual void Consume(size_t n) = 0;
-
-    virtual void Reset() = 0;
-};
-
-class VectorBuffer : public Buffer {
-public:
-    VectorBuffer() = default;
-
-    explicit VectorBuffer(size_t capacity)
+    explicit Buffer(size_t capacity)
       : data_(capacity) {}
 
-    // TODO: This is unnecessary.
-    // virtual ~VectorBuffer() = default;
+    void EnsureAvailable(size_t n);
 
-    // TODO: Consider move forward if there is space at front. If resize, consider expand more.
-    virtual void EnsureAvailable(size_t n) override {
-        if (data_.size() - write_index_ >= n) {
-            return;
-        }
-        data_.resize(n + write_index_);
-    }
+    char* Data() { return data_.data() + write_index_; }
 
-    virtual char* Data() override { return data_.data() + write_index_; }
+    size_t Available() const { return write_index_ - read_index_; }
 
-    virtual size_t Available() const override { return write_index_ - read_index_; }
+    std::span<char> Sink() { return std::span(data_.data() + write_index_, Available()); }
 
-    virtual std::span<char> Sink() override {
-        return std::span(data_.data()+write_index_, Available());
-    }
-
-    virtual void CommitWrite(size_t n) override {
+    void Produce(size_t n) {
         assert(data_.size() >= write_index_ + n);
         write_index_ += n;
     }
 
-    virtual size_t NumWritten() const override { return write_index_ - read_index_; }
+    size_t NumWritten() const { return write_index_ - read_index_; }
 
-    virtual BufferView Stored() const override {
-        if (write_index_ == read_index_) {
-            return {};
-        }
-        return BufferView(data_.data() + read_index_, write_index_ - read_index_);
-    }
+    View Source() const;
 
-    virtual void Consume(size_t n) override {
-        assert(read_index_ + n <= write_index_);
-        read_index_ += n;
-        if (read_index_ == write_index_) {
-            read_index_ = 0;
-            write_index_ = 0;
-            // TODO: Consider shrink the buffer when capcacity is over some limit.
-        }
-    }
+    void Consume(size_t n);
 
-    virtual void Reset() override {
+    void Reset() {
         read_index_ = 0;
         write_index_ = 0;
     }

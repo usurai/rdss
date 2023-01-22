@@ -65,14 +65,14 @@ public:
 
     ParsingResult Parse() {
         // TODO: naming
-        auto buffer = buffer_->Stored();
+        auto buffer = buffer_->Source();
         if (buffer.empty()) {
             state_ = State::kError;
             return {state_, {}};
         }
 
         const auto crlf = buffer.find("\r\n");
-        if (crlf == Buffer::BufferView::npos) {
+        if (crlf == Buffer::View::npos) {
             if (buffer_->NumWritten() > kMaxInlineBufferSize) {
                 state_ = State::kError;
             } else {
@@ -115,7 +115,7 @@ public:
             Reset();
         }
 
-        auto buffer = buffer_->Stored();
+        auto buffer = buffer_->Source();
         // LOG(INFO) << "Parsing:'" << buffer << "'";
         if (buffer.empty()) {
             return {state_, {}};
@@ -127,7 +127,7 @@ public:
         if (state_ == State::kInit) {
             assert(buffer[0] == '*');
             auto crlf = buffer.find("\r\n", 1);
-            if (crlf == Buffer::BufferView::npos) {
+            if (crlf == Buffer::View::npos) {
                 return {state_, {}};
             }
             auto [_, ec] = std::from_chars(buffer.data() + 1, buffer.data() + crlf, args_);
@@ -159,7 +159,7 @@ public:
                 state_ = State::kError;
                 return {state_, {}};
             }
-            if (crlf == Buffer::BufferView::npos) {
+            if (crlf == Buffer::View::npos) {
                 return {state_, {}};
             }
             int str_len;

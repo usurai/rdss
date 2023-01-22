@@ -7,12 +7,12 @@ Connection::Connection(io_uring* ring_, io_uring* write_ring_, int fd_)
   : ring(ring_)
   , write_ring(write_ring_)
   , fd(fd_)
-  , read_buffer(std::make_unique<VectorBuffer>(kReadBufferLength)) {}
+  , read_buffer(std::make_unique<Buffer>(kReadBufferLength)) {}
 
 void Connection::InitParser() {
     assert(parser == nullptr);
     assert(read_buffer != nullptr);
-    auto buf = read_buffer->Stored();
+    auto buf = read_buffer->Source();
     assert(!buf.empty());
     if (buf[0] == '*') {
         parser = std::make_unique<MultiBulkParser>(read_buffer.get());
