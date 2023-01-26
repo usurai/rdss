@@ -7,7 +7,7 @@ namespace rdss {
 
 class Listener {
 public:
-    AcceptOperation Accept();
+    AwaitableAccept Accept();
 
     static std::unique_ptr<Listener> Create(int port, AsyncOperationProcessor* processor);
 

@@ -1,17 +1,22 @@
 #pragma once
 
-#include "async_operation.h"
-
 #include <liburing.h>
 #include <memory>
 
 namespace rdss {
 
-class AcceptOperation;
+template<typename T>
+class AwaitableOperation;
 
 class AsyncOperationProcessor {
 public:
-    void Execute(AcceptOperation* operation);
+    template<typename T>
+    void Execute(AwaitableOperation<T>* operation) {
+        auto sqe = io_uring_get_sqe(&ring_);
+        operation->PrepareSqe(sqe);
+        io_uring_sqe_set_data(sqe, operation);
+        io_uring_submit(&ring_);
+    }
 
     static std::unique_ptr<AsyncOperationProcessor> Create();
 

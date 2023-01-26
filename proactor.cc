@@ -16,7 +16,7 @@ void Proactor::Run() {
             LOG(ERROR) << "io_uring_wait_cqe: " << strerror(-ret);
             continue;
         }
-        auto operation = reinterpret_cast<AcceptOperation*>(cqe->user_data);
+        auto operation = reinterpret_cast<ContRes*>(cqe->user_data);
         operation->SetResult(cqe->res);
         io_uring_cqe_seen(ring_, cqe);
         operation->OnCompleted();

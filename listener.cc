@@ -11,7 +11,7 @@ Listener::Listener(int listen_fd, AsyncOperationProcessor* processor)
   : listened_fd_(listen_fd)
   , processor_(processor) {}
 
-AcceptOperation Listener::Accept() { return AcceptOperation(listened_fd_, processor_); }
+AwaitableAccept Listener::Accept() { return AwaitableAccept(processor_, listened_fd_); }
 
 std::unique_ptr<Listener> Listener::Create(int port, AsyncOperationProcessor* processor) {
     auto create_listening_socket = [port]() {

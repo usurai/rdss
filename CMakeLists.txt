@@ -63,7 +63,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
 add_executable(
     main
     main.cc
-    async_operation.cc
     async_operation_processor.cc
     listener.cc
     proactor.cc
