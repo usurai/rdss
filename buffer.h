@@ -40,7 +40,7 @@ public:
 
     char* Data() { return data_.data() + write_index_; }
 
-    size_t Available() const { return write_index_ - read_index_; }
+    size_t Available() const { return data_.size() - write_index_; }
 
     std::span<char> Sink() { return std::span(data_.data() + write_index_, Available()); }
 
