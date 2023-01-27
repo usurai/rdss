@@ -14,7 +14,6 @@ public:
     void Execute(AwaitableOperation<T>* operation) {
         auto sqe = io_uring_get_sqe(&ring_);
         operation->PrepareSqe(sqe);
-        io_uring_sqe_set_data(sqe, operation);
         io_uring_submit(&ring_);
     }
 

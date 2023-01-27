@@ -14,13 +14,15 @@ namespace rdss {
 
 class AsyncOperationProcessor;
 
-class ContRes {
+class Promise {
 public:
-    void SetResult(auto result) { result_ = result; }
-    decltype(auto) GetResult() { return result_; }
-    void OnCompleted() { continuation_(); }
+    void Set(auto result) {
+        result_ = result;
+        continuation_();
+    }
 
-protected:
+    decltype(auto) GetResult() { return result_; }
+
     void SetContinuation(std::coroutine_handle<> continuation) {
         continuation_ = std::move(continuation);
     }
@@ -31,7 +33,7 @@ private:
 };
 
 template<typename Implementation>
-class AwaitableOperation : public ContRes {
+class AwaitableOperation {
 public:
     explicit AwaitableOperation(AsyncOperationProcessor* processor)
       : processor_(processor) {}
@@ -39,30 +41,50 @@ public:
     bool await_ready() const noexcept { return false; }
 
     void await_suspend(std::coroutine_handle<> continuation) noexcept {
-        SetContinuation(std::move(continuation));
+        promise_.SetContinuation(std::move(continuation));
         processor_->Execute(this);
     }
 
-    auto await_resume() noexcept { return GetResult(); }
+    void PrepareSqe(io_uring_sqe* sqe) {
+        Impl()->PrepareSqe(sqe);
+        io_uring_sqe_set_data(sqe, &promise_);
+    }
 
-    void PrepareSqe(io_uring_sqe* sqe) { Impl()->PrepareSqe(sqe); }
+    auto await_resume() noexcept { return promise_.GetResult(); }
 
 private:
     Implementation* Impl() { return static_cast<Implementation*>(this); }
 
     AsyncOperationProcessor* processor_;
+    Promise promise_;
 };
 
 class AwaitableAccept : public AwaitableOperation<AwaitableAccept> {
 public:
     AwaitableAccept(AsyncOperationProcessor* processor, int sockfd)
-      : AwaitableOperation(processor)
+      : AwaitableOperation<AwaitableAccept>(processor)
       , sockfd_(sockfd) {}
 
     void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, sockfd_, nullptr, nullptr, 0); }
 
 private:
     int sockfd_;
+};
+
+class AwaitableRecv : public AwaitableOperation<AwaitableRecv> {
+public:
+    AwaitableRecv(AsyncOperationProcessor* processor, int fd, Buffer::SinkType buffer)
+      : AwaitableOperation<AwaitableRecv>(processor)
+      , fd_(fd)
+      , buffer_(std::move(buffer)) {}
+
+    void PrepareSqe(io_uring_sqe* sqe) {
+        io_uring_prep_recv(sqe, fd_, buffer_.data(), buffer_.size(), 0);
+    }
+
+private:
+    int fd_;
+    Buffer::SinkType buffer_;
 };
 
 } // namespace rdss

@@ -16,10 +16,10 @@ void Proactor::Run() {
             LOG(ERROR) << "io_uring_wait_cqe: " << strerror(-ret);
             continue;
         }
-        auto operation = reinterpret_cast<ContRes*>(cqe->user_data);
-        operation->SetResult(cqe->res);
+        auto promise = reinterpret_cast<Promise*>(cqe->user_data);
+        const auto res = cqe->res;
         io_uring_cqe_seen(ring_, cqe);
-        operation->OnCompleted();
+        promise->Set(res);
     }
 }
 
