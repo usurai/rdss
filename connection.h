@@ -1,18 +1,10 @@
 #pragma once
 
+#include "async_operation.h"
+#include "async_operation_processor.h"
 #include "buffer.h"
-#include "dragonfly/io_buf.h"
-#include "dragonfly/redis_parser.h"
-#include "redis_parser.h"
-#include "server.h"
 
-#include <cassert>
-#include <charconv>
-#include <iostream>
-#include <liburing.h>
 #include <string>
-#include <string_view>
-#include <vector>
 
 namespace rdss {
 
@@ -28,6 +20,30 @@ namespace rdss {
         write_buffer->append(xxx)
         ++to_write
 ***/
+
+class AwaitableRecv;
+// class AwaitableSend;
+// class AwaitableClose;
+
+class Connection {
+public:
+    Connection(int fd, AsyncOperationProcessor* processor)
+      : fd_(fd)
+      , processor_(processor) {}
+
+    AwaitableRecv Recv(Buffer::SinkType buffer);
+
+    void Close() { close(fd_); }
+
+    // AwaitableSend Send(std::string);
+    // AwaitableClose Close();
+
+private:
+    int fd_;
+    AsyncOperationProcessor* processor_;
+};
+
+/***
 struct Connection {
     enum class State { Alive, Closing };
 
@@ -52,5 +68,6 @@ struct Connection {
     void SetClosing() { state = State::Closing; }
     bool Alive() const { return state == State::Alive; }
 };
+***/
 
 } // namespace rdss

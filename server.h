@@ -1,6 +1,7 @@
 #pragma once
 
 #include "async_operation_processor.h"
+#include "buffer.h"
 #include "listener.h"
 #include "proactor.h"
 
@@ -59,7 +60,13 @@ private:
         while (true) {
             auto conn = co_await listener_->Accept(/*cancel_token*/);
             LOG(INFO) << "accepted";
-            close(conn);
+
+            Buffer buffer(1024);
+            auto bytes_read = co_await conn.Recv(buffer.Sink());
+            buffer.Produce(bytes_read);
+            LOG(INFO) << "read " << bytes_read << " bytes:" << buffer.Source();
+
+            conn.Close();
         }
     }
 

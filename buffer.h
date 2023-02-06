@@ -29,6 +29,7 @@ Usage:
 class Buffer {
 public:
     using View = std::string_view;
+    using SinkType = std::span<char>;
 
 public:
     Buffer() = default;

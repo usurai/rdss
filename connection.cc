@@ -3,6 +3,12 @@
 #include "constants.h"
 
 namespace rdss {
+
+AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
+    return AwaitableRecv(processor_, fd_, std::move(buffer));
+}
+
+/***
 Connection::Connection(io_uring* ring_, io_uring* write_ring_, int fd_)
   : ring(ring_)
   , write_ring(write_ring_)
@@ -79,5 +85,6 @@ void Connection::ReplyAndClose(std::string reply) {
     assert(Close());
     SetClosing();
 }
+***/
 
 } // namespace rdss

@@ -2,6 +2,7 @@
 
 #include "async_operation_processor.h"
 #include "buffer.h"
+#include "connection.h"
 
 #include <glog/logging.h>
 
@@ -13,6 +14,7 @@
 namespace rdss {
 
 class AsyncOperationProcessor;
+class Connection;
 
 class Promise {
 public:
@@ -52,6 +54,8 @@ public:
 
     auto await_resume() noexcept { return promise_.GetResult(); }
 
+    AsyncOperationProcessor* GetProcessor() { return processor_; }
+
 private:
     Implementation* Impl() { return static_cast<Implementation*>(this); }
 
@@ -66,6 +70,8 @@ public:
       , sockfd_(sockfd) {}
 
     void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, sockfd_, nullptr, nullptr, 0); }
+
+    Connection await_resume() noexcept;
 
 private:
     int sockfd_;
