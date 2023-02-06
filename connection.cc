@@ -8,6 +8,10 @@ AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
     return AwaitableRecv(processor_, fd_, std::move(buffer));
 }
 
+AwaitableSend Connection::Send(std::string data) {
+    return AwaitableSend(processor_, fd_, std::move(data));
+}
+
 /***
 Connection::Connection(io_uring* ring_, io_uring* write_ring_, int fd_)
   : ring(ring_)

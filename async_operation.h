@@ -10,6 +10,7 @@
 #include <functional>
 #include <liburing.h>
 #include <memory>
+#include <string>
 
 namespace rdss {
 
@@ -91,6 +92,22 @@ public:
 private:
     int fd_;
     Buffer::SinkType buffer_;
+};
+
+class AwaitableSend : public AwaitableOperation<AwaitableSend> {
+public:
+    AwaitableSend(AsyncOperationProcessor* processor, int fd, std::string data)
+      : AwaitableOperation<AwaitableSend>(processor)
+      , fd_(fd)
+      , data_(std::move(data)) {}
+
+    void PrepareSqe(io_uring_sqe* sqe) {
+        io_uring_prep_send(sqe, fd_, data_.data(), data_.size(), 0);
+    }
+
+private:
+    int fd_;
+    std::string data_;
 };
 
 } // namespace rdss

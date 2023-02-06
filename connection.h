@@ -22,7 +22,7 @@ namespace rdss {
 ***/
 
 class AwaitableRecv;
-// class AwaitableSend;
+class AwaitableSend;
 // class AwaitableClose;
 
 class Connection {
@@ -32,10 +32,10 @@ public:
       , processor_(processor) {}
 
     AwaitableRecv Recv(Buffer::SinkType buffer);
+    AwaitableSend Send(std::string);
 
     void Close() { close(fd_); }
 
-    // AwaitableSend Send(std::string);
     // AwaitableClose Close();
 
 private:

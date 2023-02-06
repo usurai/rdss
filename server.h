@@ -64,7 +64,8 @@ private:
             Buffer buffer(1024);
             auto bytes_read = co_await conn.Recv(buffer.Sink());
             buffer.Produce(bytes_read);
-            LOG(INFO) << "read " << bytes_read << " bytes:" << buffer.Source();
+            // LOG(INFO) << "read " << bytes_read << " bytes:" << buffer.Source();
+            co_await conn.Send(std::string(buffer.Source()));
 
             conn.Close();
         }
