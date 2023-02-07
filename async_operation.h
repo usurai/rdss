@@ -72,7 +72,7 @@ public:
 
     void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, sockfd_, nullptr, nullptr, 0); }
 
-    Connection await_resume() noexcept;
+    Connection* await_resume() noexcept;
 
 private:
     int sockfd_;
