@@ -67,6 +67,7 @@ add_executable(
     async_operation_processor.cc
     buffer.cc
     connection.cc
+    client.cc
     listener.cc
     proactor.cc
 )

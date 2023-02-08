@@ -3,6 +3,7 @@
 #include "async_operation.h"
 #include "async_operation_processor.h"
 #include "buffer.h"
+#include "promise.h"
 
 #include <string>
 
@@ -31,14 +32,17 @@ public:
       : fd_(fd)
       , processor_(processor) {}
 
+    ~Connection();
+
+    bool Active() const { return active_; }
+
     AwaitableRecv Recv(Buffer::SinkType buffer);
     AwaitableSend Send(std::string);
-
-    void Close() { close(fd_); }
-
+    void Close();
     // AwaitableClose Close();
 
 private:
+    bool active_ = true;
     int fd_;
     AsyncOperationProcessor* processor_;
 };

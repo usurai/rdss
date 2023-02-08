@@ -2,7 +2,16 @@
 
 #include "constants.h"
 
+#include <glog/logging.h>
+
 namespace rdss {
+
+Connection::~Connection() {
+    if (active_) {
+        close(fd_);
+    }
+    LOG(INFO) << "Closing connection";
+}
 
 AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
     return AwaitableRecv(processor_, fd_, std::move(buffer));
@@ -10,6 +19,14 @@ AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
 
 AwaitableSend Connection::Send(std::string data) {
     return AwaitableSend(processor_, fd_, std::move(data));
+}
+
+void Connection::Close() {
+    if (!active_) {
+        return;
+    }
+    close(fd_);
+    active_ = false;
 }
 
 /***

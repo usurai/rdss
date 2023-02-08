@@ -2,6 +2,7 @@
 
 #include "async_operation_processor.h"
 #include "buffer.h"
+#include "client.h"
 #include "listener.h"
 #include "proactor.h"
 #include "promise.h"
@@ -42,15 +43,8 @@ private:
     Task<void> AcceptLoop() {
         while (true) {
             auto conn = co_await listener_->Accept(/*cancel_token*/);
-            LOG(INFO) << "accepted";
-
-            Buffer buffer(1024);
-            auto bytes_read = co_await conn.Recv(buffer.Sink());
-            buffer.Produce(bytes_read);
-            // LOG(INFO) << "read " << bytes_read << " bytes:" << buffer.Source();
-            co_await conn.Send(std::string(buffer.Source()));
-
-            conn.Close();
+            auto client = new Client(conn);
+            client->Echo();
         }
     }
 
