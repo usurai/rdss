@@ -12,8 +12,6 @@
 #include <string>
 #include <vector>
 
-namespace {}
-
 namespace rdss {
 
 constexpr size_t kMaxInlineBufferSize = 1024 * 64;
@@ -23,12 +21,13 @@ class Buffer;
 // class String;
 using String = std::string;
 using Strings = std::vector<String>;
+using StringViews = std::vector<std::string_view>;
 
 class RedisParser {
 public:
     enum class State : uint8_t { kInit, kError, kParsing, kDone };
 
-    using ParsingResult = std::pair<State, Strings>;
+    using ParsingResult = std::pair<State, StringViews>;
 
     explicit RedisParser(Buffer* buffer)
       : state_(State::kInit)
@@ -81,7 +80,7 @@ public:
             return {state_, {}};
         }
 
-        Strings result;
+        StringViews result;
         size_t i = 0;
         while (i < buffer.size()) {
             if (std::isspace(buffer[i])) {
@@ -194,12 +193,13 @@ public:
         RedisParser::Reset();
         args_ = 0;
         args_to_parse_ = 0;
+        result_.clear();
     }
 
 private:
     int32_t args_;
     int32_t args_to_parse_;
-    Strings result_;
+    StringViews result_;
 };
 
 } // namespace rdss

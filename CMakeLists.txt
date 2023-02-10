@@ -68,8 +68,10 @@ add_executable(
     buffer.cc
     connection.cc
     client.cc
+    data_structure_service.cc
     listener.cc
     proactor.cc
+    server.cc
 )
 
 target_link_libraries(
