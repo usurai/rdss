@@ -72,11 +72,14 @@ add_executable(
     listener.cc
     proactor.cc
     server.cc
+    memory.cc
+    string_commands.cc
 )
 
 target_link_libraries(
     main
     /usr/lib/liburing.a
+    /usr/lib/x86_64-linux-gnu/libxxhash.a
     glog::glog
 )
 

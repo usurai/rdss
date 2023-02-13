@@ -15,7 +15,6 @@ RedisParser::ParsingResult Parse(Buffer& buffer, bool parse_ongoing, MultiBulkPa
         return parser->Parse();
     }
     if (buffer.Source().at(0) == '*') {
-        parser->Reset();
         return parser->Parse();
     }
     return InlineParser::ParseInline(&buffer);
@@ -45,8 +44,9 @@ Task<void> Client::Echo() {
 Task<void> Client::Process() {
     Buffer query_buffer(1024);
     bool parse_ongoing = false;
+    // TODO: Lazily create parser.
     auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
-
+    Result query_result;
     while (true) {
         size_t bytes_read = co_await conn_->Recv(query_buffer.Sink());
         if (bytes_read == 0) {
@@ -63,24 +63,21 @@ Task<void> Client::Process() {
             parse_ongoing = true;
             continue;
         case RedisParser::State::kError:
-            // TODO: co_await reply error
-            LOG(INFO) << "parse error";
-            query_buffer.Reset();
-            parser->Reset();
-            parse_ongoing = false;
-            continue;
+            query_result.Add("parse error");
+            break;
         case RedisParser::State::kDone:
-            parse_ongoing = false;
+            query_result = service_->Invoke(command_strings);
             break;
         }
 
-        auto result = service_->Invoke(command_strings);
+        // TODO: close on 0 byte written
+        [[maybe_unused]] const auto bytes_written = co_await conn_->Send(
+          Replier::BuildReply(std::move(query_result)));
 
         query_buffer.Reset();
+        parse_ongoing = false;
         parser->Reset();
-
-        [[maybe_unused]] const auto bytes_written = co_await conn_->Send(
-          Replier::BuildReply(std::move(result)));
+        query_result.Reset();
     }
 }
 
