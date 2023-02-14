@@ -43,16 +43,34 @@ Task<void> Client::Echo() {
 
 Task<void> Client::Process() {
     Buffer query_buffer(1024);
+    // TODO: Make use of RedisParser::InProgress().
     bool parse_ongoing = false;
     // TODO: Lazily create parser.
     auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
     Result query_result;
     while (true) {
-        size_t bytes_read = co_await conn_->Recv(query_buffer.Sink());
-        if (bytes_read == 0) {
+        // size_t bytes_read = co_await conn_->Recv(query_buffer.Sink());
+        // if (bytes_read == 0) {
+        //     OnConnectionClose();
+        //     co_return;
+        // }
+
+        auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
+          query_buffer.Sink(), &cancel_token_);
+        LOG(INFO) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
+        if (cancelled) {
+            conn_->Close();
             OnConnectionClose();
-            co_return;
+            break;
         }
+
+        if (bytes_read == 0) {
+            conn_->Close();
+            OnConnectionClose();
+            break;
+        }
+
+        LOG(INFO) << "read length:" << bytes_read;
         query_buffer.Produce(bytes_read);
 
         auto [parse_result, command_strings] = detail::Parse(
@@ -80,5 +98,7 @@ Task<void> Client::Process() {
         query_result.Reset();
     }
 }
+
+void Client::Disconnect() { cancel_token_.RequestCancel(); }
 
 } // namespace rdss

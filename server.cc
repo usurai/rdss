@@ -20,10 +20,17 @@ void Server::Run() {
 }
 
 Task<void> Server::AcceptLoop() {
+    // Temporary: With one listening connection, when a new connection comes in, close the old
+    // connection by cancelling recv. Also, this assumes that the connection can only be closed from
+    // server side, the client closing the connection can cause UB.
+    Client* current_client{nullptr};
     while (true) {
         auto conn = co_await listener_->Accept(/*cancel_token*/);
-        auto client = new Client(conn, service_.get());
-        client->Process();
+        if (current_client != nullptr) {
+            current_client->Disconnect();
+        }
+        current_client = new Client(conn, service_.get());
+        current_client->Process();
     }
 }
 

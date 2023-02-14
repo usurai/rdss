@@ -10,11 +10,16 @@ Connection::~Connection() {
     if (active_) {
         close(fd_);
     }
-    LOG(INFO) << "Closing connection";
+    LOG(INFO) << "Closing connection " << fd_;
 }
 
 AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
     return AwaitableRecv(processor_, fd_, std::move(buffer));
+}
+
+AwaitableCancellableRecv
+Connection::CancellableRecv(Buffer::SinkType buffer, CancellationToken* token) {
+    return AwaitableCancellableRecv(processor_, fd_, std::move(buffer), token);
 }
 
 AwaitableSend Connection::Send(std::string data) {
