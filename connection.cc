@@ -19,7 +19,7 @@ AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {
 
 AwaitableCancellableRecv
 Connection::CancellableRecv(Buffer::SinkType buffer, CancellationToken* token) {
-    return AwaitableCancellableRecv(processor_, fd_, std::move(buffer), token);
+    return AwaitableCancellableRecv(processor_, fd_, token, std::move(buffer));
 }
 
 AwaitableSend Connection::Send(std::string data) {

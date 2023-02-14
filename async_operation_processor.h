@@ -10,10 +10,12 @@ namespace rdss {
 template<typename T>
 class AwaitableOperation;
 
-class AwaitableCancellableRecv;
+template<typename T>
+class AwaitableCancellableOperation;
 
 class AsyncOperationProcessor {
 public:
+    // TODO: Try to batch the submit.
     template<typename T>
     void Execute(AwaitableOperation<T>* operation) {
         VLOG(1) << "AsyncOperationProcessor::Execute(" << operation->ToString() << ')';
@@ -22,7 +24,13 @@ public:
         io_uring_submit(&ring_);
     }
 
-    void Execute(AwaitableCancellableRecv* operation);
+    template<typename T>
+    void Execute(AwaitableCancellableOperation<T>* operation) {
+        VLOG(1) << "AsyncOperationProcessor::Execute(" << operation->ToString() << ')';
+        auto sqe = io_uring_get_sqe(&ring_);
+        operation->PrepareSqe(sqe);
+        io_uring_submit(&ring_);
+    }
 
     static std::unique_ptr<AsyncOperationProcessor> Create();
 
