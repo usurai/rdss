@@ -13,7 +13,11 @@ class Client {
 public:
     explicit Client(Connection* conn, DataStructureService* service)
       : conn_(std::unique_ptr<Connection>(conn))
-      , service_(service) {}
+      , service_(service) {
+        VLOG(1) << "Client::ctor()";
+    }
+
+    ~Client() { VLOG(1) << "Client::dtor()"; }
 
     Task<void> Echo();
     Task<void> Process();
