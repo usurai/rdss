@@ -9,6 +9,8 @@ class Listener {
 public:
     AwaitableAccept Accept();
 
+    AwaitableCancellableAccept CancellableAccept(CancellationToken* token);
+
     static std::unique_ptr<Listener> Create(int port, AsyncOperationProcessor* processor);
 
 private:

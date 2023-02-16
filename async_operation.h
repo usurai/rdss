@@ -203,6 +203,19 @@ private:
     int sockfd_;
 };
 
+class AwaitableCancellableAccept
+  : public AwaitableCancellableOperation<AwaitableCancellableAccept> {
+public:
+    AwaitableCancellableAccept(AsyncOperationProcessor* processor, int fd, CancellationToken* token)
+      : AwaitableCancellableOperation<AwaitableCancellableAccept>(processor, fd, token) {}
+
+    ~AwaitableCancellableAccept() { VLOG(1) << "AwaitableCancellableAccept::dtor()"; }
+
+    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, GetFD(), nullptr, nullptr, 0); }
+
+    std::string ToString() const { return "AwaitableCancellableAccept"; }
+};
+
 class AwaitableRecv : public AwaitableOperation<AwaitableRecv> {
 public:
     AwaitableRecv(AsyncOperationProcessor* processor, int fd, Buffer::SinkType buffer)

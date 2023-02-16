@@ -13,6 +13,10 @@ Listener::Listener(int listen_fd, AsyncOperationProcessor* processor)
 
 AwaitableAccept Listener::Accept() { return AwaitableAccept(processor_, listened_fd_); }
 
+AwaitableCancellableAccept Listener::CancellableAccept(CancellationToken* token) {
+    return AwaitableCancellableAccept(processor_, listened_fd_, token);
+}
+
 std::unique_ptr<Listener> Listener::Create(int port, AsyncOperationProcessor* processor) {
     auto create_listening_socket = [port]() {
         // socket
