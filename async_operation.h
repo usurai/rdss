@@ -116,12 +116,12 @@ public:
     virtual ~AwaitableCancellableOperation() { VLOG(1) << "AwaitableCancellableOperation::dtor()"; }
 
     bool await_ready() {
-        VLOG(1) << "AwaitableCancellableOperation::await_ready()";
+        VLOG(1) << Impl()->ToString() << "::await_ready()";
         return state_ != State::kNotStarted;
     }
 
     void await_suspend(std::coroutine_handle<> continuation) noexcept {
-        VLOG(1) << "AwaitableCancellableOperation::await_suspend()";
+        VLOG(1) << Impl()->ToString() << "::await_suspend()";
 
         state_ = State::kStarted;
 
@@ -130,7 +130,7 @@ public:
     }
 
     void PrepareSqe(io_uring_sqe* sqe) {
-        VLOG(1) << "AwaitableCancellableOperation::PrepareSqe()";
+        VLOG(1) << Impl()->ToString() << "::PrepareSqe()";
         if (state_ == State::kStarted) {
             LOG(INFO) << "Initiating recv SQE.";
             Impl()->PrepareSqe(sqe);
@@ -150,7 +150,7 @@ public:
     }
 
     std::pair<bool, size_t> await_resume() noexcept {
-        VLOG(1) << "AwaitableCancellableOperation::await_resume()";
+        VLOG(1) << Impl()->ToString() << "::await_resume()";
         token_->DeregisterCancellationCallback();
         if (state_ == State::kCancelled) {
             return {true, {}};
