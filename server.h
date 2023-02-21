@@ -17,14 +17,14 @@ public:
 
     void Run();
 
-    // TODO
-    // void Shutdown();
+    void Shutdown();
 
 private:
     Task<void> AcceptLoop();
 
     void RegisterCommands();
 
+    bool active_ = true;
     std::unique_ptr<AsyncOperationProcessor> processor_;
     std::unique_ptr<Listener> listener_;
     std::unique_ptr<Proactor> proactor_;

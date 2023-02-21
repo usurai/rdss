@@ -11,7 +11,10 @@ public:
 
     void Run();
 
+    void Stop() {active_ = false;}
+
 private:
+    bool active_ = true;
     io_uring* ring_;
 };
 

@@ -4,6 +4,9 @@
 #include "command.h"
 #include "string_commands.h"
 
+#include <chrono>
+#include <thread>
+
 namespace rdss {
 
 Server::Server()
@@ -24,10 +27,19 @@ Task<void> Server::AcceptLoop() {
     // connection by cancelling recv. Also, this assumes that the connection can only be closed from
     // server side, the client closing the connection can cause UB.
     Client* current_client{nullptr};
-    while (true) {
+    size_t served{0};
+    while (active_) {
         auto conn = co_await listener_->Accept(/*cancel_token*/);
         if (current_client != nullptr) {
             current_client->Disconnect();
+        }
+
+        if (++served == 3) {
+            conn->Close();
+            delete conn;
+            Shutdown();
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            co_return;
         }
         current_client = new Client(conn, service_.get());
         current_client->Process();
@@ -37,6 +49,11 @@ Task<void> Server::AcceptLoop() {
 void Server::RegisterCommands() {
     service_->RegisterCommand("SET", Command("SET").SetHandler(SetFunction));
     service_->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
+}
+
+void Server::Shutdown() {
+    active_ = false;
+    proactor_->Stop();
 }
 
 } // namespace rdss
