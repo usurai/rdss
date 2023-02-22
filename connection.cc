@@ -26,6 +26,10 @@ AwaitableSend Connection::Send(std::string data) {
     return AwaitableSend(processor_, fd_, std::move(data));
 }
 
+AwaitableCancellableSend Connection::CancellableSend(std::string data, CancellationToken* token) {
+    return AwaitableCancellableSend(processor_, fd_, token, std::move(data));
+}
+
 void Connection::Close() {
     if (!active_) {
         return;

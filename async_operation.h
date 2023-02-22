@@ -271,4 +271,21 @@ private:
     std::string data_;
 };
 
+class AwaitableCancellableSend : public AwaitableCancellableOperation<AwaitableCancellableSend> {
+public:
+    AwaitableCancellableSend(
+      AsyncOperationProcessor* processor, int fd, CancellationToken* token, std::string data)
+      : AwaitableCancellableOperation<AwaitableCancellableSend>(processor, fd, token)
+      , data_(std::move(data)) {}
+
+    void PrepareSqe(io_uring_sqe* sqe) {
+        io_uring_prep_send(sqe, GetFD(), data_.data(), data_.size(), 0);
+    }
+
+    std::string ToString() const { return "AwaitableCancellableSend"; }
+
+private:
+    std::string data_;
+};
+
 } // namespace rdss

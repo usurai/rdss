@@ -49,29 +49,15 @@ Task<void> Client::Process() {
     auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
     Result query_result;
     while (true) {
-        // size_t bytes_read = co_await conn_->Recv(query_buffer.Sink());
-        // if (bytes_read == 0) {
-        //     OnConnectionClose();
-        //     co_return;
-        // }
-
-        auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
+        const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
           query_buffer.Sink(), &cancel_token_);
         LOG(INFO) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
-        if (cancelled) {
-            conn_->Close();
-            OnConnectionClose();
+        if (cancelled || bytes_read == 0) {
             break;
         }
-
-        if (bytes_read == 0) {
-            conn_->Close();
-            OnConnectionClose();
-            break;
-        }
-
-        LOG(INFO) << "read length:" << bytes_read;
         query_buffer.Produce(bytes_read);
+
+        VLOG(1) << "read length:" << bytes_read;
 
         auto [parse_result, command_strings] = detail::Parse(
           query_buffer, parse_ongoing, parser.get());
@@ -88,15 +74,20 @@ Task<void> Client::Process() {
             break;
         }
 
-        // TODO: close on 0 byte written
-        [[maybe_unused]] const auto bytes_written = co_await conn_->Send(
-          Replier::BuildReply(std::move(query_result)));
+        const auto [send_cancelled, bytes_written] = co_await conn_->CancellableSend(
+          Replier::BuildReply(std::move(query_result)), &cancel_token_);
+        if (send_cancelled || bytes_written == 0) {
+            break;
+        }
+        assert(bytes_written == bytes_read);
 
         query_buffer.Reset();
         parse_ongoing = false;
         parser->Reset();
         query_result.Reset();
     }
+    conn_->Close();
+    OnConnectionClose();
 }
 
 void Client::Disconnect() { cancel_token_.RequestCancel(); }
