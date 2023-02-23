@@ -1,6 +1,7 @@
 #pragma once
 
 #include "async_operation_processor.h"
+#include "client_manager.h"
 #include "data_structure_service.h"
 #include "listener.h"
 #include "proactor.h"
@@ -29,6 +30,7 @@ private:
     std::unique_ptr<Listener> listener_;
     std::unique_ptr<Proactor> proactor_;
     std::unique_ptr<DataStructureService> service_;
+    std::unique_ptr<ClientManager> client_manager_;
 };
 
 } // namespace rdss

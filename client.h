@@ -9,10 +9,13 @@
 
 namespace rdss {
 
+class ClientManager;
+
 class Client {
 public:
-    explicit Client(Connection* conn, DataStructureService* service)
+    explicit Client(Connection* conn, ClientManager* manager, DataStructureService* service)
       : conn_(std::unique_ptr<Connection>(conn))
+      , manager_(manager)
       , service_(service) {
         VLOG(1) << "Client::ctor()";
     }
@@ -28,6 +31,7 @@ private:
     void OnConnectionClose() { delete this; }
 
     std::unique_ptr<Connection> conn_;
+    ClientManager* manager_;
     DataStructureService* service_;
     CancellationToken cancel_token_;
 };

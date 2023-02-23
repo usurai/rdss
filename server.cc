@@ -13,7 +13,8 @@ Server::Server()
   : processor_(AsyncOperationProcessor::Create())
   , listener_(Listener::Create(6379, processor_.get()))
   , proactor_(std::make_unique<Proactor>(processor_->GetRing()))
-  , service_(std::make_unique<DataStructureService>()) {
+  , service_(std::make_unique<DataStructureService>())
+  , client_manager_(std::make_unique<ClientManager>()) {
     RegisterCommands();
 }
 

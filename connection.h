@@ -31,6 +31,8 @@ public:
 
     bool Active() const { return active_; }
 
+    int GetFD() const { return fd_; }
+
     AwaitableRecv Recv(Buffer::SinkType buffer);
     AwaitableCancellableRecv CancellableRecv(Buffer::SinkType buffer, CancellationToken* token);
     AwaitableSend Send(std::string);

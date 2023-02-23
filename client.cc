@@ -1,6 +1,7 @@
 #include "client.h"
 
 #include "buffer.h"
+#include "client_manager.h"
 #include "redis_parser.h"
 #include "replier.h"
 
@@ -74,18 +75,19 @@ Task<void> Client::Process() {
             break;
         }
 
+        // TODO: Handle short write.
         const auto [send_cancelled, bytes_written] = co_await conn_->CancellableSend(
           Replier::BuildReply(std::move(query_result)), &cancel_token_);
         if (send_cancelled || bytes_written == 0) {
             break;
         }
-        assert(bytes_written == bytes_read);
 
         query_buffer.Reset();
         parse_ongoing = false;
         parser->Reset();
         query_result.Reset();
     }
+    manager_->RemoveClient(conn_.get());
     conn_->Close();
     OnConnectionClose();
 }

@@ -68,6 +68,7 @@ add_executable(
     buffer.cc
     connection.cc
     client.cc
+    client_manager.cc
     data_structure_service.cc
     listener.cc
     proactor.cc
