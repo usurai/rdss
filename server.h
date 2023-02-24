@@ -2,6 +2,7 @@
 
 #include "async_operation_processor.h"
 #include "client_manager.h"
+#include "config.h"
 #include "data_structure_service.h"
 #include "listener.h"
 #include "proactor.h"
@@ -14,7 +15,7 @@ namespace rdss {
 
 class Server {
 public:
-    Server();
+    explicit Server(Config config);
 
     void Run();
 
@@ -24,6 +25,8 @@ private:
     Task<void> AcceptLoop();
 
     void RegisterCommands();
+
+    Config config_;
 
     bool active_ = true;
     std::unique_ptr<AsyncOperationProcessor> processor_;

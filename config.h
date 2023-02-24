@@ -13,69 +13,21 @@ namespace rdss {
 
 enum class MaxmemoryPolicy { kNoEviction, kAllKeysRandom, kAllKeysLru };
 
-MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str) {
-    if (str == "noeviction") {
-        return MaxmemoryPolicy::kNoEviction;
-    }
-    if (!str.compare("allkeys-random")) {
-        return MaxmemoryPolicy::kAllKeysRandom;
-    }
-    if (!str.compare("allkeys-lru")) {
-        return MaxmemoryPolicy::kAllKeysLru;
-    }
-    LOG(FATAL) << "Unknown maxmemory-policy: " << str;
-}
+MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str);
 
-std::string MaxmemoryPolicyEnumToStr(MaxmemoryPolicy policy) {
-    switch (policy) {
-    case MaxmemoryPolicy::kNoEviction:
-        return "noeviction";
-    case MaxmemoryPolicy::kAllKeysRandom:
-        return "allkeys-random";
-    case MaxmemoryPolicy::kAllKeysLru:
-        return "allkeys-lru";
-    default:
-        return "Unknown policy";
-    }
-}
+std::string MaxmemoryPolicyEnumToStr(MaxmemoryPolicy policy);
 
 struct Config {
     uint32_t port = 6379;
     uint32_t hz = 10;
+    uint32_t maxclients = 10000;
     uint64_t maxmemory = 0;
     MaxmemoryPolicy maxmemory_policy = MaxmemoryPolicy::kNoEviction;
     uint32_t maxmemory_samples = 5;
 
-    void ReadFromFile(const std::string& file_name) {
-        std::ifstream in(file_name);
+    void ReadFromFile(const std::string& file_name);
 
-        tortellini::ini ini;
-        in >> ini;
-
-        auto global_section = ini[""];
-
-        port = global_section["port"] | 6379;
-
-        hz = global_section["hz"] | 10;
-
-        maxmemory = global_section["maxmemory"] | maxmemory;
-
-        auto maxmemory_policy_str = global_section["maxmemory-policy"] | "noeviction";
-        maxmemory_policy = MaxmemoryPolicyStrToEnum(maxmemory_policy_str);
-
-        maxmemory_samples = global_section["maxmemory-samples"] | 5;
-    }
-
-    std::string ToString() const {
-        std::stringstream stream;
-        stream << "Configs: [";
-        stream << "port:" << port << ", ";
-        stream << "maxmemory:" << maxmemory << ", ";
-        stream << "maxmemory-policy:" << MaxmemoryPolicyEnumToStr(maxmemory_policy) << ", ";
-        stream << "maxmemory-samples:" << maxmemory_samples;
-        stream << "].";
-        return stream.str();
-    }
+    std::string ToString() const;
 };
 
 } // namespace rdss

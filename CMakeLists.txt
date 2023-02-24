@@ -67,6 +67,7 @@ add_executable(
     async_operation_processor.cc
     buffer.cc
     connection.cc
+    config.cc
     client.cc
     client_manager.cc
     data_structure_service.cc
