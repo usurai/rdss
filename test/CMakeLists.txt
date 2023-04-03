@@ -20,6 +20,7 @@ add_executable(
 add_executable(
     redis_parser_test
     redis_parser_test.cc
+    ../redis_parser.cc
     ../buffer.cc
 )
 
@@ -31,6 +32,7 @@ target_link_libraries(
     hash_table_test
     gtest_main
     /usr/lib/x86_64-linux-gnu/libxxhash.a
+    glog::glog
 )
 
 target_link_libraries(
