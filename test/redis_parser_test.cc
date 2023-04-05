@@ -117,28 +117,6 @@ TEST(RedisParserTest, mbulkBasic) {
     }
 
     {
-        const std::string content = "*3\r\n$3\r\nSET\r\n$2\r\nK0\r\n$6\r\nFOOBAR\r\n";
-        buffer.Reset();
-        memcpy(buffer.Data(), content.data(), content.size());
-
-        for (size_t i = 4; i < content.size() - 1; ++i) {
-            buffer.Reset();
-            memcpy(buffer.Data(), content.data(), i);
-            buffer.Produce(i);
-            MultiBulkParser parser(&buffer);
-            auto res = parser.Parse();
-            EXPECT_EQ(res.first, State::kParsing);
-
-            memcpy(buffer.Data(), content.data() + i, content.size() - i);
-            buffer.Produce(content.size() - i);
-            auto res1 = parser.Parse();
-            EXPECT_EQ(res1.first, State::kDone)
-              << "Committed buffer:'" << content.substr(0, i) << "'";
-            EXPECT_THAT(res1.second, testing::ElementsAre("SET", "K0", "FOOBAR"));
-        }
-    }
-
-    {
         const std::string content = "*0\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
@@ -187,6 +165,29 @@ TEST(RedisParserTest, mbulkBasic) {
         MultiBulkParser parser(&buffer);
         auto res = parser.Parse();
         EXPECT_EQ(res.first, State::kParsing);
+    }
+}
+
+TEST(RedisParserTest, mbulkTwoPasses) {
+    constexpr size_t kBufferCapacity = 1024;
+    Buffer buffer(kBufferCapacity);
+    const std::string content = "*3\r\n$3\r\nSET\r\n$2\r\nK0\r\n$6\r\nFOOBAR\r\n";
+
+    for (size_t i = 4; i < content.size() - 1; ++i) {
+        VLOG(1) << "First pass size: " << i;
+        buffer.Reset();
+        memcpy(buffer.Data(), content.data(), i);
+        buffer.Produce(i);
+        MultiBulkParser parser(&buffer);
+        auto res = parser.Parse();
+        EXPECT_EQ(res.first, State::kParsing);
+
+        memcpy(buffer.Data(), content.data() + i, content.size() - i);
+        buffer.Produce(content.size() - i);
+        auto res1 = parser.Parse();
+        EXPECT_EQ(res1.first, State::kDone) << "Committed buffer:'" << content.substr(0, i) << "'";
+        ASSERT_THAT(res1.second, testing::ElementsAre("SET", "K0", "FOOBAR"))
+          << "Committed buffer:'" << content.substr(0, i) << "'";
     }
 }
 

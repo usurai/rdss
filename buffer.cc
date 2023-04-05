@@ -20,11 +20,6 @@ Buffer::View Buffer::Source() const {
 void Buffer::Consume(size_t n) {
     assert(read_index_ + n <= write_index_);
     read_index_ += n;
-    if (read_index_ == write_index_) {
-        read_index_ = 0;
-        write_index_ = 0;
-        // TODO: Consider shrink the buffer when capcacity is over some limit.
-    }
 }
 
 } // namespace rdss
