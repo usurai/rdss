@@ -4,7 +4,7 @@
 
 namespace rdss {
 
-constexpr size_t kReadBufferLength = 1024 * 16;
+constexpr size_t kIOGenericBufferSize = 1024 * 16;
 
 static constexpr size_t QD = 1024;
 static constexpr size_t READ_SIZE = 1024 * 16;

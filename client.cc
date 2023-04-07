@@ -2,6 +2,7 @@
 
 #include "buffer.h"
 #include "client_manager.h"
+#include "constants.h"
 #include "redis_parser.h"
 #include "replier.h"
 
@@ -43,13 +44,20 @@ Task<void> Client::Echo() {
 }
 
 Task<void> Client::Process() {
-    Buffer query_buffer(1024);
+    Buffer query_buffer(kIOGenericBufferSize);
     // TODO: Make use of RedisParser::InProgress().
     bool parse_ongoing = false;
     // TODO: Lazily create parser.
     auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
     Result query_result;
+
     while (true) {
+        const auto data_start = query_buffer.EnsureAvailable(
+          kIOGenericBufferSize, query_buffer.Capacity() < kIOGenericBufferSize);
+        if (data_start != nullptr && parser->InProgress()) {
+            parser->BufferUpdate(data_start, query_buffer.Start());
+        }
+
         const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
           query_buffer.Sink(), &cancel_token_);
         LOG(INFO) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";

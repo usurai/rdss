@@ -67,7 +67,17 @@ ParsingResult MultiBulkParser::Parse() {
     }
 
     auto buffer = buffer_->Source();
-    // LOG(INFO) << "Parsing:'" << buffer << "'";
+
+    VLOG(2) << "Parsing:'" << buffer << "'";
+    if (result_.size()) {
+        VLOG(2) << "Already has:";
+        for (size_t i = 0; i < result_.size(); ++i) {
+            VLOG(2) << std::to_string(i) << ":" << result_[i];
+        }
+    } else {
+        VLOG(2) << "Doesn't have any result yet";
+    }
+
     if (buffer.empty()) {
         return {state_, {}};
     }
@@ -86,7 +96,7 @@ ParsingResult MultiBulkParser::Parse() {
             state_ = State::kError;
             return {state_, {}};
         }
-        // LOG(INFO) << "args:" << args_;
+        VLOG(2) << "args:" << args_;
         state_ = State::kParsing;
         args_to_parse_ = args_;
         cursor = crlf + 2;
@@ -133,6 +143,7 @@ ParsingResult MultiBulkParser::Parse() {
         cursor += static_cast<size_t>(str_len) + 2;
         --args_to_parse_;
         buffer_->Consume(cursor - old_cursor);
+        VLOG(2) << "Parsed argument:" << result_.back();
     }
     state_ = State::kInit;
     return {State::kDone, std::move(result_)};
@@ -143,6 +154,14 @@ void MultiBulkParser::Reset() {
     args_ = 0;
     args_to_parse_ = 0;
     result_.clear();
+}
+
+void MultiBulkParser::BufferUpdate(const char* original, const char* updated) {
+    for (auto& sv : result_) {
+        const size_t offset = sv.data() - original;
+        StringView new_sv(updated + offset, sv.size());
+        sv.swap(new_sv);
+    }
 }
 
 } // namespace rdss

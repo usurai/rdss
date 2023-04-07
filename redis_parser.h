@@ -31,7 +31,12 @@ protected:
     Buffer* buffer_;
 };
 
+// TODO: Currently only supports parsing in one pass. Need to add support of accumulative parsing,
+// e.g., inline arguments that are larger than initial buffer size.
 class InlineParser : public RedisParser {
+public:
+    static constexpr size_t kMaxInlineBufferSize = 1024 * 64;
+
 public:
     explicit InlineParser(Buffer* buffer)
       : RedisParser(buffer) {}
@@ -56,6 +61,8 @@ public:
     virtual bool InProgress() const override { return state_ == State::kParsing; }
 
     virtual void Reset() override;
+
+    void BufferUpdate(const char* original, const char* updated);
 
 private:
     int32_t args_;

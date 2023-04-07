@@ -76,6 +76,7 @@ add_executable(
     server.cc
     memory.cc
     string_commands.cc
+    redis_parser.cc
 )
 
 target_link_libraries(

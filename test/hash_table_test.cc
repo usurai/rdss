@@ -1,5 +1,6 @@
 #include "hash_table.h"
 #include "tracking_hash_table.h"
+#include "util.h"
 
 #include <gtest/gtest.h>
 
@@ -16,18 +17,6 @@ using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocato
 class HashTableTest : public testing::Test {
 public:
     void SetUp() override { std::srand(static_cast<unsigned int>(time(nullptr))); }
-
-    static std::string GenRandomString(size_t len) {
-        static const char alphanum[] = "0123456789"
-                                       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                       "abcdefghijklmnopqrstuvwxyz";
-        std::string result;
-        result.reserve(len);
-        for (size_t i = 0; i < len; ++i) {
-            result += alphanum[std::rand() % (sizeof(alphanum) - 1)];
-        }
-        return result;
-    }
 };
 
 TEST(HashTableTest, basic) {
@@ -43,11 +32,11 @@ TEST(HashTableTest, basic) {
     for (size_t i = 0; i < n; ++i) {
         const auto r = static_cast<double>(std::rand()) / RAND_MAX;
         if (fact.empty() || r > 0.5) {
-            auto key = HashTableTest::GenRandomString(key_length);
+            auto key = GenRandomString(key_length);
             while (fact.contains(key)) {
-                key = HashTableTest::GenRandomString(key_length);
+                key = GenRandomString(key_length);
             }
-            auto value = HashTableTest::GenRandomString(value_length);
+            auto value = GenRandomString(value_length);
             fact.insert({key, value});
 
             EXPECT_EQ(hash_table.Find(key), nullptr);
@@ -63,7 +52,7 @@ TEST(HashTableTest, basic) {
             EXPECT_FALSE(find_result->value->compare(value));
         } else if (r > 0.2) {
             auto it = fact.begin();
-            auto value = HashTableTest::GenRandomString(value_length);
+            auto value = GenRandomString(value_length);
 
             auto key_ptr = std::make_shared<TrackingString>(it->first.data(), it->first.size());
             auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
@@ -104,8 +93,8 @@ TEST(HashTableTest, getRandomEntry) {
 
     TrackingMap hash_table;
     for (size_t i = 0; i < n; ++i) {
-        auto key = HashTableTest::GenRandomString(key_length);
-        auto value = HashTableTest::GenRandomString(value_length);
+        auto key = GenRandomString(key_length);
+        auto value = GenRandomString(value_length);
         auto key_ptr = std::make_shared<TrackingString>(key.data(), key.size());
         auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
         hash_table.Insert(std::move(key_ptr), std::move(value_ptr));

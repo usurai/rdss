@@ -1,5 +1,9 @@
+#include "../constants.h"
+#include "buffer.h"
 #include "redis_parser.h"
+#include "util.h"
 
+#include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -9,7 +13,9 @@ namespace rdss::test {
 
 using State = RedisParser::State;
 
-class RedisParserTest : public testing::Test {};
+class RedisParserTest : public testing::Test {
+    void SetUp() override { std::srand(static_cast<unsigned int>(time(nullptr))); }
+};
 
 TEST(RedisParserTest, inlineBasic) {
     constexpr size_t kBufferCapacity = 1024;
@@ -188,6 +194,50 @@ TEST(RedisParserTest, mbulkTwoPasses) {
         EXPECT_EQ(res1.first, State::kDone) << "Committed buffer:'" << content.substr(0, i) << "'";
         ASSERT_THAT(res1.second, testing::ElementsAre("SET", "K0", "FOOBAR"))
           << "Committed buffer:'" << content.substr(0, i) << "'";
+    }
+}
+
+TEST(RedisParserTest, bufferExpansion) {
+    constexpr size_t num_argument = 100;
+    constexpr size_t min_length = 512;
+    constexpr size_t max_length = 16 * 1024;
+    std::string full_query = '*' + std::to_string(num_argument) + "\r\n";
+    std::vector<std::string> arguments;
+    arguments.reserve(num_argument);
+
+    for (size_t i = 0; i < num_argument; ++i) {
+        arguments.push_back(GenRandomString(min_length + std::rand() % (max_length - min_length)));
+        full_query += '$' + std::to_string(arguments.back().size()) + "\r\n" + arguments.back()
+                      + "\r\n";
+    }
+
+    Buffer buffer;
+    MultiBulkParser parser(&buffer);
+    size_t offset{0};
+    while (offset < full_query.size()) {
+        auto start = buffer.EnsureAvailable(
+          kIOGenericBufferSize, buffer.Capacity() >= kIOGenericBufferSize);
+        if (start != nullptr && parser.InProgress()) {
+            parser.BufferUpdate(start, buffer.Start());
+        }
+
+        auto sink = buffer.Sink();
+        const size_t bytes_to_copy = std::min(full_query.size() - offset, sink.size());
+        memcpy(sink.data(), full_query.data() + offset, bytes_to_copy);
+        buffer.Produce(bytes_to_copy);
+        offset += bytes_to_copy;
+
+        auto result = parser.Parse();
+        EXPECT_NE(result.first, RedisParser::State::kError);
+
+        if (offset == full_query.size()) {
+            EXPECT_EQ(result.first, RedisParser::State::kDone);
+            EXPECT_EQ(result.second.size(), num_argument);
+            for (size_t i = 0; i < num_argument; ++i) {
+                EXPECT_EQ(arguments[i].size(), result.second[i].size());
+                EXPECT_FALSE(arguments[i].compare(result.second[i]));
+            }
+        }
     }
 }
 

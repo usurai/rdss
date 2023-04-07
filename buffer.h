@@ -37,7 +37,11 @@ public:
     explicit Buffer(size_t capacity)
       : data_(capacity) {}
 
-    void EnsureAvailable(size_t n);
+    size_t Capacity() const { return data_.size(); }
+
+    char* EnsureAvailable(size_t n, bool greedy);
+
+    const char* Start() const { return data_.data(); }
 
     char* Data() { return data_.data() + write_index_; }
 
