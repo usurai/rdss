@@ -10,7 +10,7 @@ Connection::~Connection() {
     if (active_) {
         close(fd_);
     }
-    LOG(INFO) << "Closing connection " << fd_;
+    VLOG(1) << "Closing connection " << fd_;
 }
 
 AwaitableRecv Connection::Recv(Buffer::SinkType buffer) {

@@ -1,20 +1,17 @@
 #include "config.h"
 #include "server.h"
+#include <cstring>
 
 #include <glog/logging.h>
 
-int main([[maybe_unused]] int argc, char* argv[]) {
+int main(int argc, char* argv[]) {
     google::InitGoogleLogging(argv[0]);
+    const auto non_flag_index = google::ParseCommandLineFlags(&argc, &argv, true);
     FLAGS_alsologtostderr = 1;
-    FLAGS_v = 1;
 
-    if (argc > 2) {
-        LOG(ERROR) << "Too many arguments";
-        return 1;
-    }
     rdss::Config server_config;
-    if (argc == 2) {
-        server_config.ReadFromFile(argv[1]);
+    if (argv[non_flag_index] != nullptr) {
+        server_config.ReadFromFile(argv[non_flag_index]);
         LOG(INFO) << server_config.ToString();
     }
 

@@ -60,7 +60,7 @@ Task<void> Client::Process() {
 
         const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
           query_buffer.Sink(), &cancel_token_);
-        LOG(INFO) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
+        VLOG(1) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
         if (cancelled || bytes_read == 0) {
             break;
         }

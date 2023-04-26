@@ -132,7 +132,7 @@ public:
     void PrepareSqe(io_uring_sqe* sqe) {
         VLOG(1) << Impl()->ToString() << "::PrepareSqe()";
         if (state_ == State::kStarted) {
-            LOG(INFO) << "Initiating recv SQE.";
+            VLOG(1) << "Initiating recv SQE.";
             Impl()->PrepareSqe(sqe);
             io_uring_sqe_set_data(sqe, &completion_handler_);
         } else {
