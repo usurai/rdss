@@ -34,6 +34,7 @@ char* Buffer::EnsureAvailable(size_t n, bool greedy) {
     const auto new_size = detail::MakeRoomFor(needed_size, greedy);
     assert(new_size >= needed_size);
     VLOG(1) << "Resize buffer from " << data_.size() << " to " << new_size;
+    MemoryTracker::GetInstance().Allocate<MemCategory>(new_size - data_.size());
     data_.resize(new_size);
     return original_start;
 }

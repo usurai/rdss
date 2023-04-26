@@ -22,6 +22,7 @@ add_executable(
     redis_parser_test.cc
     ../redis_parser.cc
     ../buffer.cc
+    ../memory.cc
 )
 
 target_include_directories(hash_table_test PUBLIC ../)

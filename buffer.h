@@ -1,5 +1,7 @@
 #pragma once
 
+#include "memory.h"
+
 #include <cassert>
 #include <cstddef>
 #include <span>
@@ -30,12 +32,22 @@ class Buffer {
 public:
     using View = std::string_view;
     using SinkType = std::span<char>;
+    static constexpr auto MemCategory = MemoryTracker::Category::kQueryBuffer;
 
 public:
     Buffer() = default;
 
     explicit Buffer(size_t capacity)
-      : data_(capacity) {}
+      : data_(capacity) {
+        MemoryTracker::GetInstance().Allocate<MemCategory>(data_.capacity());
+    }
+
+    Buffer(const Buffer&) = default;
+    Buffer& operator=(const Buffer&) = default;
+    Buffer(Buffer&&) = default;
+    Buffer& operator=(Buffer&&) = default;
+
+    ~Buffer() { MemoryTracker::GetInstance().Deallocate<MemCategory>(data_.capacity()); }
 
     size_t Capacity() const { return data_.size(); }
 

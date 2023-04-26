@@ -11,4 +11,15 @@ MemoryTracker& MemoryTracker::GetInstance() {
     return *instance_;
 }
 
+std::ostream& operator<<(std::ostream& os, MemTrackingCategory c) {
+    switch (c) {
+    case MemTrackingCategory::kMallocator:
+        return os << "Mallocator";
+    case MemTrackingCategory::kQueryBuffer:
+        return os << "QueryBuffer";
+    case MemTrackingCategory::kAll:
+        return os << "All";
+    }
+}
+
 } // namespace rdss

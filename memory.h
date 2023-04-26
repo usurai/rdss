@@ -1,5 +1,7 @@
 #pragma once
 
+#include <glog/logging.h>
+
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -9,26 +11,56 @@
 
 namespace rdss {
 
+enum class MemTrackingCategory : uint8_t { kMallocator = 0, kQueryBuffer, kAll };
+std::ostream& operator<<(std::ostream& os, MemTrackingCategory c);
+
 class MemoryTracker {
 public:
+    using Category = MemTrackingCategory;
+
+public:
     MemoryTracker(MemoryTracker&) = delete;
+
     void operator=(const MemoryTracker&) = delete;
+
     static MemoryTracker& GetInstance();
-    void Allocate(size_t n) { counter_ += n; }
-    void Deallocate(size_t n) { counter_ -= n; }
-    size_t GetAllocated() const { return counter_; }
+
+    template<Category C>
+    void Allocate(size_t n) {
+        static_assert(C != Category::kAll);
+        counter_[static_cast<size_t>(C)] += n;
+        VLOG(1) << '[' << C << "] Allocate [" << n << " | " << counter_[static_cast<size_t>(C)]
+                << "].";
+    }
+
+    template<Category C>
+    void Deallocate(size_t n) {
+        static_assert(C != Category::kAll);
+        counter_[static_cast<size_t>(C)] -= n;
+        VLOG(1) << '[' << C << "] Deallocate [" << n << " | " << counter_[static_cast<size_t>(C)]
+                << "].";
+    }
+
+    template<Category C>
+    size_t GetAllocated() const {
+        if constexpr (C == Category::kAll) {
+            return counter_[0] + counter_[1];
+        }
+        return counter_[static_cast<size_t>(C)];
+    }
 
 protected:
     MemoryTracker() = default;
     static MemoryTracker* instance_;
 
 private:
-    size_t counter_ = 0;
+    size_t counter_[2] = {};
 };
 
 template<class T>
 struct Mallocator {
     using value_type = T;
+    static constexpr auto MemCategory = MemoryTracker::Category::kMallocator;
 
     Mallocator() = default;
 
@@ -55,12 +87,10 @@ struct Mallocator {
 private:
     void report([[maybe_unused]] T* p, std::size_t n, bool alloc = true) const {
         const auto bytes = sizeof(T) * n;
-        // std::cout << (alloc ? "Alloc: " : "Dealloc: ") << bytes << " bytes at " << std::hex
-        //           << std::showbase << reinterpret_cast<void*>(p) << std::dec << '\n';
         if (alloc) {
-            MemoryTracker::GetInstance().Allocate(bytes);
+            MemoryTracker::GetInstance().Allocate<MemCategory>(bytes);
         } else {
-            MemoryTracker::GetInstance().Deallocate(bytes);
+            MemoryTracker::GetInstance().Deallocate<MemCategory>(bytes);
         }
     }
 };
