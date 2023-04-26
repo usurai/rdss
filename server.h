@@ -24,6 +24,8 @@ public:
 private:
     Task<void> AcceptLoop();
 
+    Task<void> Cron();
+
     void RegisterCommands();
 
     Config config_;

@@ -7,6 +7,7 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <coroutine>
 #include <functional>
 #include <liburing.h>
@@ -286,6 +287,22 @@ public:
 
 private:
     std::string data_;
+};
+
+class AwaitableTimeout : public AwaitableOperation<AwaitableTimeout> {
+public:
+    AwaitableTimeout(AsyncOperationProcessor* processor, std::chrono::nanoseconds nanoseconds)
+      : AwaitableOperation<AwaitableTimeout>(processor)
+      , ts_{.tv_sec = 0, .tv_nsec = nanoseconds.count()} {}
+
+    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 1, 0); }
+
+    void await_resume() noexcept {}
+
+    std::string ToString() const { return "AwaitableTimeout"; }
+
+private:
+    __kernel_timespec ts_;
 };
 
 } // namespace rdss

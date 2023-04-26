@@ -1,5 +1,6 @@
 #include "server.h"
 
+#include "async_operation.h"
 #include "client.h"
 #include "command.h"
 #include "string_commands.h"
@@ -21,6 +22,7 @@ Server::Server(Config config)
 
 void Server::Run() {
     AcceptLoop();
+    Cron();
     proactor_->Run();
 }
 
@@ -34,6 +36,16 @@ Task<void> Server::AcceptLoop() {
         }
         auto* client = client_manager_->AddClient(conn, service_.get());
         client->Process();
+    }
+}
+
+// TODO: Adaptive hz
+Task<void> Server::Cron() {
+    const auto interval_in_millisecond = 1000 / config_.hz;
+    while (active_) {
+        co_await AwaitableTimeout(
+          processor_.get(), std::chrono::milliseconds(interval_in_millisecond));
+        LOG(INFO) << "Server::Cron()";
     }
 }
 
