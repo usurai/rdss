@@ -6,12 +6,15 @@
 
 namespace rdss {
 
+struct Config;
+
 // TODO: Add thread-safe queue command interface, so that multiple read thread can queue to the same
 // service simultaneously.
 class DataStructureService {
 public:
-    DataStructureService()
-      : data_(new TrackingMap()) {}
+    DataStructureService(Config* config)
+      : config_(config)
+      , data_(new TrackingMap()) {}
 
     Result Invoke(Command::CommandStrings command_strings);
 
@@ -20,6 +23,10 @@ public:
     }
 
 private:
+    size_t IsOOM() const;
+    bool Evict(size_t bytes_to_free);
+
+    Config* config_;
     CommandDictionary commands_;
     std::unique_ptr<TrackingMap> data_;
 };

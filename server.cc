@@ -15,7 +15,7 @@ Server::Server(Config config)
   , processor_(AsyncOperationProcessor::Create())
   , listener_(Listener::Create(6379, processor_.get()))
   , proactor_(std::make_unique<Proactor>(processor_->GetRing()))
-  , service_(std::make_unique<DataStructureService>())
+  , service_(std::make_unique<DataStructureService>(&config_))
   , client_manager_(std::make_unique<ClientManager>()) {
     RegisterCommands();
 }
@@ -45,12 +45,11 @@ Task<void> Server::Cron() {
     while (active_) {
         co_await AwaitableTimeout(
           processor_.get(), std::chrono::milliseconds(interval_in_millisecond));
-        LOG(INFO) << "Server::Cron()";
     }
 }
 
 void Server::RegisterCommands() {
-    service_->RegisterCommand("SET", Command("SET").SetHandler(SetFunction));
+    service_->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
     service_->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
 }
 
