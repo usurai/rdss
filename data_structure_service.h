@@ -4,6 +4,8 @@
 #include "command_dictionary.h"
 #include "tracking_hash_table.h"
 
+#include <set>
+
 namespace rdss {
 
 struct Config;
@@ -22,13 +24,31 @@ public:
         commands_.emplace(std::move(name), std::move(command));
     }
 
+    TrackingMap* HashTable() { return data_.get(); }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
+    TrackingMap::EntryPointer GetSomeOldEntry(size_t samples);
 
     Config* config_;
     CommandDictionary commands_;
     std::unique_ptr<TrackingMap> data_;
+
+    // LRU-related
+    using DurationCount = int64_t;
+    using LRUEntry = std::pair<DurationCount, TrackingStringPtr>;
+    struct CompareLRUEntry {
+        constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
+            return lhs.first < rhs.first;
+        }
+    };
+    static constexpr size_t kEvictionPoolLimit = 16;
+    std::set<LRUEntry, CompareLRUEntry> eviction_pool_;
+
+    // TODO: move somewhere
+public:
+    DurationCount lru_clock_{0};
 };
 
 } // namespace rdss

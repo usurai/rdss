@@ -1,7 +1,6 @@
 #pragma once
 
 #include "result.h"
-#include "tracking_hash_table.h"
 
 #include <functional>
 #include <memory>
@@ -9,16 +8,18 @@
 
 namespace rdss {
 
+class DataStructureService;
+
 class Command {
 public:
     using CommandStrings = std::span<std::string_view>;
-    using HandlerType = std::function<Result(TrackingMap&, CommandStrings)>;
+    using HandlerType = std::function<Result(DataStructureService&, CommandStrings)>;
 
     Command(std::string name)
       : name_(std::move(name)) {}
 
-    Result operator()(TrackingMap& data, CommandStrings command_strings) {
-        return handler_(data, std::move(command_strings));
+    Result operator()(DataStructureService& service, CommandStrings command_strings) {
+        return handler_(service, std::move(command_strings));
     }
 
     Command& SetHandler(HandlerType handler) {

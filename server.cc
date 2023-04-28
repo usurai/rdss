@@ -8,6 +8,16 @@
 #include <chrono>
 #include <thread>
 
+namespace detail {
+
+int64_t GetLruClock() {
+    auto now = std::chrono::system_clock::now();
+    auto epoch = now.time_since_epoch();
+    return epoch.count();
+}
+
+} // namespace detail
+
 namespace rdss {
 
 Server::Server(Config config)
@@ -45,6 +55,8 @@ Task<void> Server::Cron() {
     while (active_) {
         co_await AwaitableTimeout(
           processor_.get(), std::chrono::milliseconds(interval_in_millisecond));
+
+        service_->lru_clock_ = detail::GetLruClock();
     }
 }
 
