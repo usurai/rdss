@@ -4,6 +4,6 @@ namespace rdss {
 
 class DataStructureService;
 
-void RegisterStringCommands(DataStructureService*);
+void RegisterCommands(DataStructureService* service);
 
 } // namespace rdss

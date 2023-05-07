@@ -26,8 +26,6 @@ private:
 
     Task<void> Cron();
 
-    void RegisterCommands();
-
     Config config_;
 
     bool active_ = true;

@@ -70,6 +70,8 @@ add_executable(
     config.cc
     client.cc
     client_manager.cc
+    client_commands.cc
+    command_registry.cc
     data_structure_service.cc
     listener.cc
     proactor.cc

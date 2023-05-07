@@ -1,5 +1,6 @@
 #include "string_commands.h"
 
+#include "command.h"
 #include "data_structure_service.h"
 
 namespace rdss {
@@ -36,6 +37,11 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings comman
         result.Add(std::string(*(entry->value)));
     }
     return result;
+}
+
+void RegisterStringCommands(DataStructureService* service) {
+    service->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
+    service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
 }
 
 } // namespace rdss

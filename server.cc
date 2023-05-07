@@ -3,7 +3,7 @@
 #include "async_operation.h"
 #include "client.h"
 #include "command.h"
-#include "string_commands.h"
+#include "command_registry.h"
 
 #include <chrono>
 #include <thread>
@@ -27,7 +27,7 @@ Server::Server(Config config)
   , proactor_(std::make_unique<Proactor>(processor_->GetRing()))
   , service_(std::make_unique<DataStructureService>(&config_))
   , client_manager_(std::make_unique<ClientManager>()) {
-    RegisterCommands();
+    RegisterCommands(service_.get());
 }
 
 void Server::Run() {
@@ -58,11 +58,6 @@ Task<void> Server::Cron() {
 
         service_->lru_clock_ = detail::GetLruClock();
     }
-}
-
-void Server::RegisterCommands() {
-    service_->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
-    service_->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
 }
 
 void Server::Shutdown() {
