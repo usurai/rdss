@@ -39,9 +39,24 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings comman
     return result;
 }
 
+Result ExistsFunction(DataStructureService& service, Command::CommandStrings command_strings) {
+    Result result;
+    int32_t cnt{0};
+    for (size_t i = 1; i < command_strings.size(); ++i) {
+        auto entry = service.HashTable()->Find(command_strings[i]);
+        if (entry != nullptr) {
+            entry->lru = service.lru_clock_;
+            ++cnt;
+        }
+    }
+    result.Add(cnt);
+    return result;
+}
+
 void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
+    service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }
 
 } // namespace rdss
