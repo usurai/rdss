@@ -36,32 +36,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
 # TODO: https://stackoverflow.com/questions/11496942/understanding-weffc
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weffc++")
 
-# add_executable(
-#     rdss
-#     server.cc
-#     memory.cc
-#     connection.cc
-#     buffer.cc
-#     dragonfly/io_buf.cc
-#     dragonfly/redis_parser.cc
-#     dragonfly/resp_expr.cc
-# )
-
-# target_link_libraries(
-#     rdss
-#     /usr/lib/liburing.a
-#     /usr/lib/x86_64-linux-gnu/libxxhash.a
-#     absl::flags_parse
-#     absl::strings
-#     absl::symbolize
-#     absl::time
-#     absl::failure_signal_handler
-#     absl::str_format
-#     glog::glog
-# )
-
 add_executable(
-    main
+    rdss
     main.cc
     async_operation.cc
     async_operation_processor.cc
@@ -76,13 +52,14 @@ add_executable(
     listener.cc
     proactor.cc
     server.cc
+    misc_commands.cc
     memory.cc
     string_commands.cc
     redis_parser.cc
 )
 
 target_link_libraries(
-    main
+    rdss
     /usr/lib/liburing.a
     /usr/lib/x86_64-linux-gnu/libxxhash.a
     glog::glog

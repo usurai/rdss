@@ -107,6 +107,8 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
     return true;
 }
 
+// TODO: Current implementation doesn't care execution time. Consider stop eviction after some
+// time or attempts.
 TrackingMap::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) {
     assert(eviction_pool_.size() < kEvictionPoolLimit);
     assert(data_->Count() > 0);

@@ -188,6 +188,7 @@ private:
     CompletionHandler* cancel_handler_ = nullptr;
 };
 
+// TODO: Consider multishot/direct variant.
 class AwaitableAccept : public AwaitableOperation<AwaitableAccept> {
 public:
     AwaitableAccept(AsyncOperationProcessor* processor, int sockfd)

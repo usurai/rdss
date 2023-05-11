@@ -21,6 +21,7 @@ void Proactor::Run() {
             const auto res = cqe->res;
             io_uring_cqe_seen(ring_, cqe);
             handler->Complete(res);
+            // TODO: use io_uring_peek_batch_cqe
         } while (!io_uring_peek_cqe(ring_, &cqe));
     }
 }
