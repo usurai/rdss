@@ -38,3 +38,4 @@ compile_commands.json
 payload*
 copied*
 perfs/
+rdss.ini
