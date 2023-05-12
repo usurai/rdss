@@ -42,13 +42,13 @@ TEST(HashTableTest, basic) {
             EXPECT_EQ(hash_table.Find(key), nullptr);
             auto key_ptr = std::make_shared<TrackingString>(key.data(), key.size());
             auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
-            auto [entry, inserted] = hash_table.Insert(std::move(key_ptr), std::move(value_ptr));
+            auto [entry, inserted] = hash_table.Insert(key, value);
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(inserted);
 
             auto find_result = hash_table.Find(key);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_FALSE(find_result->key->compare(key));
+            EXPECT_TRUE(find_result->key->Equals(key));
             EXPECT_FALSE(find_result->value->compare(value));
         } else if (r > 0.2) {
             auto it = fact.begin();
@@ -59,14 +59,13 @@ TEST(HashTableTest, basic) {
 
             EXPECT_NE(hash_table.Find(it->first), nullptr);
             it->second = value;
-            auto [entry, replaced] = hash_table.InsertOrAssign(
-              std::move(key_ptr), std::move(value_ptr));
+            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, value);
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(replaced);
 
             auto find_result = hash_table.Find(it->first);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_FALSE(find_result->key->compare(it->first));
+            EXPECT_TRUE(find_result->key->Equals(it->first));
             EXPECT_FALSE(find_result->value->compare(it->second));
         } else {
             EXPECT_TRUE(hash_table.Erase(fact.begin()->first));
@@ -80,7 +79,7 @@ TEST(HashTableTest, basic) {
     for (const auto& [key, value] : fact) {
         auto find_result = hash_table.Find(key);
         EXPECT_NE(find_result, nullptr);
-        EXPECT_FALSE(find_result->key->compare(key));
+        EXPECT_TRUE(find_result->key->Equals(key));
         EXPECT_FALSE(find_result->value->compare(value));
     }
 }
@@ -95,16 +94,14 @@ TEST(HashTableTest, getRandomEntry) {
     for (size_t i = 0; i < n; ++i) {
         auto key = GenRandomString(key_length);
         auto value = GenRandomString(value_length);
-        auto key_ptr = std::make_shared<TrackingString>(key.data(), key.size());
-        auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
-        hash_table.Insert(std::move(key_ptr), std::move(value_ptr));
+        hash_table.Insert(key, value);
     }
 
-    std::map<TrackingString, size_t> count;
+    std::map<std::string, size_t> count;
     for (size_t i = 0; i < n; ++i) {
         auto entry = hash_table.GetRandomEntry();
         EXPECT_NE(entry, nullptr);
-        ++count[*(entry->key)];
+        ++count[std::string(entry->key->Data())];
     }
 
     size_t max_count{0};

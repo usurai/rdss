@@ -32,6 +32,6 @@ struct TSPHashAdapter {
 
 // TODO: Using TrackingStringPtr makes the mem usage of shared_ptr it self out of tracking of
 // MemoryTracker.
-using TrackingMap = HashTable<TrackingStringPtr, TrackingStringPtr, TSPComparator, TSPHashAdapter>;
+using TrackingMap = HashTable<TrackingString>;
 
 } // namespace rdss

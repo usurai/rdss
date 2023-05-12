@@ -37,7 +37,7 @@ private:
 
     // LRU-related
     using DurationCount = int64_t;
-    using LRUEntry = std::pair<DurationCount, TrackingStringPtr>;
+    using LRUEntry = std::pair<DurationCount, std::shared_ptr<HashTableKey>>;
     struct CompareLRUEntry {
         constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
             return lhs.first < rhs.first;

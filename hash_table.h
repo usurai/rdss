@@ -6,43 +6,69 @@
 #include <cstdlib>
 #include <ctime>
 #include <functional>
+#include <memory>
 #include <vector>
 #include <xxhash.h>
 
 namespace rdss {
 
-template<typename KeyType, typename ValueType>
-struct HashTableEntry {
-    using pointer = HashTableEntry*;
-    KeyType key;
-    ValueType value;
+// TODO: templatize the Allocator
+class HashTableKey {
+public:
+    using String = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
+
+    explicit HashTableKey(std::string_view sv)
+      : data_(sv) {}
+
+    // TODO: rename to StringView()
+    std::string_view Data() const { return std::string_view(data_); }
+
+    bool Equals(std::string_view rhs) const { return !data_.compare(rhs); }
+
+    void SetLRU(uint32_t lru) { lru_ = lru; }
+
+    uint32_t GetLRU() const { return lru_; }
+
+private:
     // TODO: Give it a more reasonable name.
-    int64_t lru = 0;
-    pointer next = nullptr;
+    uint32_t lru_ = 0;
+    const String data_;
 };
 
-// TODO: Consider a better solution for HashAdapter
-template<typename KeyType, typename ValueType, typename Comparator, typename HashAdapter>
+template<typename ValueType>
+struct HashTableEntry {
+    using Pointer = HashTableEntry*;
+    using KeyPointer = std::shared_ptr<HashTableKey>;
+
+    KeyPointer key;
+
+    // TODO: value can be shared string, or inlined int, and needs to be extented to data structure
+    // like set and list.
+    std::shared_ptr<ValueType> value;
+
+    Pointer next = nullptr;
+};
+
+template<typename ValueType>
 class HashTable {
 public:
-    using EntryType = HashTableEntry<KeyType, ValueType>;
-    using EntryPointer = EntryType::pointer;
+    using EntryType = HashTableEntry<ValueType>;
+    using EntryPointer = EntryType::Pointer;
     using BucketVector = std::vector<EntryPointer, Mallocator<EntryPointer>>;
 
 public:
     HashTable() { std::srand(static_cast<unsigned int>(time(nullptr))); }
     ~HashTable() { Clear(); }
 
-    // TODO: parameter
-    std::pair<EntryPointer, bool> Insert(KeyType key, ValueType value) {
+    std::pair<EntryPointer, bool> Insert(std::string_view key, std::string_view value) {
         return Add(std::move(key), std::move(value), false);
     }
 
-    std::pair<EntryPointer, bool> InsertOrAssign(KeyType key, ValueType value) {
+    std::pair<EntryPointer, bool> InsertOrAssign(std::string_view key, std::string_view value) {
         return Add(std::move(key), std::move(value), true);
     }
 
-    EntryPointer Find(const std::string_view& key) {
+    EntryPointer Find(std::string_view key) {
         if (buckets_[0].empty()) {
             return nullptr;
         }
@@ -65,8 +91,6 @@ public:
         // TODO: rehash case
         return nullptr;
     }
-
-    // const ValueType& GetValue(KeyType key);
 
     bool Erase(const std::string_view& key) {
         auto bucket = FindBucket(key);
@@ -113,37 +137,27 @@ public:
     // TODO: mem-related APIs
 
 private:
-    std::pair<EntryPointer, bool> Add(KeyType key, ValueType value, bool replace) {
-        std::string_view key_view{key->data(), key->size()};
-        if (auto entry = Find(key_view)) {
+    std::pair<EntryPointer, bool> Add(std::string_view key, std::string_view value, bool replace) {
+        if (auto entry = Find(key)) {
             if (!replace) {
                 return {entry, false};
             }
-            entry->value = std::move(value);
+            entry->value = std::make_shared<ValueType>(value);
             return {entry, true};
         }
 
-        if (Expand() == ExpandResult::FAIL) {
-            return {nullptr, false};
-        }
+        Expand();
 
-        auto bucket = FindBucket(key_view);
-        auto result_pointer = InsertIntoBucket(bucket, std::move(key), std::move(value));
+        auto bucket = FindBucket(key);
+        auto result_pointer = InsertIntoBucket(bucket, key, value);
         ++entries_;
         return {result_pointer, true};
     }
 
-    uint64_t Hash(const KeyType& key) {
-        auto val = HashAdapter()(key);
-        return XXH64(val.data(), val.size(), 0);
-    }
-
-    uint64_t Hash(const std::string_view& key) {
-        return XXH64(key.data(), key.size(), 0);
-    }
+    uint64_t Hash(std::string_view key) { return XXH64(key.data(), key.size(), 0); }
 
     // Assumes the table is not empty.
-    BucketVector::iterator FindBucket(const std::string_view& key) {
+    BucketVector::iterator FindBucket(std::string_view key) {
         const auto hash = Hash(key);
         const int32_t index = static_cast<int32_t>(hash % buckets_[0].size());
         if (index >= rehash_index_) {
@@ -153,13 +167,13 @@ private:
         return buckets_[1].begin() + (hash % buckets_[1].size());
     }
 
-    EntryPointer FindEntryInBucket(BucketVector::iterator bucket, const std::string_view& key) {
+    EntryPointer FindEntryInBucket(BucketVector::iterator bucket, std::string_view key) {
         if (*bucket == nullptr) {
             return nullptr;
         }
 
         auto entry = *bucket;
-        while (!comparator_(entry->key, key)) {
+        while (!entry->key->Equals(key)) {
             if (entry->next == nullptr) {
                 return nullptr;
             }
@@ -183,21 +197,13 @@ private:
         return entry;
     }
 
-    bool EraseEntryInBucket(BucketVector::iterator bucket, const std::string_view& key) {
+    bool EraseEntryInBucket(BucketVector::iterator bucket, std::string_view key) {
         if (*bucket == nullptr) {
             return false;
         }
+        EntryPointer* prev_next = &(*bucket);
         auto entry = *bucket;
-        if (comparator_(entry->key, key)) {
-            *bucket = entry->next;
-            entry->~HashTableEntry();
-            entry_allocator_.deallocate(entry, 1);
-            return true;
-        }
-
-        EntryPointer* prev_next = &(entry->next);
-        entry = entry->next;
-        while (!comparator_(entry->key, key)) {
+        while (!entry->key->Equals(key)) {
             if (entry->next == nullptr) {
                 return false;
             }
@@ -205,6 +211,7 @@ private:
             entry = entry->next;
         }
         *prev_next = entry->next;
+        // TODO: ditto.
         entry->~HashTableEntry();
         entry_allocator_.deallocate(entry, 1);
         return true;
@@ -212,19 +219,23 @@ private:
 
     // Insert entry with 'key' and 'value' to the head of the bucket.This assumes 'bucket' doesn't
     // contains an entry that has equivalent key to 'key'.
-    EntryPointer InsertIntoBucket(BucketVector::iterator bucket, KeyType key, ValueType value) {
-        // TODO: exception handling
+    EntryPointer
+    InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, std::string_view value) {
+        // TODO: exception handling.
+        // TODO: Make these into function.
         auto* mem = entry_allocator_.allocate(1);
         auto entry = new (mem) EntryType();
         assert(entry != nullptr);
-        entry->key = std::move(key);
-        entry->value = std::move(value);
+        // TODO: shared_ptr should also be tracked by MemoryTracker.
+        entry->key = std::make_shared<HashTableKey>(key);
+        // TODO: value should be cared differently.
+        entry->value = std::make_shared<ValueType>(value);
         entry->next = *bucket;
         *bucket = entry;
         return entry;
     }
 
-    enum class ExpandResult { NoNeed, SUCCESS, FAIL };
+    enum class ExpandResult { NoNeed, SUCCESS };
     ExpandResult Expand() {
         if (!NeedsToExpand()) {
             return ExpandResult::NoNeed;
@@ -258,7 +269,7 @@ private:
             auto entry = *bucket;
             while (entry) {
                 auto* next_entry = entry->next;
-                const auto hash = Hash(entry->key);
+                const auto hash = Hash(entry->key->Data());
                 auto target_bucket = buckets_[1].begin() + (hash % buckets_[1].size());
                 entry->next = *target_bucket;
                 *target_bucket = entry;
@@ -268,7 +279,6 @@ private:
     }
 
 private:
-    Comparator comparator_;
     Mallocator<EntryType> entry_allocator_;
     BucketVector buckets_[2];
     size_t entries_ = 0;
