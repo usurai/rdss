@@ -14,7 +14,7 @@ struct Config;
 // service simultaneously.
 class DataStructureService {
 public:
-    DataStructureService(Config* config)
+    explicit DataStructureService(Config* config)
       : config_(config)
       , data_(new TrackingMap()) {}
 
@@ -37,7 +37,7 @@ private:
 
     // LRU-related
     using DurationCount = int64_t;
-    using LRUEntry = std::pair<DurationCount, std::shared_ptr<HashTableKey>>;
+    using LRUEntry = std::pair<DurationCount, TrackingMap::EntryType::KeyPointer>;
     struct CompareLRUEntry {
         constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
             return lhs.first < rhs.first;

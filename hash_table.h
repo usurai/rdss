@@ -12,11 +12,9 @@
 
 namespace rdss {
 
-// TODO: templatize the Allocator
+template<typename Allocator>
 class HashTableKey {
 public:
-    using String = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
-
     explicit HashTableKey(std::string_view sv)
       : data_(sv) {}
 
@@ -30,17 +28,28 @@ public:
     uint32_t GetLRU() const { return lru_; }
 
 private:
+    using String = std::basic_string<char, std::char_traits<char>, Allocator>;
+
     // TODO: Give it a more reasonable name.
     uint32_t lru_ = 0;
     const String data_;
 };
 
-template<typename ValueType>
+template<typename ValueType, typename Allocator>
 struct HashTableEntry {
     using Pointer = HashTableEntry*;
-    using KeyPointer = std::shared_ptr<HashTableKey>;
 
-    KeyPointer key;
+    using CharAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<char>;
+    using KeyType = HashTableKey<CharAllocator>;
+    using KeyPointer = std::shared_ptr<KeyType>;
+    using KeyAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<KeyType>;
+
+    KeyPointer key = nullptr;
+
+    void SetKey(std::string_view sv) {
+        VLOG(1) << "Setting key in TableEntry with value:" << sv;
+        key = std::allocate_shared<KeyType>(KeyAllocator(), sv);
+    }
 
     // TODO: value can be shared string, or inlined int, and needs to be extented to data structure
     // like set and list.
@@ -49,12 +58,14 @@ struct HashTableEntry {
     Pointer next = nullptr;
 };
 
-template<typename ValueType>
+template<typename ValueType, typename Allocator = Mallocator<ValueType>>
 class HashTable {
 public:
-    using EntryType = HashTableEntry<ValueType>;
+    using EntryType = HashTableEntry<ValueType, Allocator>;
     using EntryPointer = EntryType::Pointer;
-    using BucketVector = std::vector<EntryPointer, Mallocator<EntryPointer>>;
+    using EntryPointerAllocator =
+      typename std::allocator_traits<Allocator>::template rebind_alloc<EntryPointer>;
+    using BucketVector = std::vector<EntryPointer, EntryPointerAllocator>;
 
 public:
     HashTable() { std::srand(static_cast<unsigned int>(time(nullptr))); }
@@ -223,11 +234,12 @@ private:
     InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, std::string_view value) {
         // TODO: exception handling.
         // TODO: Make these into function.
+        VLOG(1) << "Creating new TableEntry.";
         auto* mem = entry_allocator_.allocate(1);
         auto entry = new (mem) EntryType();
         assert(entry != nullptr);
-        // TODO: shared_ptr should also be tracked by MemoryTracker.
-        entry->key = std::make_shared<HashTableKey>(key);
+
+        entry->SetKey(key);
         // TODO: value should be cared differently.
         entry->value = std::make_shared<ValueType>(value);
         entry->next = *bucket;
@@ -236,6 +248,7 @@ private:
     }
 
     enum class ExpandResult { NoNeed, SUCCESS };
+
     ExpandResult Expand() {
         if (!NeedsToExpand()) {
             return ExpandResult::NoNeed;
@@ -243,6 +256,7 @@ private:
 
         assert(buckets_[1].empty());
         // TODO: what if cannot allocate
+        VLOG(1) << "BucketVector: resizing to " << buckets_[0].size() * 2;
         buckets_[1].resize(buckets_[0].size() * 2, nullptr);
         Rehash();
         buckets_[0] = std::move(buckets_[1]);
@@ -251,6 +265,7 @@ private:
 
     bool NeedsToExpand() {
         if (buckets_[0].empty()) {
+            VLOG(1) << "BucketVector: init resize: 4";
             // TODO: parameterize this.
             buckets_[0].resize(4, nullptr);
             return false;
@@ -279,6 +294,8 @@ private:
     }
 
 private:
+    // TODO: this should be rebind from Allocator, also, entry should be created from
+    // HashTableEntry's factory function.
     Mallocator<EntryType> entry_allocator_;
     BucketVector buckets_[2];
     size_t entries_ = 0;
