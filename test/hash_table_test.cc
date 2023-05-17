@@ -48,7 +48,7 @@ TEST(HashTableTest, basic) {
 
             auto find_result = hash_table.Find(key);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_TRUE(find_result->key->Equals(key));
+            EXPECT_TRUE(find_result->GetKey()->Equals(key));
             EXPECT_FALSE(find_result->value->compare(value));
         } else if (r > 0.2) {
             auto it = fact.begin();
@@ -65,7 +65,7 @@ TEST(HashTableTest, basic) {
 
             auto find_result = hash_table.Find(it->first);
             EXPECT_NE(find_result, nullptr);
-            EXPECT_TRUE(find_result->key->Equals(it->first));
+            EXPECT_TRUE(find_result->GetKey()->Equals(it->first));
             EXPECT_FALSE(find_result->value->compare(it->second));
         } else {
             EXPECT_TRUE(hash_table.Erase(fact.begin()->first));
@@ -79,7 +79,7 @@ TEST(HashTableTest, basic) {
     for (const auto& [key, value] : fact) {
         auto find_result = hash_table.Find(key);
         EXPECT_NE(find_result, nullptr);
-        EXPECT_TRUE(find_result->key->Equals(key));
+        EXPECT_TRUE(find_result->GetKey()->Equals(key));
         EXPECT_FALSE(find_result->value->compare(value));
     }
 }
@@ -101,7 +101,7 @@ TEST(HashTableTest, getRandomEntry) {
     for (size_t i = 0; i < n; ++i) {
         auto entry = hash_table.GetRandomEntry();
         EXPECT_NE(entry, nullptr);
-        ++count[std::string(entry->key->Data())];
+        ++count[std::string(entry->GetKey()->StringView())];
     }
 
     size_t max_count{0};

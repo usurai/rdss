@@ -13,8 +13,8 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings comman
     }
 
     auto [entry, _] = service.HashTable()->InsertOrAssign(command_strings[1], command_strings[2]);
-    entry->key->SetLRU(service.lru_clock_);
-    VLOG(1) << "lru:" << entry->key->GetLRU();
+    entry->GetKey()->SetLRU(service.lru_clock_);
+    VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
     result.Add("inserted");
     return result;
 }
@@ -29,8 +29,8 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings comman
     if (entry == nullptr) {
         result.AddNull();
     } else {
-        entry->key->SetLRU(service.lru_clock_);
-        VLOG(1) << "lru:" << entry->key->GetLRU();
+        entry->GetKey()->SetLRU(service.lru_clock_);
+        VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
         // TODO: Eliminate the conversion.
         result.Add(std::string(*(entry->value)));
     }
@@ -43,7 +43,7 @@ Result ExistsFunction(DataStructureService& service, Command::CommandStrings com
     for (size_t i = 1; i < command_strings.size(); ++i) {
         auto entry = service.HashTable()->Find(command_strings[i]);
         if (entry != nullptr) {
-            entry->key->SetLRU(service.lru_clock_);
+            entry->GetKey()->SetLRU(service.lru_clock_);
             ++cnt;
         }
     }

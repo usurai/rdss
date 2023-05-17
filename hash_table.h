@@ -18,8 +18,7 @@ public:
     explicit HashTableKey(std::string_view sv)
       : data_(sv) {}
 
-    // TODO: rename to StringView()
-    std::string_view Data() const { return std::string_view(data_); }
+    std::string_view StringView() const { return std::string_view(data_); }
 
     bool Equals(std::string_view rhs) const { return !data_.compare(rhs); }
 
@@ -36,26 +35,50 @@ private:
 };
 
 template<typename ValueType, typename Allocator>
-struct HashTableEntry {
+class HashTableEntry {
+public:
     using Pointer = HashTableEntry*;
+
+    using ThisType = HashTableEntry<ValueType, Allocator>;
+    using EntryAllocator =
+      typename std::allocator_traits<Allocator>::template rebind_alloc<ThisType>;
 
     using CharAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<char>;
     using KeyType = HashTableKey<CharAllocator>;
     using KeyPointer = std::shared_ptr<KeyType>;
     using KeyAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<KeyType>;
 
-    KeyPointer key = nullptr;
+public:
+    static HashTableEntry* Create() {
+        VLOG(1) << "Creating new TableEntry.";
+        auto* mem = EntryAllocator().allocate(1);
+        auto entry = new (mem) ThisType();
+        return entry;
+    }
+
+    static void Destroy(Pointer entry) {
+        entry->~HashTableEntry();
+        EntryAllocator().deallocate(entry, 1);
+    }
 
     void SetKey(std::string_view sv) {
         VLOG(1) << "Setting key in TableEntry with value:" << sv;
         key = std::allocate_shared<KeyType>(KeyAllocator(), sv);
     }
 
+    KeyType* GetKey() { return key.get(); }
+
+    KeyPointer CopyKey() { return key; }
+
+    KeyPointer key = nullptr;
     // TODO: value can be shared string, or inlined int, and needs to be extented to data structure
     // like set and list.
     std::shared_ptr<ValueType> value;
-
     Pointer next = nullptr;
+
+private:
+    HashTableEntry() = default;
+    ~HashTableEntry() = default;
 };
 
 template<typename ValueType, typename Allocator = Mallocator<ValueType>>
@@ -132,8 +155,7 @@ public:
                 auto entry = bucket;
                 while (entry) {
                     auto next = entry->next;
-                    entry->~HashTableEntry();
-                    entry_allocator_.deallocate(entry, 1);
+                    EntryType::Destroy(entry);
                     entry = next;
                 }
             }
@@ -184,7 +206,7 @@ private:
         }
 
         auto entry = *bucket;
-        while (!entry->key->Equals(key)) {
+        while (!entry->GetKey()->Equals(key)) {
             if (entry->next == nullptr) {
                 return nullptr;
             }
@@ -214,7 +236,7 @@ private:
         }
         EntryPointer* prev_next = &(*bucket);
         auto entry = *bucket;
-        while (!entry->key->Equals(key)) {
+        while (!entry->GetKey()->Equals(key)) {
             if (entry->next == nullptr) {
                 return false;
             }
@@ -223,8 +245,7 @@ private:
         }
         *prev_next = entry->next;
         // TODO: ditto.
-        entry->~HashTableEntry();
-        entry_allocator_.deallocate(entry, 1);
+        EntryType::Destroy(entry);
         return true;
     }
 
@@ -232,13 +253,7 @@ private:
     // contains an entry that has equivalent key to 'key'.
     EntryPointer
     InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, std::string_view value) {
-        // TODO: exception handling.
-        // TODO: Make these into function.
-        VLOG(1) << "Creating new TableEntry.";
-        auto* mem = entry_allocator_.allocate(1);
-        auto entry = new (mem) EntryType();
-        assert(entry != nullptr);
-
+        auto* entry = EntryType::Create();
         entry->SetKey(key);
         // TODO: value should be cared differently.
         entry->value = std::make_shared<ValueType>(value);
@@ -284,7 +299,7 @@ private:
             auto entry = *bucket;
             while (entry) {
                 auto* next_entry = entry->next;
-                const auto hash = Hash(entry->key->Data());
+                const auto hash = Hash(entry->GetKey()->StringView());
                 auto target_bucket = buckets_[1].begin() + (hash % buckets_[1].size());
                 entry->next = *target_bucket;
                 *target_bucket = entry;
@@ -294,9 +309,6 @@ private:
     }
 
 private:
-    // TODO: this should be rebind from Allocator, also, entry should be created from
-    // HashTableEntry's factory function.
-    Mallocator<EntryType> entry_allocator_;
     BucketVector buckets_[2];
     size_t entries_ = 0;
     int32_t rehash_index_ = -1;

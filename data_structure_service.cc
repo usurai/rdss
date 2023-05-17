@@ -73,8 +73,8 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
             auto delta
               = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
             // TODO: dont convert to string_view
-            VLOG(1) << "Evicting key " << entry->key->Data();
-            data_->Erase(entry->key->Data());
+            VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
+            data_->Erase(entry->GetKey()->StringView());
             // ++evicted_keys;
             delta
               -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
@@ -97,8 +97,8 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
         auto delta
           = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         // TODO: dont convert to string_view
-        VLOG(1) << "Evicting key " << entry->key->Data();
-        data_->Erase(entry->key->Data());
+        VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
+        data_->Erase(entry->GetKey()->StringView());
         // ++evicted_keys;
         delta -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         VLOG(1) << "Freed " << delta << " bytes.";
@@ -118,7 +118,7 @@ TrackingMap::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) 
         for (size_t i = 0; i < std::min(samples, data_->Count()); ++i) {
             auto entry = data_->GetRandomEntry();
             assert(entry != nullptr);
-            eviction_pool_.emplace(entry->key->GetLRU(), entry->key);
+            eviction_pool_.emplace(entry->GetKey()->GetLRU(), entry->CopyKey());
         }
 
         while (eviction_pool_.size() > kEvictionPoolLimit) {
@@ -129,8 +129,8 @@ TrackingMap::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) 
 
         while (!eviction_pool_.empty()) {
             auto& [lru, key] = *eviction_pool_.begin();
-            auto entry = data_->Find(key->Data());
-            if (entry == nullptr || entry->key->GetLRU() != lru) {
+            auto entry = data_->Find(key->StringView());
+            if (entry == nullptr || entry->GetKey()->GetLRU() != lru) {
                 eviction_pool_.erase(eviction_pool_.begin());
                 continue;
             }
