@@ -12,7 +12,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings comman
         return result;
     }
 
-    auto [entry, _] = service.HashTable()->InsertOrAssign(
+    auto [entry, _] = service.HashTable()->Upsert(
       command_strings[1], CreateMTSPtr(command_strings[2]));
     entry->GetKey()->SetLRU(service.lru_clock_);
     VLOG(1) << "lru:" << entry->GetKey()->GetLRU();

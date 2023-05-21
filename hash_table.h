@@ -95,20 +95,52 @@ public:
     HashTable() { std::srand(static_cast<unsigned int>(time(nullptr))); }
     ~HashTable() { Clear(); }
 
-    std::pair<EntryPointer, bool> Insert(std::string_view key, ValueType value) {
-        return Add(key, std::move(value), false);
+    /// Searches for entry with 'key' in the HashTable, and if 'create_on_missing' is set, creates
+    /// entry if no such entry is found.
+    /// If 'create_on_missing' is true, returns {entry for 'key', if entry already exists}.
+    /// If 'create_on_missing' is false, returns {newly created entry for 'key', false}.
+    std::pair<EntryPointer, bool> FindOrCreate(std::string_view key, bool create_on_missing) {
+        if (buckets_[0].empty()) {
+            if (!create_on_missing) {
+                return {nullptr, false};
+            }
+            Expand();
+        }
+
+        auto bucket = FindBucket(key);
+        EntryPointer entry{nullptr};
+        if ((entry = FindEntryInBucket(bucket, key)) != nullptr) {
+            return {entry, true};
+        }
+        if (create_on_missing) {
+            if (Expand() == ExpandResult::kExpandDone) {
+                bucket = FindBucket(key);
+            }
+            entry = CreateEntryInBucket(bucket, key);
+            ++entries_;
+        }
+        return {entry, false};
     }
 
-    std::pair<EntryPointer, bool> InsertOrAssign(std::string_view key, ValueType value) {
-        return Add(key, std::move(value), true);
+    /// Insert if 'key' not exists. Returns {entry of 'key', inserted}.
+    std::pair<EntryPointer, bool> Insert(std::string_view key, ValueType value) {
+        auto [entry, exists] = FindOrCreate(key, true);
+        if (!exists) {
+            entry->value = std::move(value);
+        }
+        return {entry, !exists};
+    }
+
+    /// Insert if 'key' not exists, overwrite if exists. Returns {entry of 'key', overwritten}.
+    std::pair<EntryPointer, bool> Upsert(std::string_view key, ValueType value) {
+        auto [entry, exists] = FindOrCreate(key, true);
+        entry->value = std::move(value);
+        return {entry, exists};
     }
 
     EntryPointer Find(std::string_view key) {
-        if (buckets_[0].empty()) {
-            return nullptr;
-        }
-        auto bucket = FindBucket(key);
-        return FindEntryInBucket(bucket, key);
+        auto [entry, _] = FindOrCreate(key, false);
+        return entry;
     }
 
     EntryPointer GetRandomEntry() {
@@ -127,7 +159,10 @@ public:
         return nullptr;
     }
 
-    bool Erase(const std::string_view& key) {
+    bool Erase(std::string_view key) {
+        if (buckets_[0].empty()) {
+            return false;
+        }
         auto bucket = FindBucket(key);
         const auto erased = EraseEntryInBucket(bucket, key);
         if (erased) {
@@ -171,24 +206,15 @@ public:
     // TODO: mem-related APIs
 
 private:
-    std::pair<EntryPointer, bool> Add(std::string_view key, ValueType value, bool replace) {
-        if (auto entry = Find(key)) {
-            if (!replace) {
-                return {entry, false};
-            }
-            entry->value = std::move(value);
-            return {entry, true};
-        }
-
-        Expand();
-
-        auto bucket = FindBucket(key);
-        auto result_pointer = InsertIntoBucket(bucket, key, std::move(value));
-        ++entries_;
-        return {result_pointer, true};
-    }
-
     uint64_t Hash(std::string_view key) { return XXH64(key.data(), key.size(), 0); }
+
+    EntryPointer CreateEntryInBucket(BucketVector::iterator bucket, std::string_view key) {
+        auto* entry = EntryType::Create();
+        entry->SetKey(key);
+        entry->next = *bucket;
+        *bucket = entry;
+        return entry;
+    }
 
     // Assumes the table is not empty.
     BucketVector::iterator FindBucket(std::string_view key) {
@@ -250,24 +276,11 @@ private:
         return true;
     }
 
-    // Insert entry with 'key' and 'value' to the head of the bucket.This assumes 'bucket' doesn't
-    // contains an entry that has equivalent key to 'key'.
-    EntryPointer
-    InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, ValueType value) {
-        auto* entry = EntryType::Create();
-        entry->SetKey(key);
-        // TODO: value should be cared differently.
-        entry->value = std::move(value);
-        entry->next = *bucket;
-        *bucket = entry;
-        return entry;
-    }
-
-    enum class ExpandResult { NoNeed, SUCCESS };
+    enum class ExpandResult { kNoExpand, kExpandDone };
 
     ExpandResult Expand() {
         if (!NeedsToExpand()) {
-            return ExpandResult::NoNeed;
+            return ExpandResult::kNoExpand;
         }
 
         assert(buckets_[1].empty());
@@ -276,7 +289,7 @@ private:
         buckets_[1].resize(buckets_[0].size() * 2, nullptr);
         Rehash();
         buckets_[0] = std::move(buckets_[1]);
-        return ExpandResult::SUCCESS;
+        return ExpandResult::kExpandDone;
     }
 
     bool NeedsToExpand() {
@@ -292,6 +305,7 @@ private:
         return false;
     }
 
+    // TODO: Adaptive rehashing.
     void Rehash() {
         for (auto bucket = buckets_[0].begin(); bucket != buckets_[0].end(); ++bucket) {
             if (*bucket == nullptr) {

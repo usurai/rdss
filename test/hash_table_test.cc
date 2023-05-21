@@ -52,7 +52,7 @@ TEST(HashTableTest, basic) {
 
             EXPECT_NE(hash_table.Find(it->first), nullptr);
             it->second = value;
-            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, CreateMTSPtr(value));
+            auto [entry, replaced] = hash_table.Upsert(it->first, CreateMTSPtr(value));
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(replaced);
 
