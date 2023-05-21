@@ -62,11 +62,11 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
     if (config_->maxmemory_policy == MaxmemoryPolicy::kAllKeysRandom) {
         size_t freed = 0;
         while (freed < bytes_to_free) {
-            if (data_->Count() == 0) {
+            if (data_ht_->Count() == 0) {
                 return false;
             }
 
-            MTSHashTable::EntryPointer entry = data_->GetRandomEntry();
+            MTSHashTable::EntryPointer entry = data_ht_->GetRandomEntry();
             if (entry == nullptr) {
                 return false;
             }
@@ -74,7 +74,7 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
               = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
             // TODO: dont convert to string_view
             VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
-            data_->Erase(entry->GetKey()->StringView());
+            data_ht_->Erase(entry->GetKey()->StringView());
             // ++evicted_keys;
             delta
               -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
@@ -87,7 +87,7 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
     assert(config_->maxmemory_policy == MaxmemoryPolicy::kAllKeysLru);
     size_t freed = 0;
     while (freed < bytes_to_free) {
-        if (data_->Count() == 0) {
+        if (data_ht_->Count() == 0) {
             return false;
         }
         MTSHashTable::EntryPointer entry = GetSomeOldEntry(config_->maxmemory_samples);
@@ -98,7 +98,7 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
           = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         // TODO: dont convert to string_view
         VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
-        data_->Erase(entry->GetKey()->StringView());
+        data_ht_->Erase(entry->GetKey()->StringView());
         // ++evicted_keys;
         delta -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         VLOG(1) << "Freed " << delta << " bytes.";
@@ -111,12 +111,12 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
 // time or attempts.
 MTSHashTable::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) {
     assert(eviction_pool_.size() < kEvictionPoolLimit);
-    assert(data_->Count() > 0);
+    assert(data_ht_->Count() > 0);
 
     MTSHashTable::EntryPointer result{nullptr};
     while (result == nullptr) {
-        for (size_t i = 0; i < std::min(samples, data_->Count()); ++i) {
-            auto entry = data_->GetRandomEntry();
+        for (size_t i = 0; i < std::min(samples, data_ht_->Count()); ++i) {
+            auto entry = data_ht_->GetRandomEntry();
             assert(entry != nullptr);
             eviction_pool_.emplace(entry->GetKey()->GetLRU(), entry->CopyKey());
         }
@@ -129,7 +129,7 @@ MTSHashTable::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples)
 
         while (!eviction_pool_.empty()) {
             auto& [lru, key] = *eviction_pool_.begin();
-            auto entry = data_->Find(key->StringView());
+            auto entry = data_ht_->Find(key->StringView());
             if (entry == nullptr || entry->GetKey()->GetLRU() != lru) {
                 eviction_pool_.erase(eviction_pool_.begin());
                 continue;

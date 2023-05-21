@@ -12,7 +12,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings comman
         return result;
     }
 
-    auto [entry, _] = service.HashTable()->Upsert(
+    auto [entry, _] = service.DataHashTable()->Upsert(
       command_strings[1], CreateMTSPtr(command_strings[2]));
     entry->GetKey()->SetLRU(service.lru_clock_);
     VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
@@ -26,7 +26,7 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings comman
         result.Add("error");
         return result;
     }
-    auto entry = service.HashTable()->Find(command_strings[1]);
+    auto entry = service.DataHashTable()->Find(command_strings[1]);
     if (entry == nullptr) {
         result.AddNull();
     } else {
@@ -42,7 +42,7 @@ Result ExistsFunction(DataStructureService& service, Command::CommandStrings com
     Result result;
     int32_t cnt{0};
     for (size_t i = 1; i < command_strings.size(); ++i) {
-        auto entry = service.HashTable()->Find(command_strings[i]);
+        auto entry = service.DataHashTable()->Find(command_strings[i]);
         if (entry != nullptr) {
             entry->GetKey()->SetLRU(service.lru_clock_);
             ++cnt;

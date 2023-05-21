@@ -16,7 +16,7 @@ class DataStructureService {
 public:
     explicit DataStructureService(Config* config)
       : config_(config)
-      , data_(new MTSHashTable()) {}
+      , data_ht_(new MTSHashTable()) {}
 
     Result Invoke(Command::CommandStrings command_strings);
 
@@ -24,7 +24,7 @@ public:
         commands_.emplace(std::move(name), std::move(command));
     }
 
-    MTSHashTable* HashTable() { return data_.get(); }
+    MTSHashTable* DataHashTable() { return data_ht_.get(); }
 
 private:
     size_t IsOOM() const;
@@ -33,7 +33,7 @@ private:
 
     Config* config_;
     CommandDictionary commands_;
-    std::unique_ptr<MTSHashTable> data_;
+    std::unique_ptr<MTSHashTable> data_ht_;
 
     // LRU-related
     using DurationCount = int64_t;

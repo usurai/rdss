@@ -7,7 +7,7 @@ namespace rdss {
 
 Result DbSizeFunction(DataStructureService& service, Command::CommandStrings) {
     Result result;
-    result.Add(static_cast<int>(service.HashTable()->Count()));
+    result.Add(static_cast<int>(service.DataHashTable()->Count()));
     return result;
 }
 
