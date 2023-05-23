@@ -4,6 +4,7 @@
 #include "command_dictionary.h"
 #include "tracking_hash_table.h"
 
+#include <chrono>
 #include <set>
 
 namespace rdss {
@@ -14,9 +15,14 @@ struct Config;
 // service simultaneously.
 class DataStructureService {
 public:
+    using Clock = std::chrono::steady_clock;
+    using ExpireHashTable = HashTable<Clock::time_point, Mallocator<Clock::time_point>>;
+
+public:
     explicit DataStructureService(Config* config)
       : config_(config)
-      , data_ht_(new MTSHashTable()) {}
+      , data_ht_(new MTSHashTable())
+      , expire_ht_(new ExpireHashTable()) {}
 
     Result Invoke(Command::CommandStrings command_strings);
 
@@ -26,6 +32,10 @@ public:
 
     MTSHashTable* DataHashTable() { return data_ht_.get(); }
 
+    ExpireHashTable* GetExpireHashTable() { return expire_ht_.get(); }
+
+    Clock::time_point GetCommandTimeSnapshot() const { return command_time_snapshot_; }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
@@ -34,6 +44,9 @@ private:
     Config* config_;
     CommandDictionary commands_;
     std::unique_ptr<MTSHashTable> data_ht_;
+    std::unique_ptr<ExpireHashTable> expire_ht_;
+
+    Clock::time_point command_time_snapshot_;
 
     // LRU-related
     using DurationCount = int64_t;

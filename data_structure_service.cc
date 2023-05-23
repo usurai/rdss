@@ -33,6 +33,9 @@ Result DataStructureService::Invoke(Command::CommandStrings command_strings) {
         }
     }
 
+    // TODO: Is this too much for high qps?
+    command_time_snapshot_ = Clock::now();
+
     result = command(*this, std::move(command_strings));
     return result;
 }

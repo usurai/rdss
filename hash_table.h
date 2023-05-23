@@ -99,7 +99,7 @@ public:
     /// entry if no such entry is found.
     /// If 'create_on_missing' is true, returns {entry for 'key', if entry already exists}.
     /// If 'create_on_missing' is false, returns {newly created entry for 'key', false}.
-    std::pair<EntryPointer, bool> FindOrCreate(std::string_view key, bool create_on_missing) {
+    std::pair<EntryPointer, bool> FindOrCreate(std::string_view key, bool create_on_missing, bool create_shared_key = true) {
         if (buckets_[0].empty()) {
             if (!create_on_missing) {
                 return {nullptr, false};
@@ -116,7 +116,7 @@ public:
             if (Expand() == ExpandResult::kExpandDone) {
                 bucket = FindBucket(key);
             }
-            entry = CreateEntryInBucket(bucket, key);
+            entry = CreateEntryInBucket(bucket, key, create_shared_key);
             ++entries_;
         }
         return {entry, false};
@@ -208,9 +208,12 @@ public:
 private:
     uint64_t Hash(std::string_view key) { return XXH64(key.data(), key.size(), 0); }
 
-    EntryPointer CreateEntryInBucket(BucketVector::iterator bucket, std::string_view key) {
+    EntryPointer CreateEntryInBucket(
+      BucketVector::iterator bucket, std::string_view key, bool create_shared_key) {
         auto* entry = EntryType::Create();
-        entry->SetKey(key);
+        if (create_shared_key) {
+            entry->SetKey(key);
+        }
         entry->next = *bucket;
         *bucket = entry;
         return entry;
