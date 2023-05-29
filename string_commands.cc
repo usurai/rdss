@@ -4,39 +4,84 @@
 #include "data_structure_service.h"
 
 #include <charconv>
+#include <limits>
 #include <optional>
 
 namespace rdss {
 
+using TimePoint = DataStructureService::TimePoint;
+
+static constexpr TimePoint::rep kRepMax = std::numeric_limits<TimePoint::rep>::max();
+
 Result SetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
 
-    std::optional<DataStructureService::Clock::time_point> expire_time{std::nullopt};
+    std::optional<TimePoint> expire_time{std::nullopt};
     if (args.size() > 3) {
+        std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
+
         for (size_t i = 3; i < args.size(); ++i) {
             if (!args[i].compare("PX")) {
-                if (i == args.size() - 1) {
-                    result.Add("syntax error");
-                    return result;
-                }
+                rep_to_tp = [current = service.GetCommandTimeSnapshot()](
+                              TimePoint::rep rep) -> std::optional<TimePoint> {
+                    const auto duration = std::chrono::milliseconds{rep};
+                    if (TimePoint::max() - current >= duration) {
+                        return current + duration;
+                    }
+                    return std::nullopt;
+                };
+            } else if (!args[i].compare("EX")) {
+                rep_to_tp = [current = service.GetCommandTimeSnapshot()](
+                              TimePoint::rep rep) -> std::optional<TimePoint> {
+                    if (kRepMax / 1000 < rep) {
+                        return std::nullopt;
+                    }
+                    const auto duration = std::chrono::seconds{rep};
+                    if (TimePoint::max() - current >= duration) {
+                        return current + duration;
+                    }
+                    return std::nullopt;
+                };
+            } else if (!args[i].compare("PXAT")) {
+                rep_to_tp = [](TimePoint::rep rep) {
+                    return TimePoint{std::chrono::milliseconds{rep}};
+                };
+            } else if (!args[i].compare("EXAT")) {
+                rep_to_tp = [](TimePoint::rep rep) -> std::optional<TimePoint> {
+                    if (kRepMax / 1000 < rep) {
+                        return std::nullopt;
+                    }
+                    return TimePoint{std::chrono::seconds{rep}};
+                };
+            } else {
+                result.Add("syntax error");
+                return result;
             }
 
-            int64_t duration_argument;
+            if (i == args.size() - 1) {
+                result.Add("syntax error");
+                return result;
+            }
+            if (expire_time.has_value()) {
+                result.Add("syntax error");
+                return result;
+            }
+
+            TimePoint::rep ll;
             auto expire_sv = args[i + 1];
             auto [ptr, err] = std::from_chars(
-              expire_sv.data(), expire_sv.data() + expire_sv.size(), duration_argument);
-            if (
-              err != std::errc{} || ptr != expire_sv.data() + expire_sv.size()
-              || duration_argument <= 0) {
+              expire_sv.data(), expire_sv.data() + expire_sv.size(), ll);
+            if (err != std::errc{} || ptr != expire_sv.data() + expire_sv.size() || ll <= 0) {
                 result.Add("value is not an integer or out of range");
                 return result;
             }
-            std::chrono::milliseconds d{duration_argument};
-            expire_time = service.GetCommandTimeSnapshot() + d;
-            VLOG(1) << "expire duration: " << d.count()
-                    << "ms, expire time: " << expire_time.value().time_since_epoch().count();
+            expire_time = rep_to_tp(ll);
+            if (!expire_time.has_value()) {
+                result.Add("value is not an integer or out of range");
+                return result;
+            }
+            VLOG(1) << "expire time:\t\t" << expire_time.value().time_since_epoch().count();
             i += 1;
-            break;
         }
     }
 

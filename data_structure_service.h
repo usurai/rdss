@@ -15,8 +15,8 @@ struct Config;
 // service simultaneously.
 class DataStructureService {
 public:
-    using Clock = std::chrono::steady_clock;
-    using ExpireHashTable = HashTable<Clock::time_point, Mallocator<Clock::time_point>>;
+    using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
+    using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
 
 public:
     explicit DataStructureService(Config* config)
@@ -34,7 +34,7 @@ public:
 
     ExpireHashTable* GetExpireHashTable() { return expire_ht_.get(); }
 
-    Clock::time_point GetCommandTimeSnapshot() const { return command_time_snapshot_; }
+    TimePoint GetCommandTimeSnapshot() const { return command_time_snapshot_; }
 
 private:
     size_t IsOOM() const;
@@ -46,7 +46,7 @@ private:
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;
 
-    Clock::time_point command_time_snapshot_;
+    TimePoint command_time_snapshot_;
 
     // LRU-related
     using DurationCount = int64_t;

@@ -34,7 +34,9 @@ Result DataStructureService::Invoke(Command::CommandStrings command_strings) {
     }
 
     // TODO: Is this too much for high qps?
-    command_time_snapshot_ = Clock::now();
+    command_time_snapshot_ = std::chrono::time_point_cast<TimePoint::duration>(
+      TimePoint::clock::now());
+    VLOG(1) << "time snapshot:\t" << command_time_snapshot_.time_since_epoch().count();
 
     result = command(*this, std::move(command_strings));
     return result;
