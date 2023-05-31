@@ -40,6 +40,7 @@ public:
     using Pointer = HashTableEntry*;
 
     using ThisType = HashTableEntry<ValueType, Allocator>;
+    // TODO: Revisit this.
     using EntryAllocator =
       typename std::allocator_traits<Allocator>::template rebind_alloc<ThisType>;
 
@@ -73,7 +74,7 @@ public:
     KeyPointer key = nullptr;
     // TODO: value can be shared string, or inlined int, and needs to be extented to data structure
     // like set and list.
-    std::shared_ptr<ValueType> value;
+    ValueType value;
     Pointer next = nullptr;
 
 private:
@@ -94,12 +95,12 @@ public:
     HashTable() { std::srand(static_cast<unsigned int>(time(nullptr))); }
     ~HashTable() { Clear(); }
 
-    std::pair<EntryPointer, bool> Insert(std::string_view key, std::string_view value) {
-        return Add(std::move(key), std::move(value), false);
+    std::pair<EntryPointer, bool> Insert(std::string_view key, ValueType value) {
+        return Add(key, std::move(value), false);
     }
 
-    std::pair<EntryPointer, bool> InsertOrAssign(std::string_view key, std::string_view value) {
-        return Add(std::move(key), std::move(value), true);
+    std::pair<EntryPointer, bool> InsertOrAssign(std::string_view key, ValueType value) {
+        return Add(key, std::move(value), true);
     }
 
     EntryPointer Find(std::string_view key) {
@@ -170,19 +171,19 @@ public:
     // TODO: mem-related APIs
 
 private:
-    std::pair<EntryPointer, bool> Add(std::string_view key, std::string_view value, bool replace) {
+    std::pair<EntryPointer, bool> Add(std::string_view key, ValueType value, bool replace) {
         if (auto entry = Find(key)) {
             if (!replace) {
                 return {entry, false};
             }
-            entry->value = std::make_shared<ValueType>(value);
+            entry->value = std::move(value);
             return {entry, true};
         }
 
         Expand();
 
         auto bucket = FindBucket(key);
-        auto result_pointer = InsertIntoBucket(bucket, key, value);
+        auto result_pointer = InsertIntoBucket(bucket, key, std::move(value));
         ++entries_;
         return {result_pointer, true};
     }
@@ -252,11 +253,11 @@ private:
     // Insert entry with 'key' and 'value' to the head of the bucket.This assumes 'bucket' doesn't
     // contains an entry that has equivalent key to 'key'.
     EntryPointer
-    InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, std::string_view value) {
+    InsertIntoBucket(BucketVector::iterator bucket, std::string_view key, ValueType value) {
         auto* entry = EntryType::Create();
         entry->SetKey(key);
         // TODO: value should be cared differently.
-        entry->value = std::make_shared<ValueType>(value);
+        entry->value = std::move(value);
         entry->next = *bucket;
         *bucket = entry;
         return entry;

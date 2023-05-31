@@ -15,6 +15,7 @@ add_executable(
     hash_table_test
     hash_table_test.cc
     ../memory.cc
+    ../tracking_hash_table.cc
 )
 
 add_executable(

@@ -12,15 +12,13 @@
 
 namespace rdss::test {
 
-using TrackingString = std::basic_string<char, std::char_traits<char>, Mallocator<char>>;
-
 class HashTableTest : public testing::Test {
 public:
     void SetUp() override { std::srand(static_cast<unsigned int>(time(nullptr))); }
 };
 
 TEST(HashTableTest, basic) {
-    TrackingMap hash_table;
+    MTSHashTable hash_table;
     EXPECT_EQ(hash_table.Count(), 0);
 
     constexpr size_t key_length = 64;
@@ -40,9 +38,7 @@ TEST(HashTableTest, basic) {
             fact.insert({key, value});
 
             EXPECT_EQ(hash_table.Find(key), nullptr);
-            auto key_ptr = std::make_shared<TrackingString>(key.data(), key.size());
-            auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
-            auto [entry, inserted] = hash_table.Insert(key, value);
+            auto [entry, inserted] = hash_table.Insert(key, CreateMTSPtr(value));
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(inserted);
 
@@ -54,12 +50,9 @@ TEST(HashTableTest, basic) {
             auto it = fact.begin();
             auto value = GenRandomString(value_length);
 
-            auto key_ptr = std::make_shared<TrackingString>(it->first.data(), it->first.size());
-            auto value_ptr = std::make_shared<TrackingString>(value.data(), value.size());
-
             EXPECT_NE(hash_table.Find(it->first), nullptr);
             it->second = value;
-            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, value);
+            auto [entry, replaced] = hash_table.InsertOrAssign(it->first, CreateMTSPtr(value));
             EXPECT_NE(entry, nullptr);
             EXPECT_TRUE(replaced);
 
@@ -90,11 +83,11 @@ TEST(HashTableTest, getRandomEntry) {
     constexpr size_t value_length = 512;
     constexpr size_t n = 1024 * 16;
 
-    TrackingMap hash_table;
+    MTSHashTable hash_table;
     for (size_t i = 0; i < n; ++i) {
         auto key = GenRandomString(key_length);
         auto value = GenRandomString(value_length);
-        hash_table.Insert(key, value);
+        hash_table.Insert(key, CreateMTSPtr(value));
     }
 
     std::map<std::string, size_t> count;

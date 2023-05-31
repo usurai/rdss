@@ -12,7 +12,8 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings comman
         return result;
     }
 
-    auto [entry, _] = service.HashTable()->InsertOrAssign(command_strings[1], command_strings[2]);
+    auto [entry, _] = service.HashTable()->InsertOrAssign(
+      command_strings[1], CreateMTSPtr(command_strings[2]));
     entry->GetKey()->SetLRU(service.lru_clock_);
     VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
     result.Add("inserted");
@@ -32,7 +33,7 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings comman
         entry->GetKey()->SetLRU(service.lru_clock_);
         VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
         // TODO: Eliminate the conversion.
-        result.Add(std::string(*(entry->value)));
+        result.Add(std::string(*entry->value));
     }
     return result;
 }

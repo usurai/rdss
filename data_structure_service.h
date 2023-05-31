@@ -16,7 +16,7 @@ class DataStructureService {
 public:
     explicit DataStructureService(Config* config)
       : config_(config)
-      , data_(new TrackingMap()) {}
+      , data_(new MTSHashTable()) {}
 
     Result Invoke(Command::CommandStrings command_strings);
 
@@ -24,20 +24,20 @@ public:
         commands_.emplace(std::move(name), std::move(command));
     }
 
-    TrackingMap* HashTable() { return data_.get(); }
+    MTSHashTable* HashTable() { return data_.get(); }
 
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
-    TrackingMap::EntryPointer GetSomeOldEntry(size_t samples);
+    MTSHashTable::EntryPointer GetSomeOldEntry(size_t samples);
 
     Config* config_;
     CommandDictionary commands_;
-    std::unique_ptr<TrackingMap> data_;
+    std::unique_ptr<MTSHashTable> data_;
 
     // LRU-related
     using DurationCount = int64_t;
-    using LRUEntry = std::pair<DurationCount, TrackingMap::EntryType::KeyPointer>;
+    using LRUEntry = std::pair<DurationCount, MTSHashTable::EntryType::KeyPointer>;
     struct CompareLRUEntry {
         constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
             return lhs.first < rhs.first;

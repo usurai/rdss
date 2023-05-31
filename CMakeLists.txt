@@ -57,6 +57,7 @@ add_executable(
     memory.cc
     string_commands.cc
     redis_parser.cc
+    tracking_hash_table.cc
 )
 
 target_link_libraries(

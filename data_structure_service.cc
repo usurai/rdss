@@ -66,7 +66,7 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
                 return false;
             }
 
-            TrackingMap::EntryPointer entry = data_->GetRandomEntry();
+            MTSHashTable::EntryPointer entry = data_->GetRandomEntry();
             if (entry == nullptr) {
                 return false;
             }
@@ -90,7 +90,7 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
         if (data_->Count() == 0) {
             return false;
         }
-        TrackingMap::EntryPointer entry = GetSomeOldEntry(config_->maxmemory_samples);
+        MTSHashTable::EntryPointer entry = GetSomeOldEntry(config_->maxmemory_samples);
         if (entry == nullptr) {
             return false;
         }
@@ -109,11 +109,11 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
 
 // TODO: Current implementation doesn't care execution time. Consider stop eviction after some
 // time or attempts.
-TrackingMap::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) {
+MTSHashTable::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) {
     assert(eviction_pool_.size() < kEvictionPoolLimit);
     assert(data_->Count() > 0);
 
-    TrackingMap::EntryPointer result{nullptr};
+    MTSHashTable::EntryPointer result{nullptr};
     while (result == nullptr) {
         for (size_t i = 0; i < std::min(samples, data_->Count()); ++i) {
             auto entry = data_->GetRandomEntry();
