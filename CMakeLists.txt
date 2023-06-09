@@ -50,6 +50,7 @@ add_executable(
     client_commands.cc
     command_registry.cc
     data_structure_service.cc
+    key_commands.cc
     listener.cc
     proactor.cc
     server.cc
