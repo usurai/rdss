@@ -13,17 +13,35 @@ using TimePoint = DataStructureService::TimePoint;
 
 static constexpr TimePoint::rep kRepMax = std::numeric_limits<TimePoint::rep>::max();
 
+enum class SetMode { kRegular, kNX, kXX };
+
 Result SetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
 
+    const auto cmd_time = service.GetCommandTimeSnapshot();
+
+    SetMode set_mode{SetMode::kRegular};
     std::optional<TimePoint> expire_time{std::nullopt};
     if (args.size() > 3) {
         std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
 
         for (size_t i = 3; i < args.size(); ++i) {
-            if (!args[i].compare("PX")) {
-                rep_to_tp = [current = service.GetCommandTimeSnapshot()](
-                              TimePoint::rep rep) -> std::optional<TimePoint> {
+            if (!args[i].compare("NX")) {
+                if (set_mode != SetMode::kRegular) {
+                    result.Add("syntax error");
+                    return result;
+                }
+                set_mode = SetMode::kNX;
+                continue;
+            } else if (!args[i].compare("XX")) {
+                if (set_mode != SetMode::kRegular) {
+                    result.Add("syntax error");
+                    return result;
+                }
+                set_mode = SetMode::kXX;
+                continue;
+            } else if (!args[i].compare("PX")) {
+                rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
                     const auto duration = std::chrono::milliseconds{rep};
                     if (TimePoint::max() - current >= duration) {
                         return current + duration;
@@ -31,8 +49,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
                     return std::nullopt;
                 };
             } else if (!args[i].compare("EX")) {
-                rep_to_tp = [current = service.GetCommandTimeSnapshot()](
-                              TimePoint::rep rep) -> std::optional<TimePoint> {
+                rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
                     if (kRepMax / 1000 < rep) {
                         return std::nullopt;
                     }
@@ -85,24 +102,76 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
         }
     }
 
-    auto [entry, _] = service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[2]));
-    entry->GetKey()->SetLRU(service.lru_clock_);
-    VLOG(1) << "Data: insert key [" << entry->GetKey()->StringView()
-            << "], lru:" << entry->GetKey()->GetLRU();
+    VLOG(1) << "SetMode:" << static_cast<int>(set_mode);
 
+    auto key = args[1];
+    auto value = args[2];
+
+    auto* data_ht = service.DataHashTable();
     auto* expire_ht = service.GetExpireHashTable();
-    if (expire_time.has_value()) {
-        auto [exp_entry, _] = expire_ht->FindOrCreate(args[1], true, false);
-        exp_entry->key = entry->CopyKey();
-        VLOG(1) << "Expire: insert " << exp_entry->key->StringView()
-                << ", use_count:" << exp_entry->key.use_count();
-        exp_entry->value = expire_time.value();
-    } else {
-        expire_ht->Erase(args[1]);
+    bool inserted{false};
+    bool overwritten{false};
+    {
+        switch (set_mode) {
+        case SetMode::kRegular: {
+            auto [_, existed] = data_ht->Upsert(key, CreateMTSPtr(value));
+            if (!existed) {
+                inserted = true;
+            } else {
+                overwritten = true;
+            }
+            break;
+        }
+        case SetMode::kNX: {
+            auto data_entry = data_ht->Find(key);
+            if (data_entry != nullptr) {
+                auto expire_entry = expire_ht->Find(key);
+                if (expire_entry != nullptr && expire_entry->value <= cmd_time) {
+                    data_entry->value = CreateMTSPtr(value);
+                    inserted = true;
+                }
+            } else {
+                data_ht->Insert(key, CreateMTSPtr(value));
+                inserted = true;
+            }
+            break;
+        }
+        case SetMode::kXX: {
+            auto data_entry = data_ht->Find(key);
+            if (data_entry == nullptr) {
+                break;
+            }
+            auto expire_entry = expire_ht->Find(key);
+            if (expire_entry != nullptr && expire_entry->value <= cmd_time) {
+                data_ht->Erase(key);
+                expire_ht->Erase(key);
+                break;
+            }
+            data_entry->value = CreateMTSPtr(value);
+            overwritten = true;
+            break;
+        }
+        }
     }
 
-    result.Add("inserted");
-    return result;
+    if (!inserted && !overwritten) {
+        result.AddNull();
+        return result;
+    }
+
+    {
+        if (expire_time.has_value()) {
+            expire_ht->Upsert(key, expire_time.value());
+        } else if (overwritten) {
+            // TODO: maybe we can know there is no expire_entry before this.
+            expire_ht->Erase(key);
+        }
+
+        VLOG(1) << "inserted:" << inserted << " overwritten:" << overwritten;
+
+        result.Add("inserted");
+        return result;
+    }
 }
 
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
