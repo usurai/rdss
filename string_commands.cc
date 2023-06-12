@@ -23,11 +23,15 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     SetMode set_mode{SetMode::kRegular};
     std::optional<TimePoint> expire_time{std::nullopt};
     bool keep_ttl{false};
+    bool get{false};
     if (args.size() > 3) {
         std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
 
         for (size_t i = 3; i < args.size(); ++i) {
-            if (!args[i].compare("NX")) {
+            if (!args[i].compare("GET")) {
+                get = true;
+                continue;
+            } else if (!args[i].compare("NX")) {
                 if (set_mode != SetMode::kRegular) {
                     result.Add("syntax error");
                     return result;
@@ -119,11 +123,23 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     auto* expire_ht = service.GetExpireHashTable();
     bool inserted{false};
     bool overwritten{false};
+    MTSPtr old_value{nullptr};
     {
         switch (set_mode) {
         case SetMode::kRegular: {
-            auto [_, existed] = data_ht->Upsert(key, CreateMTSPtr(value));
-            if (!existed) {
+            bool exists{false};
+            if (!get) {
+                auto upsert_result = data_ht->Upsert(key, CreateMTSPtr(value));
+                exists = upsert_result.second;
+            } else {
+                auto fc_result = data_ht->FindOrCreate(key, true);
+                if (fc_result.second) {
+                    old_value = std::move(fc_result.first->value);
+                    exists = true;
+                }
+                fc_result.first->value = CreateMTSPtr(value);
+            }
+            if (!exists) {
                 inserted = true;
             } else {
                 overwritten = true;
@@ -155,6 +171,9 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
                 expire_ht->Erase(key);
                 break;
             }
+            if (get) {
+                old_value = std::move(data_entry->value);
+            }
             data_entry->value = CreateMTSPtr(value);
             overwritten = true;
             break;
@@ -167,19 +186,27 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
         return result;
     }
 
-    {
-        if (expire_time.has_value()) {
-            expire_ht->Upsert(key, expire_time.value());
-        } else if (overwritten && !keep_ttl) {
-            // TODO: maybe we can know there is no expire_entry before this.
-            expire_ht->Erase(key);
-        }
-
-        VLOG(1) << "inserted:" << inserted << " overwritten:" << overwritten;
-
-        result.Add("inserted");
-        return result;
+    if (expire_time.has_value()) {
+        expire_ht->Upsert(key, expire_time.value());
+    } else if (overwritten && !keep_ttl) {
+        // TODO: maybe we can know there is no expire_entry before this.
+        expire_ht->Erase(key);
     }
+
+    VLOG(1) << "inserted:" << inserted << " overwritten:" << overwritten;
+
+    // TODO: lru
+
+    if (get) {
+        if (old_value == nullptr) {
+            result.AddNull();
+        } else {
+            result.Add(std::string(*old_value));
+        }
+    } else {
+        result.Add("OK");
+    }
+    return result;
 }
 
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
