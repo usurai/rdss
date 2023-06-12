@@ -22,6 +22,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
 
     SetMode set_mode{SetMode::kRegular};
     std::optional<TimePoint> expire_time{std::nullopt};
+    bool keep_ttl{false};
     if (args.size() > 3) {
         std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
 
@@ -39,6 +40,13 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
                     return result;
                 }
                 set_mode = SetMode::kXX;
+                continue;
+            } else if (!args[i].compare("KEEPTTL")) {
+                if (expire_time.has_value()) {
+                    result.Add("syntax error");
+                    return result;
+                }
+                keep_ttl = true;
                 continue;
             } else if (!args[i].compare("PX")) {
                 rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
@@ -79,7 +87,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
                 result.Add("syntax error");
                 return result;
             }
-            if (expire_time.has_value()) {
+            if (expire_time.has_value() || keep_ttl) {
                 result.Add("syntax error");
                 return result;
             }
@@ -162,7 +170,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     {
         if (expire_time.has_value()) {
             expire_ht->Upsert(key, expire_time.value());
-        } else if (overwritten) {
+        } else if (overwritten && !keep_ttl) {
             // TODO: maybe we can know there is no expire_entry before this.
             expire_ht->Erase(key);
         }
