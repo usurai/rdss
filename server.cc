@@ -22,10 +22,11 @@ namespace rdss {
 
 Server::Server(Config config)
   : config_(std::move(config))
+  , clock_(std::make_unique<Clock>(true))
   , processor_(AsyncOperationProcessor::Create())
   , listener_(Listener::Create(6379, processor_.get()))
   , proactor_(std::make_unique<Proactor>(processor_->GetRing()))
-  , service_(std::make_unique<DataStructureService>(&config_))
+  , service_(std::make_unique<DataStructureService>(&config_, clock_.get()))
   , client_manager_(std::make_unique<ClientManager>()) {
     RegisterCommands(service_.get());
 }

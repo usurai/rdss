@@ -2,6 +2,7 @@
 
 #include "async_operation_processor.h"
 #include "client_manager.h"
+#include "clock.h"
 #include "config.h"
 #include "data_structure_service.h"
 #include "listener.h"
@@ -29,6 +30,7 @@ private:
     Config config_;
 
     bool active_ = true;
+    std::unique_ptr<Clock> clock_;
     std::unique_ptr<AsyncOperationProcessor> processor_;
     std::unique_ptr<Listener> listener_;
     std::unique_ptr<Proactor> proactor_;

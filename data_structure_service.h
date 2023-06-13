@@ -1,5 +1,6 @@
 #pragma once
 
+#include "clock.h"
 #include "command.h"
 #include "command_dictionary.h"
 #include "tracking_hash_table.h"
@@ -19,8 +20,9 @@ public:
     using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
 
 public:
-    explicit DataStructureService(Config* config)
+    explicit DataStructureService(Config* config, Clock* clock)
       : config_(config)
+      , clock_(clock)
       , data_ht_(new MTSHashTable())
       , expire_ht_(new ExpireHashTable()) {}
 
@@ -42,6 +44,7 @@ private:
     MTSHashTable::EntryPointer GetSomeOldEntry(size_t samples);
 
     Config* config_;
+    Clock* clock_;
     CommandDictionary commands_;
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;
