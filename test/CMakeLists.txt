@@ -26,6 +26,18 @@ add_executable(
     ../memory.cc
 )
 
+add_executable(
+    string_commands_test
+    string_commands_test.cc
+    ../redis_parser.cc
+    ../buffer.cc
+    ../memory.cc
+    ../data_structure_service.cc
+    ../tracking_hash_table.cc
+    ../config.cc
+    ../string_commands.cc
+)
+
 target_include_directories(hash_table_test PUBLIC ../)
 
 target_include_directories(redis_parser_test PUBLIC ../)
@@ -43,6 +55,14 @@ target_link_libraries(
     glog::glog
 )
 
+target_link_libraries(
+    string_commands_test
+    gtest_main
+    /usr/lib/x86_64-linux-gnu/libxxhash.a
+    glog::glog
+)
+
 include(GoogleTest)
 gtest_discover_tests(hash_table_test)
 gtest_discover_tests(redis_parser_test)
+gtest_discover_tests(string_commands_test)
