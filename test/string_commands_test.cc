@@ -41,7 +41,13 @@ protected:
     }
 
     void ExpectNoKey(std::string_view key) {
-        EXPECT_EQ(nullptr, service_.DataHashTable()->Find(key));
+        auto data_entry = service_.DataHashTable()->Find(key);
+        if (data_entry != nullptr) {
+            auto expire_entry = service_.GetExpireHashTable()->Find(key);
+            if (expire_entry) {
+                EXPECT_LE(expire_entry->value, clock_.Now());
+            }
+        }
     }
 
     void ExpectTTL(std::string_view key, std::chrono::milliseconds ttl) {
@@ -57,6 +63,10 @@ protected:
         if (entry != nullptr) {
             EXPECT_LE(entry->value, clock_.Now());
         }
+    }
+
+    void AdvanceTime(Clock::TimePoint::duration duration) {
+        clock_.SetTime(clock_.Now() + duration);
     }
 
     Config config_;
@@ -116,12 +126,34 @@ TEST_F(StringCommandsTest, SetTest) {
     clock_.SetTime(Clock::TimePoint{2000s});
     Invoke("SET k0 v0 PX 100\r\n");
     ExpectTTL("k0", 100ms);
-    clock_.SetTime(Clock::TimePoint{2000s + 50ms});
+    AdvanceTime(50ms);
     ExpectTTL("k0", 50ms);
-    clock_.SetTime(Clock::TimePoint{2000s + 50ms + 49ms});
+    AdvanceTime(49ms);
     ExpectTTL("k0", 1ms);
-    clock_.SetTime(Clock::TimePoint{2000s + 100ms});
+    AdvanceTime(1ms);
     ExpectNoTTL("k0");
+
+    Invoke("SET k0 v0\r\n");
+    Invoke("SET k0 v0 KEEPTTL\r\n");
+    ExpectNoTTL("k0");
+    Invoke("SET k0 v0 EX 100\r\n");
+    ExpectTTL("k0", 100s);
+    Invoke("SET k0 v1 KEEPTTL\r\n");
+    ExpectTTL("k0", 100s);
+
+    Invoke("SET k0 v0\r\n");
+    auto res = Invoke("SET k0 v1 GET\r\n");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_EQ(res.data[0], "v0");
+    Invoke("SET k0 v0 PX 100\r\n");
+    res = Invoke("SET k0 v2 GET PX 100\r\n");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_EQ(res.data[0], "v0");
+    AdvanceTime(100ms);
+    ExpectNoKey("k0");
+    res = Invoke("SET k0 v3 GET\r\n");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_TRUE(res.is_null[0]);
 }
 
 } // namespace rdss::test

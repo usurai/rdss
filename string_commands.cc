@@ -134,8 +134,11 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
             } else {
                 auto fc_result = data_ht->FindOrCreate(key, true);
                 if (fc_result.second) {
-                    old_value = std::move(fc_result.first->value);
-                    exists = true;
+                    auto expire_entry = expire_ht->Find(key);
+                    if (expire_entry == nullptr || expire_entry->value > cmd_time) {
+                        old_value = std::move(fc_result.first->value);
+                        exists = true;
+                    }
                 }
                 fc_result.first->value = CreateMTSPtr(value);
             }
