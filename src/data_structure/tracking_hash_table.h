@@ -1,7 +1,7 @@
 #pragma once
 
-#include "hash_table.h"
-#include "memory.h"
+#include "base/memory.h"
+#include "data_structure/hash_table.h"
 
 #include <cassert>
 #include <memory>

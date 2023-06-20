@@ -1,10 +1,10 @@
 #include "client.h"
 
-#include "buffer.h"
+#include "base/buffer.h"
 #include "client_manager.h"
 #include "constants.h"
-#include "redis_parser.h"
-#include "replier.h"
+#include "resp/redis_parser.h"
+#include "resp/replier.h"
 
 #include <glog/logging.h>
 

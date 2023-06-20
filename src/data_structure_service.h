@@ -1,9 +1,9 @@
 #pragma once
 
-#include "clock.h"
+#include "base/clock.h"
 #include "command.h"
 #include "command_dictionary.h"
-#include "tracking_hash_table.h"
+#include "data_structure/tracking_hash_table.h"
 
 #include <chrono>
 #include <set>

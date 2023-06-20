@@ -1,10 +1,10 @@
 #pragma once
 
-#include "async_operation.h"
-#include "async_operation_processor.h"
-#include "buffer.h"
-#include "cancellation.h"
-#include "promise.h"
+#include "base/buffer.h"
+#include "io/async_operation.h"
+#include "io/async_operation_processor.h"
+#include "io/cancellation.h"
+#include "io/promise.h"
 
 #include <glog/logging.h>
 

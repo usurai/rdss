@@ -1,10 +1,10 @@
-#include "../buffer.h"
-#include "../clock.h"
-#include "../config.h"
-#include "../data_structure_service.h"
-#include "../redis_parser.h"
-#include "../replier.h"
-#include "../string_commands.h"
+#include "base/buffer.h"
+#include "base/clock.h"
+#include "config.h"
+#include "data_structure_service.h"
+#include "resp/redis_parser.h"
+#include "resp/replier.h"
+#include "commands/string_commands.h"
 
 #include <gtest/gtest.h>
 

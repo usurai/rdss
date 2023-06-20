@@ -1,5 +1,5 @@
-#include "hash_table.h"
-#include "tracking_hash_table.h"
+#include "data_structure/hash_table.h"
+#include "data_structure/tracking_hash_table.h"
 #include "util.h"
 
 #include <gtest/gtest.h>

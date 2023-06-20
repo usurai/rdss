@@ -1,4 +1,4 @@
-#include "tracking_hash_table.h"
+#include "data_structure/tracking_hash_table.h"
 
 #include "glog/logging.h"
 

@@ -1,6 +1,6 @@
-#include "redis_parser.h"
+#include "resp/redis_parser.h"
 
-#include "buffer.h"
+#include "base/buffer.h"
 
 #include <glog/logging.h>
 

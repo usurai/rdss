@@ -1,6 +1,6 @@
-#include "../constants.h"
-#include "buffer.h"
-#include "redis_parser.h"
+#include "base/buffer.h"
+#include "constants.h"
+#include "resp/redis_parser.h"
 #include "util.h"
 
 #include <glog/logging.h>

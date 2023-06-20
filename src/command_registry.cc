@@ -1,9 +1,9 @@
 #include "command_registry.h"
 
-#include "client_commands.h"
-#include "key_commands.h"
-#include "misc_commands.h"
-#include "string_commands.h"
+#include "commands/client_commands.h"
+#include "commands/key_commands.h"
+#include "commands/misc_commands.h"
+#include "commands/string_commands.h"
 
 namespace rdss {
 

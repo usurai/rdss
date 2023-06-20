@@ -1,7 +1,7 @@
 #include "client_manager.h"
 
 #include "client.h"
-#include "connection.h"
+#include "io/connection.h"
 
 namespace rdss {
 
