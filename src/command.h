@@ -12,7 +12,8 @@ class DataStructureService;
 
 class Command {
 public:
-    using CommandStrings = std::span<std::string_view>;
+    using CommandString = std::string_view;
+    using CommandStrings = std::span<CommandString>;
     using HandlerType = std::function<Result(DataStructureService&, CommandStrings)>;
 
     Command(std::string name)
