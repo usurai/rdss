@@ -1,10 +1,10 @@
 #include "base/buffer.h"
 #include "base/clock.h"
+#include "commands/string_commands.h"
 #include "config.h"
 #include "data_structure_service.h"
 #include "resp/redis_parser.h"
 #include "resp/replier.h"
-#include "commands/string_commands.h"
 
 #include <gtest/gtest.h>
 
@@ -12,6 +12,8 @@
 #include <vector>
 
 namespace rdss::test {
+
+using namespace std::chrono;
 
 class StringCommandsTest : public testing::Test {
 protected:
@@ -28,10 +30,15 @@ protected:
     }
 
     Result Invoke(std::string query) {
+        if (!query.ends_with("\r\n")) {
+            query += "\r\n";
+        }
+        buffer_.Reset();
         std::memcpy(buffer_.Sink().data(), query.data(), query.size());
         buffer_.Produce(query.size());
-        auto [parse_result, args] = InlineParser::ParseInline(&buffer_);
-        return service_.Invoke(args);
+        auto parse_result = InlineParser::ParseInline(&buffer_);
+        EXPECT_EQ(parse_result.first, RedisParser::State::kDone);
+        return service_.Invoke(parse_result.second);
     }
 
     void ExpectKeyValue(std::string_view key, std::string_view value) {
@@ -76,55 +83,53 @@ protected:
 };
 
 TEST_F(StringCommandsTest, SetTest) {
-    using namespace std::chrono;
-
-    Invoke("SET k0 v0\r\n");
+    Invoke("SET k0 v0");
     ExpectKeyValue("k0", "v0");
-    Invoke("SET k0 v1\r\n");
+    Invoke("SET k0 v1");
     ExpectKeyValue("k0", "v1");
 
-    Invoke("SET k0 v2 NX\r\n");
+    Invoke("SET k0 v2 NX");
     ExpectKeyValue("k0", "v1");
-    Invoke("SET k1 v0 NX\r\n");
+    Invoke("SET k1 v0 NX");
     ExpectKeyValue("k1", "v0");
 
-    Invoke("SET k2 v0 XX\r\n");
+    Invoke("SET k2 v0 XX");
     ExpectNoKey("k2");
-    Invoke("SET k1 v1 XX\r\n");
+    Invoke("SET k1 v1 XX");
     ExpectKeyValue("k1", "v1");
 
     ExpectNoTTL("k0");
-    Invoke("SET k0 v0 PX 100\r\n");
+    Invoke("SET k0 v0 PX 100");
     ExpectTTL("k0", 100ms);
-    Invoke("SET k0 v0 PX 2000\r\n");
+    Invoke("SET k0 v0 PX 2000");
     ExpectTTL("k0", 2s);
-    Invoke("SET k0 v0\r\n");
+    Invoke("SET k0 v0");
     ExpectNoTTL("k0");
     auto pxat = clock_.Now() + 1000ms;
-    Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "\r\n");
+    Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "");
     ExpectTTL("k0", 1s);
     pxat = clock_.Now() - 1000ms;
-    Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "\r\n");
+    Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "");
     ExpectNoTTL("k0");
 
     // Zero-out milliseconds to make EXAT do not lose precision.
     clock_.SetTime(Clock::TimePoint{2000s});
     ExpectNoTTL("k1");
-    Invoke("SET k1 v0 EX 100\r\n");
+    Invoke("SET k1 v0 EX 100");
     ExpectTTL("k1", 100s);
-    Invoke("SET k1 v0 EX 2000\r\n");
+    Invoke("SET k1 v0 EX 2000");
     ExpectTTL("k1", 2000s);
-    Invoke("SET k1 v0\r\n");
+    Invoke("SET k1 v0");
     ExpectNoTTL("k1");
     auto exat = clock_.Now() + 1000s;
-    Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "\r\n");
+    Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "");
     ExpectTTL("k1", 1000s);
     exat = clock_.Now() - 1000s;
-    Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "\r\n");
+    Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "");
     ExpectNoTTL("k1");
 
     clock_.SetTime(Clock::TimePoint{2000s});
-    Invoke("SET k0 v0 PX 100\r\n");
+    Invoke("SET k0 v0 PX 100");
     ExpectTTL("k0", 100ms);
     AdvanceTime(50ms);
     ExpectTTL("k0", 50ms);
@@ -133,25 +138,25 @@ TEST_F(StringCommandsTest, SetTest) {
     AdvanceTime(1ms);
     ExpectNoTTL("k0");
 
-    Invoke("SET k0 v0\r\n");
-    Invoke("SET k0 v0 KEEPTTL\r\n");
+    Invoke("SET k0 v0");
+    Invoke("SET k0 v0 KEEPTTL");
     ExpectNoTTL("k0");
-    Invoke("SET k0 v0 EX 100\r\n");
+    Invoke("SET k0 v0 EX 100");
     ExpectTTL("k0", 100s);
-    Invoke("SET k0 v1 KEEPTTL\r\n");
+    Invoke("SET k0 v1 KEEPTTL");
     ExpectTTL("k0", 100s);
 
-    Invoke("SET k0 v0\r\n");
-    auto res = Invoke("SET k0 v1 GET\r\n");
+    Invoke("SET k0 v0");
+    auto res = Invoke("SET k0 v1 GET");
     EXPECT_EQ(res.Size(), 1);
     EXPECT_EQ(res.data[0], "v0");
-    Invoke("SET k0 v0 PX 100\r\n");
-    res = Invoke("SET k0 v2 GET PX 100\r\n");
+    Invoke("SET k0 v0 PX 100");
+    res = Invoke("SET k0 v2 GET PX 100");
     EXPECT_EQ(res.Size(), 1);
     EXPECT_EQ(res.data[0], "v0");
     AdvanceTime(100ms);
     ExpectNoKey("k0");
-    res = Invoke("SET k0 v3 GET\r\n");
+    res = Invoke("SET k0 v3 GET");
     EXPECT_EQ(res.Size(), 1);
     EXPECT_TRUE(res.is_null[0]);
 }
