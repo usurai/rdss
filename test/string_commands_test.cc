@@ -161,4 +161,33 @@ TEST_F(StringCommandsTest, SetTest) {
     EXPECT_TRUE(res.is_null[0]);
 }
 
+TEST_F(StringCommandsTest, GetTest) {
+    Result result;
+    // key no exist -> nil
+    result = Invoke("GET non-existing-key");
+    ASSERT_EQ(result.Size(), 1);
+    EXPECT_TRUE(result.is_null[0]);
+
+    // key exist
+    //      valid   -> value, update lru
+    Invoke("SET k0 v0");
+    result = Invoke("GET k0");
+    ASSERT_EQ(result.Size(), 1);
+    EXPECT_EQ(result.data[0], "v0");
+    // TODO: LRU
+
+    Invoke("SET k0 v0 EX 10");
+    result = Invoke("GET k0");
+    ASSERT_EQ(result.Size(), 1);
+    EXPECT_EQ(result.data[0], "v0");
+
+    //      invalid -> nil, erase data/expire
+    AdvanceTime(10s);
+    result = Invoke("GET k0");
+    ASSERT_EQ(result.Size(), 1);
+    EXPECT_TRUE(result.is_null[0]);
+    EXPECT_EQ(service_.DataHashTable()->Find("k0"), nullptr);
+    EXPECT_EQ(service_.GetExpireHashTable()->Find("k0"), nullptr);
+}
+
 } // namespace rdss::test

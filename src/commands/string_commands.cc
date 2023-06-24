@@ -249,17 +249,19 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
     if (args.size() != 2) {
-        result.Add("error");
+        result.Add("wrong number of arguments for command");
         return result;
     }
-    auto entry = service.DataHashTable()->Find(args[1]);
+
+    auto key = args[1];
+    auto entry = service.DataHashTable()->Find(key);
     if (entry == nullptr) {
         result.AddNull();
         return result;
     }
 
     auto* expire_ht = service.GetExpireHashTable();
-    auto* expire_entry = expire_ht->Find(args[1]);
+    auto* expire_entry = expire_ht->Find(key);
     const auto expire_found = (expire_entry != nullptr);
     if (!expire_found || service.GetCommandTimeSnapshot() < expire_entry->value) {
         entry->GetKey()->SetLRU(service.lru_clock_);
@@ -269,9 +271,9 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings args) 
         return result;
     }
 
-    service.DataHashTable()->Erase(args[1]);
+    service.DataHashTable()->Erase(key);
     if (expire_found) {
-        expire_ht->Erase(args[1]);
+        expire_ht->Erase(key);
     }
     result.AddNull();
     return result;
