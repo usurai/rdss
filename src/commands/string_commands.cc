@@ -170,6 +170,7 @@ std::pair<SetStatus, MTSPtr> SetData(
             auto expire_entry = expire_ht->Find(key);
             if (expire_entry != nullptr && expire_entry->value <= cmd_time) {
                 data_entry->value = CreateMTSPtr(value);
+                expire_ht->Erase(key);
                 set_status = SetStatus::kInserted;
             }
         } else {
