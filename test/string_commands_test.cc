@@ -195,6 +195,28 @@ TEST_F(StringCommandsTest, SetTest) {
     ExpectNoKey("k0");
 }
 
+TEST_F(StringCommandsTest, SetNXTest) {
+    // SETNX on no existing -> insert
+    auto res = Invoke("SETNX k0 v0");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_EQ(res.ints[0], 1);
+    ExpectKeyValue("k0", "v0");
+
+    // SETNX on existing -> noop
+    res = Invoke("SETNX k0 v1");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_EQ(res.ints[0], 0);
+    ExpectKeyValue("k0", "v0");
+
+    // SETNX on expired -> insert
+    Invoke("SET k0 v0 EX 1");
+    AdvanceTime(1s);
+    res = Invoke("SETNX k0 v1");
+    EXPECT_EQ(res.Size(), 1);
+    EXPECT_EQ(res.ints[0], 1);
+    ExpectKeyValue("k0", "v1");
+}
+
 TEST_F(StringCommandsTest, GetTest) {
     Result result;
     // key no exist -> nil

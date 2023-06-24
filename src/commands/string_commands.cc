@@ -280,6 +280,26 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings args) 
     return result;
 }
 
+Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() != 3) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto [set_status, _] = SetData(
+      service.DataHashTable(),
+      service.GetExpireHashTable(),
+      args[1],
+      args[2],
+      SetMode::kNX,
+      service.GetCommandTimeSnapshot(),
+      false);
+    assert(set_status != SetStatus::kUpdated);
+    result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
+    return result;
+}
+
 Result ExistsFunction(DataStructureService& service, Command::CommandStrings command_strings) {
     Result result;
     int32_t cnt{0};
@@ -296,6 +316,8 @@ Result ExistsFunction(DataStructureService& service, Command::CommandStrings com
 
 void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
+    service->RegisterCommand(
+      "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }
