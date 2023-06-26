@@ -72,6 +72,23 @@ protected:
         }
     }
 
+    void ExpectNull(Result result) {
+        ASSERT_EQ(result.Size(), 1);
+        EXPECT_TRUE(result.is_null[0]);
+    }
+
+    void ExpectString(Result result, std::string_view str) {
+        ASSERT_EQ(result.Size(), 1);
+        ASSERT_EQ(result.data.size(), 1);
+        EXPECT_EQ(result.data[0], str);
+    }
+
+    void ExpectInt(Result result, int i) {
+        ASSERT_EQ(result.Size(), 1);
+        ASSERT_EQ(result.ints.size(), 1);
+        EXPECT_EQ(result.ints[0], i);
+    }
+
     void AdvanceTime(Clock::TimePoint::duration duration) {
         clock_.SetTime(clock_.Now() + duration);
     }
@@ -166,17 +183,14 @@ TEST_F(StringCommandsTest, SetTest) {
     // GET
     Invoke("SET k0 v0");
     auto res = Invoke("SET k0 v1 GET");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_EQ(res.data[0], "v0");
+    ExpectString(res, "v0");
     Invoke("SET k0 v0 PX 100");
     res = Invoke("SET k0 v2 GET PX 100");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_EQ(res.data[0], "v0");
+    ExpectString(res, "v0");
     AdvanceTime(100ms);
     // GET on expired key returns null.
     res = Invoke("SET k0 v3 GET");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_TRUE(res.is_null[0]);
+    ExpectNull(res);
 
     // SET NX on expired key should success.
     Invoke("SET k0 v0 EX 1");
@@ -190,30 +204,26 @@ TEST_F(StringCommandsTest, SetTest) {
     Invoke("SET k0 v0 EX 1");
     AdvanceTime(1s);
     res = Invoke("SET k0 v1 XX");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_TRUE(res.is_null[0]);
+    ExpectNull(res);
     ExpectNoKey("k0");
 }
 
 TEST_F(StringCommandsTest, SetNXTest) {
     // SETNX on no existing -> insert
     auto res = Invoke("SETNX k0 v0");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_EQ(res.ints[0], 1);
+    ExpectInt(res, 1);
     ExpectKeyValue("k0", "v0");
 
     // SETNX on existing -> noop
     res = Invoke("SETNX k0 v1");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_EQ(res.ints[0], 0);
+    ExpectInt(res, 0);
     ExpectKeyValue("k0", "v0");
 
     // SETNX on expired -> insert
     Invoke("SET k0 v0 EX 1");
     AdvanceTime(1s);
     res = Invoke("SETNX k0 v1");
-    EXPECT_EQ(res.Size(), 1);
-    EXPECT_EQ(res.ints[0], 1);
+    ExpectInt(res, 1);
     ExpectKeyValue("k0", "v1");
 }
 
@@ -221,8 +231,7 @@ TEST_F(StringCommandsTest, GetTest) {
     Result result;
     // key no exist -> nil
     result = Invoke("GET non-existing-key");
-    ASSERT_EQ(result.Size(), 1);
-    EXPECT_TRUE(result.is_null[0]);
+    ExpectNull(result);
 
     // key exist
     //      valid   -> value, update lru
@@ -234,14 +243,12 @@ TEST_F(StringCommandsTest, GetTest) {
 
     Invoke("SET k0 v0 EX 10");
     result = Invoke("GET k0");
-    ASSERT_EQ(result.Size(), 1);
-    EXPECT_EQ(result.data[0], "v0");
+    ExpectString(result, "v0");
 
     //      invalid -> nil, erase data/expire
     AdvanceTime(10s);
     result = Invoke("GET k0");
-    ASSERT_EQ(result.Size(), 1);
-    EXPECT_TRUE(result.is_null[0]);
+    ExpectNull(result);
     EXPECT_EQ(service_.DataHashTable()->Find("k0"), nullptr);
     EXPECT_EQ(service_.GetExpireHashTable()->Find("k0"), nullptr);
 }
