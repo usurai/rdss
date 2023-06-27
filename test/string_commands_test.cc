@@ -253,4 +253,23 @@ TEST_F(StringCommandsTest, GetTest) {
     EXPECT_EQ(service_.GetExpireHashTable()->Find("k0"), nullptr);
 }
 
+TEST_F(StringCommandsTest, GetDelTest) {
+    // GETDEL on not existing -> nil
+    ExpectNull(Invoke("GETDEL k0"));
+
+    // GETDEL on expired -> nil
+    Invoke("SET k0 v0 EX 1");
+    AdvanceTime(1s);
+    ExpectNull(Invoke("GETDEL k0"));
+
+    // GETDEL on valid -> return and delete
+    Invoke("SET k0 v0");
+    ExpectString(Invoke("GETDEL k0"), "v0");
+    ExpectNoKey("k0");
+
+    // GETDEL on volatile valid -> return and delete data / expire
+    Invoke("SET k0 v0 EX 1");
+    ExpectString(Invoke("GETDEL k0"), "v0");
+    ExpectNoKey("k0");
+}
 } // namespace rdss::test
