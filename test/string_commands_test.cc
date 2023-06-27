@@ -43,7 +43,7 @@ protected:
 
     void ExpectKeyValue(std::string_view key, std::string_view value) {
         auto entry = service_.DataHashTable()->Find(key);
-        EXPECT_NE(entry, nullptr);
+        ASSERT_NE(entry, nullptr);
         EXPECT_EQ(*entry->value, value);
     }
 
@@ -272,4 +272,29 @@ TEST_F(StringCommandsTest, GetDelTest) {
     ExpectString(Invoke("GETDEL k0"), "v0");
     ExpectNoKey("k0");
 }
+
+TEST_F(StringCommandsTest, GetSetTest) {
+    // GETSET on not existing -> set key, returns null
+    ExpectNull(Invoke("GETSET k0 v0"));
+    ExpectKeyValue("k0", "v0");
+
+    // GETSET on existing nonvolatile -> set key, returns old value
+    Invoke("SET k0 v0");
+    ExpectString(Invoke("GETSET k0 v1"), "v0");
+    ExpectKeyValue("k0", "v1");
+
+    // GETSET on existing and valid -> set key, invalidate expire, returns old value
+    Invoke("SET k0 v0 EX 1");
+    ExpectString(Invoke("GETSET k0 v1"), "v0");
+    ExpectKeyValue("k0", "v1");
+    ExpectNoTTL("k0");
+
+    // GETSET on existing and expired -> set key, returns null
+    Invoke("SET k0 v0 EX 1");
+    AdvanceTime(1s);
+    ExpectNull(Invoke("GETSET k0 v1"));
+    ExpectKeyValue("k0", "v1");
+    ExpectNoTTL("k0");
+}
+
 } // namespace rdss::test

@@ -247,6 +247,26 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     return result;
 }
 
+Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() != 3) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto [set_status, _] = SetData(
+      service.DataHashTable(),
+      service.GetExpireHashTable(),
+      args[1],
+      args[2],
+      SetMode::kNX,
+      service.GetCommandTimeSnapshot(),
+      false);
+    assert(set_status != SetStatus::kUpdated);
+    result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
+    return result;
+}
+
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
     if (args.size() != 2) {
@@ -311,23 +331,29 @@ Result GetDelFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
-Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetSetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
     if (args.size() != 3) {
         result.Add("wrong number of arguments for command");
         return result;
     }
 
-    auto [set_status, _] = SetData(
+    auto [set_status, old_value] = SetData(
       service.DataHashTable(),
       service.GetExpireHashTable(),
       args[1],
       args[2],
-      SetMode::kNX,
+      SetMode::kRegular,
       service.GetCommandTimeSnapshot(),
-      false);
-    assert(set_status != SetStatus::kUpdated);
-    result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
+      true);
+    assert(set_status != SetStatus::kNoOp);
+
+    if (old_value == nullptr) {
+        result.AddNull();
+    } else {
+        result.Add(std::string(*old_value));
+        service.GetExpireHashTable()->Erase(args[1]);
+    }
     return result;
 }
 
@@ -351,6 +377,7 @@ void RegisterStringCommands(DataStructureService* service) {
       "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
+    service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }
 
