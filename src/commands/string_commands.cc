@@ -20,6 +20,69 @@ enum class SetMode {
     kXX       /*** Only update if key presents ***/
 };
 
+enum class ExtractExpireResult { kDone, kNotFound, kError };
+
+ExtractExpireResult ExtractExpireOptions(
+  Args args, size_t& i, TimePoint cmd_time, Result& result, std::optional<TimePoint>& expire_time) {
+    std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
+    if (!args[i].compare("PX")) {
+        rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
+            const auto duration = std::chrono::milliseconds{rep};
+            if (TimePoint::max() - current >= duration) {
+                return current + duration;
+            }
+            return std::nullopt;
+        };
+    } else if (!args[i].compare("EX")) {
+        rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
+            if (kRepMax / 1000 < rep) {
+                return std::nullopt;
+            }
+            const auto duration = std::chrono::seconds{rep};
+            if (TimePoint::max() - current >= duration) {
+                return current + duration;
+            }
+            return std::nullopt;
+        };
+    } else if (!args[i].compare("PXAT")) {
+        rep_to_tp = [](TimePoint::rep rep) { return TimePoint{std::chrono::milliseconds{rep}}; };
+    } else if (!args[i].compare("EXAT")) {
+        rep_to_tp = [](TimePoint::rep rep) -> std::optional<TimePoint> {
+            if (kRepMax / 1000 < rep) {
+                return std::nullopt;
+            }
+            return TimePoint{std::chrono::seconds{rep}};
+        };
+    } else {
+        return ExtractExpireResult::kNotFound;
+    }
+
+    if (i == args.size() - 1) {
+        result.Add("syntax error");
+        return ExtractExpireResult::kError;
+    }
+    if (expire_time.has_value()) {
+        result.Add("syntax error");
+        return ExtractExpireResult::kError;
+    }
+
+    TimePoint::rep ll;
+    auto expire_sv = args[i + 1];
+    auto [ptr, err] = std::from_chars(expire_sv.data(), expire_sv.data() + expire_sv.size(), ll);
+    if (err != std::errc{} || ptr != expire_sv.data() + expire_sv.size() || ll <= 0) {
+        result.Add("value is not an integer or out of range");
+        return ExtractExpireResult::kError;
+    }
+    expire_time = rep_to_tp(ll);
+    if (!expire_time.has_value()) {
+        result.Add("value is not an integer or out of range");
+        return ExtractExpireResult::kError;
+    }
+
+    i += 1;
+    return ExtractExpireResult::kDone;
+}
+
 // Extracts options in arguments of SET command:
 // - 'set_mode': [NX | XX]
 // - 'get': [GET]
@@ -38,8 +101,6 @@ bool ExtractSetOptions(
   std::optional<TimePoint>& expire_time,
   bool& keep_ttl,
   bool& get) {
-    std::function<std::optional<TimePoint>(TimePoint::rep)> rep_to_tp;
-
     for (size_t i = 0; i < args.size(); ++i) {
         if (!args[i].compare("GET")) {
             get = true;
@@ -65,65 +126,24 @@ bool ExtractSetOptions(
             }
             keep_ttl = true;
             continue;
-        } else if (!args[i].compare("PX")) {
-            rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
-                const auto duration = std::chrono::milliseconds{rep};
-                if (TimePoint::max() - current >= duration) {
-                    return current + duration;
-                }
-                return std::nullopt;
-            };
-        } else if (!args[i].compare("EX")) {
-            rep_to_tp = [current = cmd_time](TimePoint::rep rep) -> std::optional<TimePoint> {
-                if (kRepMax / 1000 < rep) {
-                    return std::nullopt;
-                }
-                const auto duration = std::chrono::seconds{rep};
-                if (TimePoint::max() - current >= duration) {
-                    return current + duration;
-                }
-                return std::nullopt;
-            };
-        } else if (!args[i].compare("PXAT")) {
-            rep_to_tp = [](TimePoint::rep rep) {
-                return TimePoint{std::chrono::milliseconds{rep}};
-            };
-        } else if (!args[i].compare("EXAT")) {
-            rep_to_tp = [](TimePoint::rep rep) -> std::optional<TimePoint> {
-                if (kRepMax / 1000 < rep) {
-                    return std::nullopt;
-                }
-                return TimePoint{std::chrono::seconds{rep}};
-            };
-        } else {
-            result.Add("syntax error");
-            return false;
         }
 
-        if (i == args.size() - 1) {
+        const auto expire_result = ExtractExpireOptions(args, i, cmd_time, result, expire_time);
+        switch (expire_result) {
+        case ExtractExpireResult::kError:
+            return false;
+        case ExtractExpireResult::kNotFound: {
             result.Add("syntax error");
             return false;
         }
-        if (expire_time.has_value() || keep_ttl) {
+        case ExtractExpireResult::kDone: {
+            if (!keep_ttl) {
+                break;
+            }
             result.Add("syntax error");
             return false;
         }
-
-        TimePoint::rep ll;
-        auto expire_sv = args[i + 1];
-        auto [ptr, err] = std::from_chars(
-          expire_sv.data(), expire_sv.data() + expire_sv.size(), ll);
-        if (err != std::errc{} || ptr != expire_sv.data() + expire_sv.size() || ll <= 0) {
-            result.Add("value is not an integer or out of range");
-            return false;
         }
-        expire_time = rep_to_tp(ll);
-        if (!expire_time.has_value()) {
-            result.Add("value is not an integer or out of range");
-            return false;
-        }
-        VLOG(1) << "expire time:\t\t" << expire_time.value().time_since_epoch().count();
-        i += 1;
     }
     return true;
 }
@@ -331,6 +351,76 @@ Result GetDelFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
+Result GetEXFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() < 2) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    bool persist{false};
+    std::optional<TimePoint> expire_time{std::nullopt};
+    if (args.size() > 2) {
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (!args[i].compare("PERSIST")) {
+                if (expire_time.has_value() || persist) {
+                    result.Add("syntax error");
+                    return result;
+                }
+                persist = true;
+                continue;
+            }
+            const auto expire_result = ExtractExpireOptions(
+              args, i, service.GetCommandTimeSnapshot(), result, expire_time);
+            switch (expire_result) {
+            case ExtractExpireResult::kError:
+                return result;
+            case ExtractExpireResult::kNotFound: {
+                result.Add("syntax error");
+                return result;
+            }
+            case ExtractExpireResult::kDone: {
+                if (persist) {
+                    result.Add("syntax error");
+                    return result;
+                }
+                break;
+            }
+            }
+        }
+    }
+
+    auto key = args[1];
+    auto entry = service.DataHashTable()->Find(key);
+    if (entry == nullptr) {
+        result.AddNull();
+        return result;
+    }
+
+    auto* expire_ht = service.GetExpireHashTable();
+    auto* expire_entry = expire_ht->Find(key);
+    const auto expire_found = (expire_entry != nullptr);
+    if (!expire_found || service.GetCommandTimeSnapshot() < expire_entry->value) {
+        // TODO: Eliminate the conversion.
+        result.Add(std::string(*entry->value));
+        if (persist) {
+            if (expire_found) {
+                expire_ht->Erase(key);
+            }
+        } else if (expire_time.has_value()) {
+            expire_ht->Upsert(key, expire_time.value());
+        }
+        return result;
+    }
+
+    service.DataHashTable()->Erase(key);
+    if (expire_found) {
+        expire_ht->Erase(key);
+    }
+    result.AddNull();
+    return result;
+}
+
 Result GetSetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
     if (args.size() != 3) {
@@ -377,6 +467,7 @@ void RegisterStringCommands(DataStructureService* service) {
       "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
+    service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));
     service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }

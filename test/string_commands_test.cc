@@ -273,6 +273,52 @@ TEST_F(StringCommandsTest, GetDelTest) {
     ExpectNoKey("k0");
 }
 
+TEST_F(StringCommandsTest, GetEXTest) {
+    // GETEX on not existing -> nil
+    ExpectNull(Invoke("GETEX k0"));
+
+    // Also for PERSIST / EX ...
+    ExpectNull(Invoke("GETEX k0 PERSIST"));
+    ExpectNull(Invoke("GETEX k0 EX 10"));
+    ExpectNull(Invoke("GETEX k0 PX 10"));
+    ExpectNull(Invoke("GETEX k0 EXAT 10"));
+    ExpectNull(Invoke("GETEX k0 PXAT 10"));
+
+    // Clean GETEX is same as GET for valid / expired keys.
+    Invoke("SET k0 v0");
+    ExpectString(Invoke("GETEX k0"), "v0");
+    ExpectNoTTL("k0");
+
+    Invoke("SET k0 v1 EX 10");
+    ExpectString(Invoke("GETEX k0"), "v1");
+    ExpectTTL("k0", 10s);
+
+    // For expired keys, returns null.
+    AdvanceTime(10s);
+    ExpectNull(Invoke("GETEX k0 PERSIST"));
+    ExpectNull(Invoke("GETEX k0 EX 10"));
+    ExpectNull(Invoke("GETEX k0 PX 10"));
+    ExpectNull(Invoke("GETEX k0 EXAT 10"));
+    ExpectNull(Invoke("GETEX k0 PXAT 10"));
+    ExpectNoKey("k0");
+
+    // GETEX with EX/PX/EXAT/PXAT changes expire time
+    clock_.SetTime(Clock::TimePoint{2000s});
+    Invoke("SET k0 v0");
+    ExpectString(Invoke("GETEX k0 EX 10"), "v0");
+    ExpectTTL("k0", 10s);
+    ExpectString(Invoke("GETEX k0 PX 10"), "v0");
+    ExpectTTL("k0", 10ms);
+    ExpectString(Invoke("GETEX k0 EXAT 3000"), "v0");
+    ExpectTTL("k0", 1000s);
+    ExpectString(Invoke("GETEX k0 PXAT 2100000"), "v0");
+    ExpectTTL("k0", 100s);
+
+    // GETEX with PERSIST cleans TTL
+    ExpectString(Invoke("GETEX k0 PERSIST"), "v0");
+    ExpectNoTTL("k0");
+}
+
 TEST_F(StringCommandsTest, GetSetTest) {
     // GETSET on not existing -> set key, returns null
     ExpectNull(Invoke("GETSET k0 v0"));
