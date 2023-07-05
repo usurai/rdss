@@ -221,6 +221,19 @@ TEST_F(StringCommandsTest, SetEXTest) {
     ExpectNoKey("k1");
     Invoke("SETEX k1 v0");
     ExpectNoKey("k1");
+
+    Invoke("PSETEX k0 10 v0");
+    ExpectKeyValue("k0", "v0");
+    ExpectTTL("k0", 10ms);
+    Invoke("PSETEX k0 1000 v0");
+    ExpectTTL("k0", 1000ms);
+
+    Invoke("PSETEX k1 0 v0");
+    ExpectNoKey("k1");
+    Invoke("PSETEX k1 invalid v0");
+    ExpectNoKey("k1");
+    Invoke("PSETEX k1 v0");
+    ExpectNoKey("k1");
 }
 
 TEST_F(StringCommandsTest, SetNXTest) {
