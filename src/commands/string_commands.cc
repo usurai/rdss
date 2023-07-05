@@ -20,6 +20,15 @@ enum class SetMode {
     kXX       /*** Only update if key presents ***/
 };
 
+std::optional<TimePoint::rep> ParseInt(Command::CommandString str) {
+    TimePoint::rep ll;
+    auto [ptr, err] = std::from_chars(str.data(), str.data() + str.size(), ll);
+    if (err != std::errc{} || ptr != str.data() + str.size()) {
+        return std::nullopt;
+    }
+    return ll;
+}
+
 enum class ExtractExpireResult { kDone, kNotFound, kError };
 
 ExtractExpireResult ExtractExpireOptions(
@@ -66,14 +75,12 @@ ExtractExpireResult ExtractExpireOptions(
         return ExtractExpireResult::kError;
     }
 
-    TimePoint::rep ll;
-    auto expire_sv = args[i + 1];
-    auto [ptr, err] = std::from_chars(expire_sv.data(), expire_sv.data() + expire_sv.size(), ll);
-    if (err != std::errc{} || ptr != expire_sv.data() + expire_sv.size() || ll <= 0) {
+    auto ll = ParseInt(args[i + 1]);
+    if (!ll.has_value() || ll <= 0) {
         result.Add("value is not an integer or out of range");
         return ExtractExpireResult::kError;
     }
-    expire_time = rep_to_tp(ll);
+    expire_time = rep_to_tp(ll.value());
     if (!expire_time.has_value()) {
         result.Add("value is not an integer or out of range");
         return ExtractExpireResult::kError;
@@ -264,6 +271,30 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     } else {
         result.Add("OK");
     }
+    return result;
+}
+
+Result SetEXFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() != 4) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto ll = ParseInt(args[2]);
+    const auto current = service.GetCommandTimeSnapshot();
+    // TODO: Reuse this with ExtractExpireOptions.
+    if (
+      !ll.has_value() || ll <= 0 || kRepMax / 1000 < ll.value()
+      || TimePoint::max() - current < std::chrono::seconds{ll.value()}) {
+        result.Add("value is not an integer or out of range");
+        return result;
+    }
+
+    service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
+    service.GetExpireHashTable()->Upsert(
+      args[1], service.GetCommandTimeSnapshot() + std::chrono::seconds{ll.value()});
+    result.Add("OK");
     return result;
 }
 
@@ -463,6 +494,8 @@ Result ExistsFunction(DataStructureService& service, Command::CommandStrings com
 
 void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("SET", Command("SET").SetHandler(SetFunction).SetIsWriteCommand());
+    service->RegisterCommand(
+      "SETEX", Command("SETEX").SetHandler(SetEXFunction).SetIsWriteCommand());
     service->RegisterCommand(
       "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));

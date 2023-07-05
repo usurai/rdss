@@ -208,6 +208,21 @@ TEST_F(StringCommandsTest, SetTest) {
     ExpectNoKey("k0");
 }
 
+TEST_F(StringCommandsTest, SetEXTest) {
+    Invoke("SETEX k0 10 v0");
+    ExpectKeyValue("k0", "v0");
+    ExpectTTL("k0", 10s);
+    Invoke("SETEX k0 1000 v0");
+    ExpectTTL("k0", 1000s);
+
+    Invoke("SETEX k1 0 v0");
+    ExpectNoKey("k1");
+    Invoke("SETEX k1 invalid v0");
+    ExpectNoKey("k1");
+    Invoke("SETEX k1 v0");
+    ExpectNoKey("k1");
+}
+
 TEST_F(StringCommandsTest, SetNXTest) {
     // SETNX on no existing -> insert
     auto res = Invoke("SETNX k0 v0");
