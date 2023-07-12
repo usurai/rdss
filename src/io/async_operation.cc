@@ -7,4 +7,9 @@ Connection* AwaitableAccept::await_resume() noexcept {
     return new Connection(fd, GetProcessor());
 }
 
+void AwaitableTimeout::await_resume() noexcept {
+    const auto result = AwaitableOperation<AwaitableTimeout>::await_resume();
+    VLOG(1) << "AwaitableTimeout, result:" << strerror(result);
+}
+
 } // namespace rdss

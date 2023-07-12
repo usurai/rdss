@@ -296,9 +296,9 @@ public:
       : AwaitableOperation<AwaitableTimeout>(processor)
       , ts_{.tv_sec = 0, .tv_nsec = nanoseconds.count()} {}
 
-    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 1, 0); }
+    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 0, 0); }
 
-    void await_resume() noexcept {}
+    void await_resume() noexcept;
 
     std::string ToString() const { return "AwaitableTimeout"; }
 
