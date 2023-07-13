@@ -38,6 +38,14 @@ public:
 
     TimePoint GetCommandTimeSnapshot() const { return command_time_snapshot_; }
 
+    /// Triggers a cycle of active expiration. The expiration process will repeatly scan a portion
+    /// of volatile keys, and erase the expired keys. The process only stops in one of the following
+    /// condition: 1. The expired rate of the last iteration is below the threshold specified by
+    /// 'active_expire_acceptable_stale_percent'. 2. The elapsed time of the process has exceeded
+    /// the time limit specified by 'active_expire_cycle_time_percent'. 3. The whole table has been
+    /// scanned.
+    void ActiveExpire();
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
@@ -62,8 +70,13 @@ private:
     static constexpr size_t kEvictionPoolLimit = 16;
     std::set<LRUEntry, CompareLRUEntry> eviction_pool_;
 
-    // TODO: move somewhere
+    // Index of next bucket of expire table to scan for expired key.
+    size_t bucket_index_{0};
+
 public:
+    size_t active_expired_keys_{0};
+
+    // TODO: move somewhere
     DurationCount lru_clock_{0};
 };
 

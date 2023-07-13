@@ -25,7 +25,13 @@ struct Config {
     MaxmemoryPolicy maxmemory_policy = MaxmemoryPolicy::kNoEviction;
     uint32_t maxmemory_samples = 5;
 
+    uint32_t active_expire_cycle_time_percent = 25;
+    uint32_t active_expire_acceptable_stale_percent = 10;
+    uint32_t active_expire_keys_per_loop = 20;
+
     void ReadFromFile(const std::string& file_name);
+
+    void SanityCheck();
 
     std::string ToString() const;
 };

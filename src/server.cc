@@ -58,6 +58,8 @@ Task<void> Server::Cron() {
           processor_.get(), std::chrono::milliseconds(interval_in_millisecond));
 
         service_->lru_clock_ = detail::GetLruClock();
+
+        service_->ActiveExpire();
     }
 }
 

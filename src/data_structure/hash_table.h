@@ -6,15 +6,48 @@
 #include <cstdlib>
 #include <ctime>
 #include <functional>
+#include <limits.h>
 #include <memory>
 #include <vector>
 #include <xxhash.h>
+
+namespace detail {
+
+static size_t rev(size_t v) {
+    unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
+    unsigned long mask = ~0UL;
+    while ((s >>= 1) > 0) {
+        mask ^= (mask << s);
+        v = ((v >> s) & mask) | ((v << s) & ~mask);
+    }
+    return v;
+}
+
+static size_t NextIndex(size_t index, size_t size) {
+    int i;
+    for (i = 31; i >= 0; --i) {
+        if ((size >> i) & 1) {
+            break;
+        }
+    }
+
+    const auto mask = (1UL << i) - 1;
+    index |= ~mask;
+    index = rev(index);
+    ++index;
+    index = rev(index);
+    return index;
+}
+
+} // namespace detail
 
 namespace rdss {
 
 template<typename Allocator>
 class HashTableKey {
 public:
+    using String = std::basic_string<char, std::char_traits<char>, Allocator>;
+
     explicit HashTableKey(std::string_view sv)
       : data_(sv) {}
 
@@ -27,8 +60,6 @@ public:
     uint32_t GetLRU() const { return lru_; }
 
 private:
-    using String = std::basic_string<char, std::char_traits<char>, Allocator>;
-
     // TODO: Give it a more reasonable name.
     uint32_t lru_ = 0;
     const String data_;
@@ -99,7 +130,8 @@ public:
     /// entry if no such entry is found.
     /// If 'create_on_missing' is true, returns {entry for 'key', if entry already exists}.
     /// If 'create_on_missing' is false, returns {newly created entry for 'key', false}.
-    std::pair<EntryPointer, bool> FindOrCreate(std::string_view key, bool create_on_missing, bool create_shared_key = true) {
+    std::pair<EntryPointer, bool>
+    FindOrCreate(std::string_view key, bool create_on_missing, bool create_shared_key = true) {
         if (buckets_[0].empty()) {
             if (!create_on_missing) {
                 return {nullptr, false};
@@ -200,6 +232,21 @@ public:
     }
 
     bool IsRehashing() const { return (rehash_index_ >= 0); }
+
+    size_t TraverseBucket(size_t bucket_index, auto func) {
+        // TODO: support rehashing.
+        assert(!IsRehashing());
+        assert(bucket_index < buckets_[0].size());
+        auto entry = buckets_[0][bucket_index];
+
+        bucket_index = detail::NextIndex(bucket_index, buckets_[0].size());
+
+        while (entry != nullptr) {
+            func(entry);
+            entry = entry->next;
+        }
+        return bucket_index;
+    }
 
     // TODO: void RehashStep(size_t steps) const;
     // TODO: iterate
