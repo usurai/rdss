@@ -223,4 +223,31 @@ void DataStructureService::ActiveExpire() {
     active_expired_keys_ += expired_keys;
 }
 
+MTSHashTable::EntryPointer DataStructureService::FindOrExpire(std::string_view key) {
+    auto entry = data_ht_->Find(key);
+    if (entry == nullptr) {
+        return nullptr;
+    }
+
+    // TODO: Add a FindEntryAndProceeding to save an additional Erase call on expired.
+    auto* expire_entry = expire_ht_->Find(key);
+    const auto expire_found = (expire_entry != nullptr);
+    if (!expire_found || GetCommandTimeSnapshot() < expire_entry->value) {
+        return entry;
+    }
+
+    data_ht_->Erase(key);
+    if (expire_found) {
+        expire_ht_->Erase(key);
+    }
+    return nullptr;
+}
+
+void DataStructureService::EraseKey(std::string_view key) {
+    if (!data_ht_->Erase(key)) {
+        return;
+    }
+    expire_ht_->Erase(key);
+}
+
 } // namespace rdss

@@ -32,6 +32,12 @@ public:
         commands_.emplace(std::move(name), std::move(command));
     }
 
+    /// Find and return the entry of 'key' if it's valid. Expire the key if it's stale.
+    MTSHashTable::EntryPointer FindOrExpire(std::string_view key);
+
+    /// Erase key in both data and expire table.
+    void EraseKey(std::string_view key);
+
     MTSHashTable* DataHashTable() { return data_ht_.get(); }
 
     ExpireHashTable* GetExpireHashTable() { return expire_ht_.get(); }

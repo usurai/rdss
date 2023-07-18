@@ -12,6 +12,38 @@ namespace rdss {
 using TimePoint = DataStructureService::TimePoint;
 using Args = Command::CommandStrings;
 
+namespace detail {
+
+// Treat the second arg in 'args' as key and search if key is valid. If valid, update its LRU and
+// add it's corresponding value to result, then return {entry of the key, result}. Otherwise, If
+// it's stale, expire it, add null to result and return {nullptr, result}.
+std::pair<MTSHashTable::EntryPointer, Result>
+GetFunctionBase(DataStructureService& service, Args args) {
+    Result result;
+
+    auto entry = service.FindOrExpire(args[1]);
+    if (entry == nullptr) {
+        result.AddNull();
+    } else {
+        result.Add(std::string(*entry->value));
+        entry->GetKey()->SetLRU(service.lru_clock_);
+    }
+    return {entry, result};
+}
+
+// Call GetFunctionBase, if the key is found, call callback(found_entry).
+template<typename CallbackOnFound>
+Result
+GetFunctionBaseWithCallback(DataStructureService& service, Args args, CallbackOnFound callback) {
+    auto [entry, result] = GetFunctionBase(service, std::move(args));
+    if (entry != nullptr) {
+        callback(entry);
+    }
+    return result;
+}
+
+} // namespace detail
+
 static constexpr TimePoint::rep kRepMax = std::numeric_limits<TimePoint::rep>::max();
 
 enum class SetMode {
@@ -345,67 +377,25 @@ Result SetNXFunction(DataStructureService& service, Command::CommandStrings args
 }
 
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
-    Result result;
     if (args.size() != 2) {
+        Result result;
         result.Add("wrong number of arguments for command");
         return result;
     }
-
-    auto key = args[1];
-    auto entry = service.DataHashTable()->Find(key);
-    if (entry == nullptr) {
-        result.AddNull();
-        return result;
-    }
-
-    auto* expire_ht = service.GetExpireHashTable();
-    auto* expire_entry = expire_ht->Find(key);
-    const auto expire_found = (expire_entry != nullptr);
-    if (!expire_found || service.GetCommandTimeSnapshot() < expire_entry->value) {
-        entry->GetKey()->SetLRU(service.lru_clock_);
-        VLOG(1) << "lru:" << entry->GetKey()->GetLRU();
-        // TODO: Eliminate the conversion.
-        result.Add(std::string(*entry->value));
-        return result;
-    }
-
-    service.DataHashTable()->Erase(key);
-    if (expire_found) {
-        expire_ht->Erase(key);
-    }
-    result.AddNull();
+    auto [_, result] = detail::GetFunctionBase(service, args);
     return result;
 }
 
 Result GetDelFunction(DataStructureService& service, Command::CommandStrings args) {
-    Result result;
     if (args.size() != 2) {
+        Result result;
         result.Add("wrong number of arguments for command");
         return result;
     }
-
-    auto key = args[1];
-    auto entry = service.DataHashTable()->Find(key);
-    if (entry == nullptr) {
-        result.AddNull();
-        return result;
-    }
-
-    auto* expire_ht = service.GetExpireHashTable();
-    auto* expire_entry = expire_ht->Find(key);
-    const auto expire_found = (expire_entry != nullptr);
-    if (!expire_found || service.GetCommandTimeSnapshot() < expire_entry->value) {
-        // TODO: Eliminate the conversion.
-        result.Add(std::string(*entry->value));
-    } else {
-        result.AddNull();
-    }
-
-    service.DataHashTable()->Erase(key);
-    if (expire_found) {
-        expire_ht->Erase(key);
-    }
-    return result;
+    return detail::GetFunctionBaseWithCallback(
+      service, args, [&service](MTSHashTable::EntryPointer entry) {
+          service.EraseKey(entry->GetKey()->StringView());
+      });
 }
 
 Result GetEXFunction(DataStructureService& service, Command::CommandStrings args) {
@@ -447,35 +437,15 @@ Result GetEXFunction(DataStructureService& service, Command::CommandStrings args
         }
     }
 
-    auto key = args[1];
-    auto entry = service.DataHashTable()->Find(key);
-    if (entry == nullptr) {
-        result.AddNull();
-        return result;
-    }
-
-    auto* expire_ht = service.GetExpireHashTable();
-    auto* expire_entry = expire_ht->Find(key);
-    const auto expire_found = (expire_entry != nullptr);
-    if (!expire_found || service.GetCommandTimeSnapshot() < expire_entry->value) {
-        // TODO: Eliminate the conversion.
-        result.Add(std::string(*entry->value));
+    return detail::GetFunctionBaseWithCallback(
+      service, args, [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
+          auto key = entry->GetKey()->StringView();
         if (persist) {
-            if (expire_found) {
-                expire_ht->Erase(key);
-            }
+              service.GetExpireHashTable()->Erase(key);
         } else if (expire_time.has_value()) {
-            expire_ht->Upsert(key, expire_time.value());
+              service.GetExpireHashTable()->Upsert(key, expire_time.value());
         }
-        return result;
-    }
-
-    service.DataHashTable()->Erase(key);
-    if (expire_found) {
-        expire_ht->Erase(key);
-    }
-    result.AddNull();
-    return result;
+      });
 }
 
 Result GetSetFunction(DataStructureService& service, Command::CommandStrings args) {
