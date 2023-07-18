@@ -35,6 +35,19 @@ public:
     /// Find and return the entry of 'key' if it's valid. Expire the key if it's stale.
     MTSHashTable::EntryPointer FindOrExpire(std::string_view key);
 
+    enum class SetMode {
+        kRegular, /*** Update if key presents, insert otherwise ***/
+        kNX,      /*** Only insert if key doesn't present ***/
+        kXX       /*** Only update if key presents ***/
+    };
+
+    enum class SetStatus { kNoOp, kInserted, kUpdated };
+
+    /// Set 'key' 'value' pair in data table with respect to 'set_mode'. Return the result of the
+    /// operation and if 'get' is true and 'key' exists, return the old value of 'key'.
+    std::pair<SetStatus, MTSPtr>
+    SetData(std::string_view key, std::string_view value, SetMode set_mode, bool get);
+
     /// Erase key in both data and expire table.
     void EraseKey(std::string_view key);
 

@@ -11,6 +11,8 @@ namespace rdss {
 
 using TimePoint = DataStructureService::TimePoint;
 using Args = Command::CommandStrings;
+using SetMode = DataStructureService::SetMode;
+using SetStatus = DataStructureService::SetStatus;
 
 namespace detail {
 
@@ -46,12 +48,7 @@ GetFunctionBaseWithCallback(DataStructureService& service, Args args, CallbackOn
 
 static constexpr TimePoint::rep kRepMax = std::numeric_limits<TimePoint::rep>::max();
 
-enum class SetMode {
-    kRegular, /*** Update if key presents, insert otherwise ***/
-    kNX,      /*** Only insert if key doesn't present ***/
-    kXX       /*** Only update if key presents ***/
-};
-
+// TODO: Templatize these two functions
 auto IntToTimePointSecond(TimePoint::rep ll, TimePoint current) -> std::optional<TimePoint> {
     if (ll <= 0 || kRepMax / 1000 < ll || TimePoint::max() - current < std::chrono::seconds{ll}) {
         return std::nullopt;
@@ -201,83 +198,15 @@ bool ExtractSetOptions(
     return true;
 }
 
-enum class SetStatus { kNoOp, kInserted, kUpdated };
-
-// TODO: Templatize 'get' argument, or make two functions.
-std::pair<SetStatus, MTSPtr> SetData(
-  MTSHashTable* data_ht,
-  DataStructureService::ExpireHashTable* expire_ht,
-  Command::CommandString key,
-  Command::CommandString value,
-  SetMode set_mode,
-  TimePoint cmd_time,
-  bool get) {
-    bool inserted{false};
-    bool overwritten{false};
-    SetStatus set_status{SetStatus::kNoOp};
-    MTSPtr old_value{nullptr};
-
-    switch (set_mode) {
-    case SetMode::kRegular: {
-        bool exists{false};
-        if (!get) {
-            auto upsert_result = data_ht->Upsert(key, CreateMTSPtr(value));
-            exists = upsert_result.second;
-        } else {
-            auto fc_result = data_ht->FindOrCreate(key, true);
-            if (fc_result.second) {
-                auto expire_entry = expire_ht->Find(key);
-                if (expire_entry == nullptr || expire_entry->value > cmd_time) {
-                    old_value = std::move(fc_result.first->value);
-                    exists = true;
-                }
-            }
-            fc_result.first->value = CreateMTSPtr(value);
-        }
-        set_status = (exists) ? SetStatus::kUpdated : SetStatus::kInserted;
-        break;
-    }
-    case SetMode::kNX: {
-        auto data_entry = data_ht->Find(key);
-        if (data_entry != nullptr) {
-            auto expire_entry = expire_ht->Find(key);
-            if (expire_entry != nullptr && expire_entry->value <= cmd_time) {
-                data_entry->value = CreateMTSPtr(value);
-                expire_ht->Erase(key);
-                set_status = SetStatus::kInserted;
-            }
-        } else {
-            data_ht->Insert(key, CreateMTSPtr(value));
-            set_status = SetStatus::kInserted;
-        }
-        break;
-    }
-    case SetMode::kXX: {
-        auto data_entry = data_ht->Find(key);
-        if (data_entry == nullptr) {
-            break;
-        }
-        auto expire_entry = expire_ht->Find(key);
-        if (expire_entry != nullptr && expire_entry->value <= cmd_time) {
-            data_ht->Erase(key);
-            expire_ht->Erase(key);
-            break;
-        }
-        if (get) {
-            old_value = std::move(data_entry->value);
-        }
-        data_entry->value = CreateMTSPtr(value);
-        set_status = SetStatus::kUpdated;
-        break;
-    }
-    }
-    return {set_status, old_value};
-}
-
 Result SetFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() < 3) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
     const auto cmd_time = service.GetCommandTimeSnapshot();
 
-    Result result;
     SetMode set_mode{SetMode::kRegular};
     std::optional<TimePoint> expire_time{std::nullopt};
     bool keep_ttl{false};
@@ -291,8 +220,7 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
 
     auto key = args[1];
     auto* expire_ht = service.GetExpireHashTable();
-    auto [set_status, old_value] = SetData(
-      service.DataHashTable(), expire_ht, key, args[2], set_mode, cmd_time, get);
+    auto [set_status, old_value] = service.SetData(key, args[2], set_mode, get);
     if (set_status == SetStatus::kNoOp) {
         result.AddNull();
         return result;
@@ -304,8 +232,6 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
         // TODO: maybe we can know there is no expire_entry before this.
         expire_ht->Erase(key);
     }
-
-    // TODO: lru
 
     if (get) {
         if (old_value == nullptr) {
@@ -322,9 +248,9 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
 
 template<typename RepToTime>
 Result SetEXFunctionBase(
-  RepToTime rep_to_time, DataStructureService& service, Command::CommandStrings args) {
-    const auto current = service.GetCommandTimeSnapshot();
+  DataStructureService& service, Command::CommandStrings args, RepToTime rep_to_time) {
     Result result;
+    const auto now = service.GetCommandTimeSnapshot();
     if (args.size() != 4) {
         result.Add("wrong number of arguments for command");
         return result;
@@ -336,12 +262,13 @@ Result SetEXFunctionBase(
         return result;
     }
 
-    auto expire_time = rep_to_time(ll.value(), current);
+    auto expire_time = rep_to_time(ll.value(), now);
     if (!expire_time.has_value()) {
         result.Add("value is not an integer or out of range");
         return result;
     }
 
+    // TODO: Make these into one function so that key be can shared.
     service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
     service.GetExpireHashTable()->Upsert(args[1], expire_time.value());
     result.Add("OK");
@@ -349,11 +276,11 @@ Result SetEXFunctionBase(
 }
 
 Result SetEXFunction(DataStructureService& service, Command::CommandStrings args) {
-    return SetEXFunctionBase(IntToTimePointSecond, service, args);
+    return SetEXFunctionBase(service, args, IntToTimePointSecond);
 }
 
 Result PSetEXFunction(DataStructureService& service, Command::CommandStrings args) {
-    return SetEXFunctionBase(IntToTimePointMillisecond, service, args);
+    return SetEXFunctionBase(service, args, IntToTimePointMillisecond);
 }
 
 Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
@@ -363,14 +290,7 @@ Result SetNXFunction(DataStructureService& service, Command::CommandStrings args
         return result;
     }
 
-    auto [set_status, _] = SetData(
-      service.DataHashTable(),
-      service.GetExpireHashTable(),
-      args[1],
-      args[2],
-      SetMode::kNX,
-      service.GetCommandTimeSnapshot(),
-      false);
+    auto [set_status, _] = service.SetData(args[1], args[2], SetMode::kNX, false);
     assert(set_status != SetStatus::kUpdated);
     result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
     return result;
@@ -455,14 +375,7 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
         return result;
     }
 
-    auto [set_status, old_value] = SetData(
-      service.DataHashTable(),
-      service.GetExpireHashTable(),
-      args[1],
-      args[2],
-      SetMode::kRegular,
-      service.GetCommandTimeSnapshot(),
-      true);
+    auto [set_status, old_value] = service.SetData(args[1], args[2], SetMode::kRegular, true);
     assert(set_status != SetStatus::kNoOp);
 
     if (old_value == nullptr) {

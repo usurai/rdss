@@ -9,6 +9,9 @@
 
 namespace rdss {
 
+using SetStatus = DataStructureService::SetStatus;
+using SetMode = DataStructureService::SetMode;
+
 Result DataStructureService::Invoke(Command::CommandStrings command_strings) {
     VLOG(3) << "received " << command_strings.size() << " commands:";
     for (const auto& arg : command_strings) {
@@ -248,6 +251,77 @@ void DataStructureService::EraseKey(std::string_view key) {
         return;
     }
     expire_ht_->Erase(key);
+}
+
+std::pair<SetStatus, MTSPtr> DataStructureService::SetData(
+  std::string_view key, std::string_view value, SetMode set_mode, bool get) {
+    SetStatus set_status{SetStatus::kNoOp};
+    MTSPtr old_value{nullptr};
+    MTSHashTable::EntryPointer set_entry{nullptr};
+
+    switch (set_mode) {
+    case SetMode::kRegular: {
+        bool exists{false};
+        if (!get) {
+            auto upsert_result = data_ht_->Upsert(key, CreateMTSPtr(value));
+            set_entry = upsert_result.first;
+            exists = upsert_result.second;
+        } else {
+            auto [entry, exists] = data_ht_->FindOrCreate(key, true);
+            if (exists) {
+                auto expire_entry = expire_ht_->Find(key);
+                if (expire_entry == nullptr || expire_entry->value > GetCommandTimeSnapshot()) {
+                    old_value = std::move(entry->value);
+                    exists = true;
+                }
+            }
+            entry->value = CreateMTSPtr(value);
+            set_entry = entry;
+        }
+        set_status = (exists) ? SetStatus::kUpdated : SetStatus::kInserted;
+        break;
+    }
+    case SetMode::kNX: {
+        auto data_entry = data_ht_->Find(key);
+        if (data_entry != nullptr) {
+            auto expire_entry = expire_ht_->Find(key);
+            if (expire_entry != nullptr && expire_entry->value <= GetCommandTimeSnapshot()) {
+                data_entry->value = CreateMTSPtr(value);
+                expire_ht_->Erase(key);
+                set_entry = data_entry;
+                set_status = SetStatus::kInserted;
+            }
+        } else {
+            auto [entry, _] = data_ht_->Insert(key, CreateMTSPtr(value));
+            set_entry = entry;
+            set_status = SetStatus::kInserted;
+        }
+        break;
+    }
+    case SetMode::kXX: {
+        auto data_entry = data_ht_->Find(key);
+        if (data_entry == nullptr) {
+            break;
+        }
+        auto expire_entry = expire_ht_->Find(key);
+        if (expire_entry != nullptr && expire_entry->value <= GetCommandTimeSnapshot()) {
+            data_ht_->Erase(key);
+            expire_ht_->Erase(key);
+            break;
+        }
+        if (get) {
+            old_value = std::move(data_entry->value);
+        }
+        data_entry->value = CreateMTSPtr(value);
+        set_entry = data_entry;
+        set_status = SetStatus::kUpdated;
+        break;
+    }
+    }
+    if (set_entry != nullptr) {
+        set_entry->GetKey()->SetLRU(lru_clock_);
+    }
+    return {set_status, old_value};
 }
 
 } // namespace rdss
