@@ -48,19 +48,22 @@ GetFunctionBaseWithCallback(DataStructureService& service, Args args, CallbackOn
 
 static constexpr TimePoint::rep kRepMax = std::numeric_limits<TimePoint::rep>::max();
 
-// TODO: Templatize these two functions
-auto IntToTimePointSecond(TimePoint::rep ll, TimePoint current) -> std::optional<TimePoint> {
-    if (ll <= 0 || kRepMax / 1000 < ll || TimePoint::max() - current < std::chrono::seconds{ll}) {
+template<typename Duration>
+std::optional<TimePoint> IntToTimePoint(TimePoint now, TimePoint::rep i) {
+    static constexpr auto target_den = TimePoint::duration::period::den;
+    static constexpr auto den = TimePoint::duration::period::den;
+    if (i <= 0) {
         return std::nullopt;
     }
-    return current + std::chrono::seconds{ll};
-}
-
-auto IntToTimePointMillisecond(TimePoint::rep ll, TimePoint current) -> std::optional<TimePoint> {
-    if (ll <= 0 || TimePoint::max() - current < std::chrono::milliseconds{ll}) {
+    if constexpr (den < target_den) {
+        if (TimePoint::duration::max().count() / (target_den / den) < i) {
+            return std::nullopt;
+        }
+    }
+    if (TimePoint::max() - now < Duration{i}) {
         return std::nullopt;
     }
-    return current + std::chrono::milliseconds{ll};
+    return now + Duration{i};
 }
 
 std::optional<TimePoint::rep> ParseInt(Command::CommandString str) {
@@ -142,7 +145,7 @@ ExtractExpireResult ExtractExpireOptions(
 // in unix-time-milliseconds, otherwise, it's std::nullopt.
 // Returns false if arguments are invalid or conflict, in this case, error is added to 'result'.
 // Returns true otherwise.
-// TODO: Determine option by size(), discard string_view.compare().
+// TODO: Determine option by size() in favour of string_view.compare().
 bool ExtractSetOptions(
   Args args,
   TimePoint cmd_time,
@@ -262,7 +265,7 @@ Result SetEXFunctionBase(
         return result;
     }
 
-    auto expire_time = rep_to_time(ll.value(), now);
+    auto expire_time = rep_to_time(now, ll.value());
     if (!expire_time.has_value()) {
         result.Add("value is not an integer or out of range");
         return result;
@@ -276,11 +279,11 @@ Result SetEXFunctionBase(
 }
 
 Result SetEXFunction(DataStructureService& service, Command::CommandStrings args) {
-    return SetEXFunctionBase(service, args, IntToTimePointSecond);
+    return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::seconds>);
 }
 
 Result PSetEXFunction(DataStructureService& service, Command::CommandStrings args) {
-    return SetEXFunctionBase(service, args, IntToTimePointMillisecond);
+    return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::milliseconds>);
 }
 
 Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
@@ -360,11 +363,11 @@ Result GetEXFunction(DataStructureService& service, Command::CommandStrings args
     return detail::GetFunctionBaseWithCallback(
       service, args, [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
           auto key = entry->GetKey()->StringView();
-        if (persist) {
+          if (persist) {
               service.GetExpireHashTable()->Erase(key);
-        } else if (expire_time.has_value()) {
+          } else if (expire_time.has_value()) {
               service.GetExpireHashTable()->Upsert(key, expire_time.value());
-        }
+          }
       });
 }
 
