@@ -223,14 +223,14 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
 
     auto key = args[1];
     auto* expire_ht = service.GetExpireHashTable();
-    auto [set_status, old_value] = service.SetData(key, args[2], set_mode, get);
+    auto [set_status, entry, old_value] = service.SetData(key, args[2], set_mode, get);
     if (set_status == SetStatus::kNoOp) {
         result.AddNull();
         return result;
     }
 
     if (expire_time.has_value()) {
-        expire_ht->Upsert(key, expire_time.value());
+        expire_ht->Upsert(entry->CopyKey(), expire_time.value());
     } else if (set_status == SetStatus::kUpdated && !keep_ttl) {
         // TODO: maybe we can know there is no expire_entry before this.
         expire_ht->Erase(key);
@@ -271,9 +271,8 @@ Result SetEXFunctionBase(
         return result;
     }
 
-    // TODO: Make these into one function so that key be can shared.
-    service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
-    service.GetExpireHashTable()->Upsert(args[1], expire_time.value());
+    auto [entry, _] = service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
+    service.GetExpireHashTable()->Upsert(entry->CopyKey(), expire_time.value());
     result.Add("OK");
     return result;
 }
@@ -293,7 +292,7 @@ Result SetNXFunction(DataStructureService& service, Command::CommandStrings args
         return result;
     }
 
-    auto [set_status, _] = service.SetData(args[1], args[2], SetMode::kNX, false);
+    auto [set_status, _, __] = service.SetData(args[1], args[2], SetMode::kNX, false);
     assert(set_status != SetStatus::kUpdated);
     result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
     return result;
@@ -378,7 +377,7 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
         return result;
     }
 
-    auto [set_status, old_value] = service.SetData(args[1], args[2], SetMode::kRegular, true);
+    auto [set_status, _, old_value] = service.SetData(args[1], args[2], SetMode::kRegular, true);
     assert(set_status != SetStatus::kNoOp);
 
     if (old_value == nullptr) {

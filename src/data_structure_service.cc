@@ -253,7 +253,7 @@ void DataStructureService::EraseKey(std::string_view key) {
     expire_ht_->Erase(key);
 }
 
-std::pair<SetStatus, MTSPtr> DataStructureService::SetData(
+std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::SetData(
   std::string_view key, std::string_view value, SetMode set_mode, bool get) {
     SetStatus set_status{SetStatus::kNoOp};
     MTSPtr old_value{nullptr};
@@ -321,7 +321,7 @@ std::pair<SetStatus, MTSPtr> DataStructureService::SetData(
     if (set_entry != nullptr) {
         set_entry->GetKey()->SetLRU(lru_clock_);
     }
-    return {set_status, old_value};
+    return {set_status, set_entry, old_value};
 }
 
 } // namespace rdss

@@ -44,8 +44,9 @@ public:
     enum class SetStatus { kNoOp, kInserted, kUpdated };
 
     /// Set 'key' 'value' pair in data table with respect to 'set_mode'. Return the result of the
-    /// operation and if 'get' is true and 'key' exists, return the old value of 'key'.
-    std::pair<SetStatus, MTSPtr>
+    /// operation, the entry of 'key', and if 'get' is true and 'key' exists, return the old value
+    /// of 'key'.
+    std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr>
     SetData(std::string_view key, std::string_view value, SetMode set_mode, bool get);
 
     /// Erase key in both data and expire table.

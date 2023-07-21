@@ -163,9 +163,23 @@ public:
         return {entry, !exists};
     }
 
-    /// Insert if 'key' not exists, overwrite if exists. Returns {entry of 'key', overwritten}.
+    /// Insert if 'key' not exists, overwrite if exists. Returns {entry of 'key', overwritten}. The
+    /// actual key is a shared_ptr constructed with string_view 'key'.
     std::pair<EntryPointer, bool> Upsert(std::string_view key, ValueType value) {
         auto [entry, exists] = FindOrCreate(key, true);
+        entry->value = std::move(value);
+        return {entry, exists};
+    }
+
+    /// Provides the same functionality as above, but with already constructed key shared_ptr. This
+    /// is used for a second table that shares the key object with the first table.
+    std::pair<EntryPointer, bool> Upsert(EntryType::KeyPointer key_ptr, ValueType value) {
+        auto [entry, exists] = FindOrCreate(key_ptr->StringView(), true, false);
+        if (exists) {
+            assert(entry->key.get() == key_ptr.get());
+        } else {
+            entry->key = key_ptr;
+        }
         entry->value = std::move(value);
         return {entry, exists};
     }
