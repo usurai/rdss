@@ -19,25 +19,24 @@ namespace detail {
 // Treat the second arg in 'args' as key and search if key is valid. If valid, update its LRU and
 // add it's corresponding value to result, then return {entry of the key, result}. Otherwise, If
 // it's stale, expire it, add null to result and return {nullptr, result}.
-std::pair<MTSHashTable::EntryPointer, Result>
-GetFunctionBase(DataStructureService& service, Args args) {
-    Result result;
-
-    auto entry = service.FindOrExpire(args[1]);
+MTSHashTable::EntryPointer
+GetFunctionBase(DataStructureService& service, Command::CommandString key, Result& result) {
+    auto entry = service.FindOrExpire(key);
     if (entry == nullptr) {
         result.AddNull();
     } else {
         result.Add(std::string(*entry->value));
         entry->GetKey()->SetLRU(service.lru_clock_);
     }
-    return {entry, result};
+    return entry;
 }
 
 // Call GetFunctionBase, if the key is found, call callback(found_entry).
 template<typename CallbackOnFound>
-Result
-GetFunctionBaseWithCallback(DataStructureService& service, Args args, CallbackOnFound callback) {
-    auto [entry, result] = GetFunctionBase(service, std::move(args));
+Result GetFunctionBaseWithCallback(
+  DataStructureService& service, Command::CommandString key, CallbackOnFound callback) {
+    Result result;
+    auto entry = GetFunctionBase(service, key, result);
     if (entry != nullptr) {
         callback(entry);
     }
@@ -330,12 +329,24 @@ Result SetNXFunction(DataStructureService& service, Command::CommandStrings args
 }
 
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
     if (args.size() != 2) {
-        Result result;
         result.Add("wrong number of arguments for command");
         return result;
     }
-    auto [_, result] = detail::GetFunctionBase(service, args);
+    detail::GetFunctionBase(service, args[1], result);
+    return result;
+}
+
+Result MGetFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() < 2) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+    for (size_t i = 1; i < args.size(); ++i) {
+        detail::GetFunctionBase(service, args[i], result);
+    }
     return result;
 }
 
@@ -346,7 +357,7 @@ Result GetDelFunction(DataStructureService& service, Command::CommandStrings arg
         return result;
     }
     return detail::GetFunctionBaseWithCallback(
-      service, args, [&service](MTSHashTable::EntryPointer entry) {
+      service, args[1], [&service](MTSHashTable::EntryPointer entry) {
           service.EraseKey(entry->GetKey()->StringView());
       });
 }
@@ -391,7 +402,7 @@ Result GetEXFunction(DataStructureService& service, Command::CommandStrings args
     }
 
     return detail::GetFunctionBaseWithCallback(
-      service, args, [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
+      service, args[1], [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
           auto key = entry->GetKey()->StringView();
           if (persist) {
               service.GetExpireHashTable()->Erase(key);
@@ -446,6 +457,7 @@ void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand(
       "MSETNX", Command("MSETNX").SetHandler(MSetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
+    service->RegisterCommand("MGET", Command("MGET").SetHandler(MGetFunction));
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
     service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));
     service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
