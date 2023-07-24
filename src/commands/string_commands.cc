@@ -249,6 +249,37 @@ Result SetFunction(DataStructureService& service, Command::CommandStrings args) 
     return result;
 }
 
+Result MSetFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() < 3 || args.size() % 2 == 0) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    for (size_t i = 1; i < args.size(); i += 2) {
+        service.SetData(args[i], args[i + 1], SetMode::kRegular, false);
+        service.GetExpireHashTable()->Erase(args[i]);
+    }
+    result.Add("OK");
+    return result;
+}
+
+Result MSetNXFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() < 3 || args.size() % 2 == 0) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    bool succeeded{false};
+    for (size_t i = 1; i < args.size(); i += 2) {
+        auto [set_status, _, __] = service.SetData(args[i], args[i + 1], SetMode::kNX, false);
+        succeeded |= (set_status == SetStatus::kInserted);
+    }
+    result.Add(((succeeded) ? 1 : 0));
+    return result;
+}
+
 template<typename RepToTime>
 Result SetEXFunctionBase(
   DataStructureService& service, Command::CommandStrings args, RepToTime rep_to_time) {
@@ -411,6 +442,9 @@ void RegisterStringCommands(DataStructureService* service) {
       "PSETEX", Command("PSETEX").SetHandler(PSetEXFunction).SetIsWriteCommand());
     service->RegisterCommand(
       "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
+    service->RegisterCommand("MSET", Command("MSET").SetHandler(MSetFunction).SetIsWriteCommand());
+    service->RegisterCommand(
+      "MSETNX", Command("MSETNX").SetHandler(MSetNXFunction).SetIsWriteCommand());
     service->RegisterCommand("GET", Command("GET").SetHandler(GetFunction));
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
     service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));

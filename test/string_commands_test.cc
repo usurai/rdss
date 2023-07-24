@@ -255,6 +255,38 @@ TEST_F(StringCommandsTest, SetNXTest) {
     ExpectKeyValue("k0", "v1");
 }
 
+TEST_F(StringCommandsTest, MSetTest) {
+    // MSET should succeed and invalidate expiration no matter key exists / is volatile or not.
+    Invoke("SET k1 v0");
+    Invoke("SET k2 v0 EX 1000");
+    ExpectString(Invoke("MSET k0 v1 k1 v1 k2 v1"), "OK");
+    ExpectKeyValue("k0", "v1");
+    ExpectKeyValue("k1", "v1");
+    ExpectKeyValue("k2", "v1");
+    ExpectNoTTL("k2");
+}
+
+TEST_F(StringCommandsTest, MSetNXTest) {
+    ExpectInt(Invoke("MSETNX k0 v0 k1 v1 k2 v2"), 1);
+    ExpectKeyValue("k0", "v0");
+    ExpectKeyValue("k1", "v1");
+    ExpectKeyValue("k2", "v2");
+
+    ExpectInt(Invoke("MSETNX k0 v1 k1 v2 k2 v3"), 0);
+    ExpectKeyValue("k0", "v0");
+    ExpectKeyValue("k1", "v1");
+    ExpectKeyValue("k2", "v2");
+
+    ExpectInt(Invoke("MSETNX k0 v1 k1 v2 k2 v3 k3 v4"), 1);
+    ExpectKeyValue("k3", "v4");
+
+    Invoke("SET k4 v4 EX 1");
+    AdvanceTime(1s);
+    ExpectInt(Invoke("MSETNX k4 v5"), 1);
+    ExpectKeyValue("k4", "v5");
+    ExpectNoTTL("k4");
+}
+
 TEST_F(StringCommandsTest, GetTest) {
     Result result;
     // key no exist -> nil
