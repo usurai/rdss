@@ -432,13 +432,13 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
-Result ExistsFunction(DataStructureService& service, Command::CommandStrings command_strings) {
+Result ExistsFunction(DataStructureService& service, Args args) {
     Result result;
     int32_t cnt{0};
-    for (size_t i = 1; i < command_strings.size(); ++i) {
-        auto entry = service.DataHashTable()->Find(command_strings[i]);
+    for (size_t i = 1; i < args.size(); ++i) {
+        auto entry = service.FindOrExpire(args[i]);
         if (entry != nullptr) {
-            entry->GetKey()->SetLRU(service.lru_clock_);
+            entry->GetKey()->SetLRU(service.GetLRUClock());
             ++cnt;
         }
     }
