@@ -18,6 +18,8 @@ class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
     using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
+    // TODO: use timepoint instead.
+    using DurationCount = int64_t;
 
 public:
     explicit DataStructureService(Config* config, Clock* clock)
@@ -66,6 +68,10 @@ public:
     /// scanned.
     void ActiveExpire();
 
+    DurationCount GetLRUClock() const { return lru_clock_; }
+
+    void SetLRUClock(DurationCount lru_clock) { lru_clock_ = lru_clock; }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
@@ -80,7 +86,6 @@ private:
     TimePoint command_time_snapshot_;
 
     // LRU-related
-    using DurationCount = int64_t;
     using LRUEntry = std::pair<DurationCount, MTSHashTable::EntryType::KeyPointer>;
     struct CompareLRUEntry {
         constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
@@ -89,15 +94,14 @@ private:
     };
     static constexpr size_t kEvictionPoolLimit = 16;
     std::set<LRUEntry, CompareLRUEntry> eviction_pool_;
+    DurationCount lru_clock_{0};
 
     // Index of next bucket of expire table to scan for expired key.
     size_t bucket_index_{0};
 
 public:
-    size_t active_expired_keys_{0};
-
     // TODO: move somewhere
-    DurationCount lru_clock_{0};
+    size_t active_expired_keys_{0};
 };
 
 } // namespace rdss

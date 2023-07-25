@@ -319,7 +319,7 @@ std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::
     }
     }
     if (set_entry != nullptr) {
-        set_entry->GetKey()->SetLRU(lru_clock_);
+        set_entry->GetKey()->SetLRU(GetLRUClock());
     }
     return {set_status, set_entry, old_value};
 }

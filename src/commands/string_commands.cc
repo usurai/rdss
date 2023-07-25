@@ -26,7 +26,7 @@ GetFunctionBase(DataStructureService& service, Command::CommandString key, Resul
         result.AddNull();
     } else {
         result.Add(std::string(*entry->value));
-        entry->GetKey()->SetLRU(service.lru_clock_);
+        entry->GetKey()->SetLRU(service.GetLRUClock());
     }
     return entry;
 }
@@ -303,6 +303,7 @@ Result SetEXFunctionBase(
 
     auto [entry, _] = service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
     service.GetExpireHashTable()->Upsert(entry->CopyKey(), expire_time.value());
+    entry->GetKey()->SetLRU(service.GetLRUClock());
     result.Add("OK");
     return result;
 }

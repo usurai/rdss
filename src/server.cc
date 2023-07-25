@@ -1,9 +1,9 @@
 #include "server.h"
 
-#include "io/async_operation.h"
 #include "client.h"
 #include "command.h"
 #include "command_registry.h"
+#include "io/async_operation.h"
 
 #include <chrono>
 #include <thread>
@@ -57,7 +57,7 @@ Task<void> Server::Cron() {
         co_await AwaitableTimeout(
           processor_.get(), std::chrono::milliseconds(interval_in_millisecond));
 
-        service_->lru_clock_ = detail::GetLruClock();
+        service_->SetLRUClock(detail::GetLruClock());
 
         service_->ActiveExpire();
     }
