@@ -3,6 +3,7 @@
 #include "base/memory.h"
 
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <functional>
@@ -47,6 +48,9 @@ template<typename Allocator>
 class HashTableKey {
 public:
     using String = std::basic_string<char, std::char_traits<char>, Allocator>;
+    using LastAccessTimeDuration = std::chrono::duration<uint32_t, std::milli>;
+    using LastAccessTimePoint
+      = std::chrono::time_point<std::chrono::steady_clock, LastAccessTimeDuration>;
 
     explicit HashTableKey(std::string_view sv)
       : data_(sv) {}
@@ -55,13 +59,13 @@ public:
 
     bool Equals(std::string_view rhs) const { return !data_.compare(rhs); }
 
-    void SetLRU(uint32_t lru) { lru_ = lru; }
+    void SetLRU(LastAccessTimePoint lru) { lru_ = lru; }
 
-    uint32_t GetLRU() const { return lru_; }
+    LastAccessTimePoint GetLRU() const { return lru_; }
 
 private:
     // TODO: Give it a more reasonable name.
-    uint32_t lru_ = 0;
+    LastAccessTimePoint lru_;
     const String data_;
 };
 

@@ -18,19 +18,26 @@ class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
     using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
-    // TODO: use timepoint instead.
-    using DurationCount = int64_t;
+    using LastAccessTimePoint = MTSHashTable::EntryType::KeyType::LastAccessTimePoint;
+    using LastAccessTimeDuration = MTSHashTable::EntryType::KeyType::LastAccessTimeDuration;
 
 public:
     explicit DataStructureService(Config* config, Clock* clock)
       : config_(config)
       , clock_(clock)
       , data_ht_(new MTSHashTable())
-      , expire_ht_(new ExpireHashTable()) {}
+      , expire_ht_(new ExpireHashTable()) {
+        RefreshLRUClock();
+    }
 
     Result Invoke(Command::CommandStrings command_strings);
 
     void RegisterCommand(CommandName name, Command command) {
+        std::transform(
+          name.begin(), name.end(), name.begin(), [](char c) { return std::tolower(c); });
+        commands_.emplace(name, command);
+        std::transform(
+          name.begin(), name.end(), name.begin(), [](char c) { return std::toupper(c); });
         commands_.emplace(std::move(name), std::move(command));
     }
 
@@ -68,9 +75,14 @@ public:
     /// scanned.
     void ActiveExpire();
 
-    DurationCount GetLRUClock() const { return lru_clock_; }
+    LastAccessTimePoint GetLRUClock() const { return lru_clock_; }
 
-    void SetLRUClock(DurationCount lru_clock) { lru_clock_ = lru_clock; }
+    void RefreshLRUClock() {
+        lru_clock_ = std::chrono::time_point_cast<LastAccessTimeDuration>(
+          LastAccessTimePoint::clock::now());
+    }
+
+    size_t GetEvictedKeys() const { return evicted_keys_; }
 
 private:
     size_t IsOOM() const;
@@ -86,7 +98,7 @@ private:
     TimePoint command_time_snapshot_;
 
     // LRU-related
-    using LRUEntry = std::pair<DurationCount, MTSHashTable::EntryType::KeyPointer>;
+    using LRUEntry = std::pair<LastAccessTimePoint, MTSHashTable::EntryType::KeyPointer>;
     struct CompareLRUEntry {
         constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
             return lhs.first < rhs.first;
@@ -94,7 +106,8 @@ private:
     };
     static constexpr size_t kEvictionPoolLimit = 16;
     std::set<LRUEntry, CompareLRUEntry> eviction_pool_;
-    DurationCount lru_clock_{0};
+    LastAccessTimePoint lru_clock_;
+    size_t evicted_keys_{0};
 
     // Index of next bucket of expire table to scan for expired key.
     size_t bucket_index_{0};

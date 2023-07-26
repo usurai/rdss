@@ -13,7 +13,9 @@ Result DbSizeFunction(DataStructureService& service, Command::CommandStrings) {
 
 Result InfoFunction(DataStructureService& service, Command::CommandStrings) {
     Result result;
-    result.Add("active_expired_keys:" + std::to_string(service.active_expired_keys_));
+    result.Add(
+      "# Memory\r\nevicted_keys:" + std::to_string(service.GetEvictedKeys())
+      + "\r\nactive_expired_keys:" + std::to_string(service.active_expired_keys_));
     return result;
 }
 

@@ -80,8 +80,9 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
               = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
             // TODO: dont convert to string_view
             VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
+            expire_ht_->Erase(entry->GetKey()->StringView());
             data_ht_->Erase(entry->GetKey()->StringView());
-            // ++evicted_keys;
+            ++evicted_keys_;
             delta
               -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
             VLOG(1) << "Freed " << delta << " bytes.";
@@ -104,8 +105,9 @@ bool DataStructureService::Evict(size_t bytes_to_free) {
           = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         // TODO: dont convert to string_view
         VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
+        expire_ht_->Erase(entry->GetKey()->StringView());
         data_ht_->Erase(entry->GetKey()->StringView());
-        // ++evicted_keys;
+        ++evicted_keys_;
         delta -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
         VLOG(1) << "Freed " << delta << " bytes.";
         freed += delta;
