@@ -432,6 +432,31 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
+Result AppendFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() != 3) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto key = args[1];
+    auto value = args[2];
+
+    auto [entry, exists] = service.DataHashTable()->FindOrCreate(key, true);
+    if (!exists) {
+        entry->value = CreateMTSPtr(value);
+    } else {
+        auto& original_value = entry->value;
+        if (original_value.use_count() != 1) {
+            entry->value = CreateMTSPtr(*original_value);
+        }
+        entry->value->append(value);
+    }
+    entry->GetKey()->SetLRU(service.GetLRUClock());
+    result.Add(entry->value->size());
+    return result;
+}
+
 Result ExistsFunction(DataStructureService& service, Args args) {
     Result result;
     int32_t cnt{0};
@@ -462,6 +487,7 @@ void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
     service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));
     service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
+    service->RegisterCommand("APPEND", Command("APPEND").SetHandler(AppendFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }
 

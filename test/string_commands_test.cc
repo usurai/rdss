@@ -403,4 +403,19 @@ TEST_F(StringCommandsTest, GetSetTest) {
     ExpectNoTTL("k0");
 }
 
+TEST_F(StringCommandsTest, AppendTest) {
+    // APPEND non-exist key should create
+    ExpectInt(Invoke("APPEND k0 foobar"), 6);
+    ExpectKeyValue("k0", "foobar");
+
+    // regular APPEND
+    ExpectInt(Invoke("APPEND k0 barfoo"), 12);
+    ExpectKeyValue("k0", "foobarbarfoo");
+
+    // APPEND should not modify TTL
+    Invoke("SET k0 v0 EX 1");
+    ExpectInt(Invoke("APPEND k0 foobar"), 8);
+    ExpectTTL("k0", 1s);
+}
+
 } // namespace rdss::test
