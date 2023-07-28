@@ -65,8 +65,9 @@ std::optional<TimePoint> IntToTimePoint(TimePoint now, TimePoint::rep i) {
     return now + Duration{i};
 }
 
-std::optional<TimePoint::rep> ParseInt(Command::CommandString str) {
-    TimePoint::rep ll;
+template<typename Rep>
+std::optional<Rep> ParseInt(Command::CommandString str) {
+    Rep ll;
     auto [ptr, err] = std::from_chars(str.data(), str.data() + str.size(), ll);
     if (err != std::errc{} || ptr != str.data() + str.size()) {
         return std::nullopt;
@@ -120,7 +121,7 @@ ExtractExpireResult ExtractExpireOptions(
         return ExtractExpireResult::kError;
     }
 
-    auto ll = ParseInt(args[i + 1]);
+    auto ll = ParseInt<TimePoint::rep>(args[i + 1]);
     if (!ll.has_value() || ll <= 0) {
         result.Add("value is not an integer or out of range");
         return ExtractExpireResult::kError;
@@ -289,7 +290,7 @@ Result SetEXFunctionBase(
         return result;
     }
 
-    auto ll = ParseInt(args[2]);
+    auto ll = ParseInt<TimePoint::rep>(args[2]);
     if (!ll.has_value()) {
         result.Add("value is not an integer or out of range");
         return result;
@@ -432,6 +433,50 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
+Result GetRangeFunction(DataStructureService& service, Command::CommandStrings args) {
+    Result result;
+    if (args.size() != 4) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto start = ParseInt<int32_t>(args[2]);
+    if (!start.has_value()) {
+        result.Add("value is not an integer or out of range");
+        return result;
+    }
+    auto end = ParseInt<int32_t>(args[3]);
+    if (!end.has_value()) {
+        result.Add("value is not an integer or out of range");
+        return result;
+    }
+
+    auto entry = service.FindOrExpire(args[1]);
+    if (entry == nullptr) {
+        result.Add("");
+        return result;
+    }
+
+    auto transform_index = [size = entry->value->size()](int32_t index) {
+        if (index < 0) {
+            index = std::max<int32_t>(0, size + index);
+        }
+        index = std::min<int32_t>(size, index);
+        return index;
+    };
+
+    const auto start_index = transform_index(start.value());
+    const auto end_index = transform_index(end.value());
+    if (start_index == entry->value->size() || end_index <= start_index) {
+        result.Add("");
+    } else {
+        result.Add(
+          std::string(entry->value->data() + start_index, entry->value->data() + end_index + 1));
+    }
+    entry->GetKey()->SetLRU(service.GetLRUClock());
+    return result;
+}
+
 Result AppendFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() != 3) {
@@ -487,6 +532,7 @@ void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("GETDEL", Command("GETDEL").SetHandler(GetDelFunction));
     service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));
     service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
+    service->RegisterCommand("GETRANGE", Command("GETRANGE").SetHandler(GetRangeFunction));
     service->RegisterCommand("APPEND", Command("APPEND").SetHandler(AppendFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
 }

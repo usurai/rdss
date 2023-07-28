@@ -403,6 +403,20 @@ TEST_F(StringCommandsTest, GetSetTest) {
     ExpectNoTTL("k0");
 }
 
+TEST_F(StringCommandsTest, GetRangeTest) {
+    ExpectString(Invoke("GETRANGE k 0 2"), "");
+
+    Invoke("SET k abcdefghijklmn");
+    ExpectString(Invoke("GETRANGE k 0 4"), "abcde");
+    ExpectString(Invoke("GETRANGE k 0 -1"), "abcdefghijklmn");
+    ExpectString(Invoke("GETRANGE k 3 7"), "defgh");
+    ExpectString(Invoke("GETRANGE k -4 -1"), "klmn");
+    ExpectString(Invoke("GETRANGE k -4 13"), "klmn");
+
+    ExpectString(Invoke("GETRANGE k 1000 0"), "");
+    ExpectString(Invoke("GETRANGE k 0 -20"), "");
+}
+
 TEST_F(StringCommandsTest, AppendTest) {
     // APPEND non-exist key should create
     ExpectInt(Invoke("APPEND k0 foobar"), 6);
