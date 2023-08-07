@@ -5,7 +5,7 @@
 
 namespace rdss {
 
-Result HelloFunction(DataStructureService&, Command::CommandStrings command_strings) {
+Result HelloFunction(DataStructureService&, Args command_strings) {
     Result result;
     if (command_strings.size() == 2 && !command_strings[1].compare("3")) {
         result.Add("OK");

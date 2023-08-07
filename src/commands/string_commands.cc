@@ -10,7 +10,6 @@
 namespace rdss {
 
 using TimePoint = DataStructureService::TimePoint;
-using Args = Command::CommandStrings;
 using SetMode = DataStructureService::SetMode;
 using SetStatus = DataStructureService::SetStatus;
 
@@ -201,7 +200,7 @@ bool ExtractSetOptions(
     return true;
 }
 
-Result SetFunction(DataStructureService& service, Command::CommandStrings args) {
+Result SetFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() < 3) {
         result.Add("wrong number of arguments for command");
@@ -282,7 +281,7 @@ Result MSetNXFunction(DataStructureService& service, Args args) {
 
 template<typename RepToTime>
 Result SetEXFunctionBase(
-  DataStructureService& service, Command::CommandStrings args, RepToTime rep_to_time) {
+  DataStructureService& service, Args args, RepToTime rep_to_time) {
     Result result;
     const auto now = service.GetCommandTimeSnapshot();
     if (args.size() != 4) {
@@ -309,15 +308,15 @@ Result SetEXFunctionBase(
     return result;
 }
 
-Result SetEXFunction(DataStructureService& service, Command::CommandStrings args) {
+Result SetEXFunction(DataStructureService& service, Args args) {
     return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::seconds>);
 }
 
-Result PSetEXFunction(DataStructureService& service, Command::CommandStrings args) {
+Result PSetEXFunction(DataStructureService& service, Args args) {
     return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::milliseconds>);
 }
 
-Result SetNXFunction(DataStructureService& service, Command::CommandStrings args) {
+Result SetNXFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() != 3) {
         result.Add("wrong number of arguments for command");
@@ -393,7 +392,7 @@ Result StrlenFunction(DataStructureService& service, Args args) {
     return result;
 }
 
-Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() != 2) {
         result.Add("wrong number of arguments for command");
@@ -403,7 +402,7 @@ Result GetFunction(DataStructureService& service, Command::CommandStrings args) 
     return result;
 }
 
-Result MGetFunction(DataStructureService& service, Command::CommandStrings args) {
+Result MGetFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() < 2) {
         result.Add("wrong number of arguments for command");
@@ -415,7 +414,7 @@ Result MGetFunction(DataStructureService& service, Command::CommandStrings args)
     return result;
 }
 
-Result GetDelFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetDelFunction(DataStructureService& service, Args args) {
     if (args.size() != 2) {
         Result result;
         result.Add("wrong number of arguments for command");
@@ -427,7 +426,7 @@ Result GetDelFunction(DataStructureService& service, Command::CommandStrings arg
       });
 }
 
-Result GetEXFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetEXFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() < 2) {
         result.Add("wrong number of arguments for command");
@@ -477,7 +476,7 @@ Result GetEXFunction(DataStructureService& service, Command::CommandStrings args
       });
 }
 
-Result GetSetFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetSetFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() != 3) {
         result.Add("wrong number of arguments for command");
@@ -496,7 +495,7 @@ Result GetSetFunction(DataStructureService& service, Command::CommandStrings arg
     return result;
 }
 
-Result GetRangeFunction(DataStructureService& service, Command::CommandStrings args) {
+Result GetRangeFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() != 4) {
         result.Add("wrong number of arguments for command");

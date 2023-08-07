@@ -5,13 +5,13 @@
 
 namespace rdss {
 
-Result DbSizeFunction(DataStructureService& service, Command::CommandStrings) {
+Result DbSizeFunction(DataStructureService& service, Args) {
     Result result;
     result.Add(static_cast<int>(service.DataHashTable()->Count()));
     return result;
 }
 
-Result InfoFunction(DataStructureService& service, Command::CommandStrings) {
+Result InfoFunction(DataStructureService& service, Args) {
     Result result;
     result.Add(
       "# Memory\r\nevicted_keys:" + std::to_string(service.GetEvictedKeys())
@@ -20,7 +20,7 @@ Result InfoFunction(DataStructureService& service, Command::CommandStrings) {
 }
 
 // TODO: Implementation.
-Result CommandFunction(DataStructureService&, Command::CommandStrings) {
+Result CommandFunction(DataStructureService&, Args) {
     Result result;
     result.Add(" ");
     return result;

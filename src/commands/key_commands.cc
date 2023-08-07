@@ -7,7 +7,7 @@
 
 namespace rdss {
 
-Result TtlFunction(DataStructureService& service, Command::CommandStrings args) {
+Result TtlFunction(DataStructureService& service, Args args) {
     Result result;
     if (args.size() > 2) {
         result.Add("syntax error");

@@ -41,4 +41,6 @@ private:
     HandlerType handler_;
 };
 
+using Args = Command::CommandStrings;
+
 } // namespace rdss
