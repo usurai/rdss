@@ -255,6 +255,25 @@ TEST_F(StringCommandsTest, SetNXTest) {
     ExpectKeyValue("k0", "v1");
 }
 
+TEST_F(StringCommandsTest, SetRangeTest) {
+    // SETRANGE on non-existing key creates it
+    ExpectInt(Invoke("SETRANGE k 0 foobar"), 6);
+    ExpectKeyValue("k", "foobar");
+
+    // SETRANGE at the end appends
+    ExpectInt(Invoke("SETRANGE k 6 foobar"), 12);
+    ExpectKeyValue("k", "foobarfoobar");
+
+    // SETRANGE at the middle replaces
+    ExpectInt(Invoke("SETRANGE k 3 foobar"), 9);
+    ExpectKeyValue("k", "foofoobar");
+
+    // zero-padding
+    ExpectInt(Invoke("SETRANGE k 12 foobar"), 18);
+    std::string expected{std::string{"foofoobar"} + std::string(3, 0) + std::string{"foobar"}};
+    ExpectKeyValue("k", expected);
+}
+
 TEST_F(StringCommandsTest, MSetTest) {
     // MSET should succeed and invalidate expiration no matter key exists / is volatile or not.
     Invoke("SET k1 v0");
@@ -430,6 +449,15 @@ TEST_F(StringCommandsTest, AppendTest) {
     Invoke("SET k0 v0 EX 1");
     ExpectInt(Invoke("APPEND k0 foobar"), 8);
     ExpectTTL("k0", 1s);
+}
+
+TEST_F(StringCommandsTest, StrlenTest) {
+    ExpectInt(Invoke("STRLEN k"), 0);
+    Invoke("SET k foobar");
+    ExpectInt(Invoke("STRLEN k"), 6);
+    Invoke("SET k foobar EX 1");
+    AdvanceTime(1s);
+    ExpectInt(Invoke("STRLEN k"), 0);
 }
 
 } // namespace rdss::test

@@ -330,6 +330,69 @@ Result SetNXFunction(DataStructureService& service, Command::CommandStrings args
     return result;
 }
 
+Result SetRangeFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() != 4) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto start = ParseInt<uint32_t>(args[2]);
+    if (!start.has_value()) {
+        result.Add("value is not an integer or out of range");
+        return result;
+    }
+    const auto start_index = start.value();
+
+    auto key = args[1];
+    auto [entry, exists] = service.DataHashTable()->FindOrCreate(key, true);
+    if (exists) {
+        auto expire_entry = service.GetExpireHashTable()->Find(key);
+        if (expire_entry != nullptr && expire_entry->value <= service.GetCommandTimeSnapshot()) {
+            entry->value.reset();
+            service.GetExpireHashTable()->Erase(key);
+            exists = false;
+        }
+    }
+
+    if (!exists || entry->value.use_count() != 1) {
+        if (start_index == 0) {
+            entry->value = CreateMTSPtr(args[3]);
+        } else {
+            std::string tmp(start_index + 1, 0);
+            tmp += args[3];
+            entry->value = CreateMTSPtr(tmp);
+        }
+    } else {
+        if (start_index > entry->value->size()) {
+            entry->value->append(start_index - entry->value->size(), 0);
+            entry->value->append(args[3]);
+        } else {
+            entry->value->replace(start_index, entry->value->size() - start_index, args[3]);
+        }
+    }
+    entry->GetKey()->SetLRU(service.GetLRUClock());
+    result.Add(entry->value->size());
+    return result;
+}
+
+Result StrlenFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() != 2) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    auto entry = service.FindOrExpire(args[1]);
+    if (entry == nullptr) {
+        result.Add(0);
+        return result;
+    }
+    result.Add(entry->value->size());
+    entry->GetKey()->SetLRU(service.GetLRUClock());
+    return result;
+}
+
 Result GetFunction(DataStructureService& service, Command::CommandStrings args) {
     Result result;
     if (args.size() != 2) {
@@ -524,6 +587,8 @@ void RegisterStringCommands(DataStructureService* service) {
       "PSETEX", Command("PSETEX").SetHandler(PSetEXFunction).SetIsWriteCommand());
     service->RegisterCommand(
       "SETNX", Command("SETNX").SetHandler(SetNXFunction).SetIsWriteCommand());
+    service->RegisterCommand(
+      "SETRANGE", Command("SETRANGE").SetHandler(SetRangeFunction).SetIsWriteCommand());
     service->RegisterCommand("MSET", Command("MSET").SetHandler(MSetFunction).SetIsWriteCommand());
     service->RegisterCommand(
       "MSETNX", Command("MSETNX").SetHandler(MSetNXFunction).SetIsWriteCommand());
@@ -533,8 +598,10 @@ void RegisterStringCommands(DataStructureService* service) {
     service->RegisterCommand("GETEX", Command("GETEX").SetHandler(GetEXFunction));
     service->RegisterCommand("GETSET", Command("GETSET").SetHandler(GetSetFunction));
     service->RegisterCommand("GETRANGE", Command("GETRANGE").SetHandler(GetRangeFunction));
+    service->RegisterCommand("SUBSTR", Command("SUBSTR").SetHandler(GetRangeFunction));
     service->RegisterCommand("APPEND", Command("APPEND").SetHandler(AppendFunction));
     service->RegisterCommand("EXISTS", Command("EXISTS").SetHandler(ExistsFunction));
+    service->RegisterCommand("STRLEN", Command("STRLEN").SetHandler(StrlenFunction));
 }
 
 } // namespace rdss
