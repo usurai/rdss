@@ -39,8 +39,29 @@ Result TtlFunction(DataStructureService& service, Args args) {
     return result;
 }
 
+Result DelFunction(DataStructureService& service, Args args) {
+    Result result;
+    if (args.size() < 2) {
+        result.Add("wrong number of arguments for command");
+        return result;
+    }
+
+    int deleted{0};
+    for (size_t i = 1; i < args.size(); ++i) {
+        auto key = args[i];
+        auto entry = service.FindOrExpire(key);
+        if (entry != nullptr) {
+            service.EraseKey(key);
+            ++deleted;
+        }
+    }
+    result.Add(deleted);
+    return result;
+}
+
 void RegisterKeyCommands(DataStructureService* service) {
     service->RegisterCommand("TTL", Command("TTL").SetHandler(TtlFunction));
+    service->RegisterCommand("DEL", Command("DEL").SetHandler(DelFunction).SetIsWriteCommand());
 }
 
 } // namespace rdss

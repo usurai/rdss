@@ -20,9 +20,13 @@ target_compile_features(redis_parser_test PRIVATE cxx_std_20)
 add_executable(string_commands_test string_commands_test.cc)
 target_compile_features(string_commands_test PRIVATE cxx_std_20)
 
+add_executable(key_commands_test key_commands_test.cc)
+target_compile_features(key_commands_test PRIVATE cxx_std_20)
+
 target_include_directories(hash_table_test PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(redis_parser_test PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(string_commands_test PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(key_commands_test PUBLIC ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(
   hash_table_test
@@ -40,7 +44,10 @@ target_link_libraries(
 
 target_link_libraries(string_commands_test PRIVATE librdss gtest_main glog::glog)
 
+target_link_libraries(key_commands_test PRIVATE librdss gtest_main glog::glog)
+
 include(GoogleTest)
 gtest_discover_tests(hash_table_test)
 gtest_discover_tests(redis_parser_test)
 gtest_discover_tests(string_commands_test)
+gtest_discover_tests(key_commands_test)
