@@ -35,7 +35,7 @@ public:
 
     AwaitableRecv Recv(Buffer::SinkType buffer);
     AwaitableCancellableRecv CancellableRecv(Buffer::SinkType buffer, CancellationToken* token);
-    AwaitableSend Send(std::string);
+    AwaitableSend Send(std::string_view);
     AwaitableCancellableSend CancellableSend(std::string data, CancellationToken* token);
     void Close();
     // AwaitableClose Close();

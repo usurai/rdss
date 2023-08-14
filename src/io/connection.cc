@@ -22,8 +22,8 @@ Connection::CancellableRecv(Buffer::SinkType buffer, CancellationToken* token) {
     return AwaitableCancellableRecv(processor_, fd_, token, std::move(buffer));
 }
 
-AwaitableSend Connection::Send(std::string data) {
-    return AwaitableSend(processor_, fd_, std::move(data));
+AwaitableSend Connection::Send(std::string_view data) {
+    return AwaitableSend(processor_, fd_, data);
 }
 
 AwaitableCancellableSend Connection::CancellableSend(std::string data, CancellationToken* token) {

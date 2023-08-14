@@ -28,18 +28,19 @@ Task<void> Client::Echo() {
     Buffer buffer(1024);
     while (true) {
         const auto bytes_read = co_await conn_->Recv(buffer.Sink());
-        LOG(INFO) << "read " << bytes_read;
         if (bytes_read == 0) {
             break;
         }
         buffer.Produce(bytes_read);
-        auto bytes_written = co_await conn_->Send(std::string(buffer.Source()));
-        LOG(INFO) << "written " << bytes_written;
+        auto bytes_written = co_await conn_->Send(buffer.Source());
         if (bytes_written == 0) {
             break;
         }
         buffer.Consume(bytes_written);
+        buffer.Reset();
     }
+    manager_->RemoveClient(conn_.get());
+    conn_->Close();
     OnConnectionClose();
 }
 
@@ -58,12 +59,24 @@ Task<void> Client::Process() {
             parser->BufferUpdate(data_start, query_buffer.Start());
         }
 
-        const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
-          query_buffer.Sink(), &cancel_token_);
-        VLOG(1) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
-        if (cancelled || bytes_read == 0) {
+        // Ideally:
+        // auto some_result = co_await conn_->Recv(SOME_PROCESSOR,  buffer, cancel_token_,);
+        // Underlying, recv sqe is submitted to ring of SOME_PROCESSOR
+
+        // Cancellable recv
+        // const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
+        //   query_buffer.Sink(), &cancel_token_);
+        // VLOG(1) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
+        // if (cancelled || bytes_read == 0) {
+        //     break;
+        // }
+
+        // Normal recv
+        const auto bytes_read = co_await conn_->Recv(query_buffer.Sink());
+        if (bytes_read == 0) {
             break;
         }
+
         query_buffer.Produce(bytes_read);
 
         VLOG(1) << "read length:" << bytes_read;
@@ -84,9 +97,16 @@ Task<void> Client::Process() {
         }
 
         // TODO: Handle short write.
-        const auto [send_cancelled, bytes_written] = co_await conn_->CancellableSend(
-          Replier::BuildReply(std::move(query_result)), &cancel_token_);
-        if (send_cancelled || bytes_written == 0) {
+        // Cancellable send
+        // const auto [send_cancelled, bytes_written] = co_await conn_->CancellableSend(
+        //   Replier::BuildReply(std::move(query_result)), &cancel_token_);
+        // if (send_cancelled || bytes_written == 0) {
+        //     break;
+        // }
+
+        const auto bytes_written = co_await conn_->Send(
+          Replier::BuildReply(std::move(query_result)));
+        if (bytes_written == 0) {
             break;
         }
 

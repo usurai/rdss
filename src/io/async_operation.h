@@ -257,7 +257,7 @@ private:
 
 class AwaitableSend : public AwaitableOperation<AwaitableSend> {
 public:
-    AwaitableSend(AsyncOperationProcessor* processor, int fd, std::string data)
+    AwaitableSend(AsyncOperationProcessor* processor, int fd, std::string_view data)
       : AwaitableOperation<AwaitableSend>(processor)
       , fd_(fd)
       , data_(std::move(data)) {}
@@ -270,7 +270,7 @@ public:
 
 private:
     int fd_;
-    std::string data_;
+    std::string_view data_;
 };
 
 class AwaitableCancellableSend : public AwaitableCancellableOperation<AwaitableCancellableSend> {
