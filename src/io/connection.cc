@@ -30,6 +30,10 @@ AwaitableCancellableSend Connection::CancellableSend(std::string data, Cancellat
     return AwaitableCancellableSend(processor_, fd_, token, std::move(data));
 }
 
+AwaitableWritev Connection::Writev(std::span<iovec> iovecs) {
+    return AwaitableWritev(processor_, fd_, iovecs);
+}
+
 void Connection::Close() {
     if (!active_) {
         return;

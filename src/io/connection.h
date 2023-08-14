@@ -16,6 +16,7 @@ class AwaitableRecv;
 class AwaitableCancellableRecv;
 class AwaitableSend;
 class AwaitableCancellableSend;
+class AwaitableWritev;
 // TODO
 // class AwaitableClose;
 
@@ -37,6 +38,7 @@ public:
     AwaitableCancellableRecv CancellableRecv(Buffer::SinkType buffer, CancellationToken* token);
     AwaitableSend Send(std::string_view);
     AwaitableCancellableSend CancellableSend(std::string data, CancellationToken* token);
+    AwaitableWritev Writev(std::span<iovec>);
     void Close();
     // AwaitableClose Close();
 

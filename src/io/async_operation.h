@@ -6,6 +6,7 @@
 #include "io/connection.h"
 
 #include <glog/logging.h>
+#include <sys/uio.h>
 
 #include <chrono>
 #include <coroutine>
@@ -260,7 +261,7 @@ public:
     AwaitableSend(AsyncOperationProcessor* processor, int fd, std::string_view data)
       : AwaitableOperation<AwaitableSend>(processor)
       , fd_(fd)
-      , data_(std::move(data)) {}
+      , data_(data) {}
 
     void PrepareSqe(io_uring_sqe* sqe) {
         io_uring_prep_send(sqe, fd_, data_.data(), data_.size(), 0);
@@ -288,6 +289,22 @@ public:
 
 private:
     std::string data_;
+};
+
+class AwaitableWritev : public AwaitableOperation<AwaitableWritev> {
+public:
+    AwaitableWritev(AsyncOperationProcessor* processor, int fd, std::span<iovec> iovecs)
+      : AwaitableOperation<AwaitableWritev>(processor)
+      , fd_(fd)
+      , iovecs_(iovecs) {}
+
+    void PrepareSqe(io_uring_sqe* sqe) {
+        io_uring_prep_writev(sqe, fd_, iovecs_.data(), iovecs_.size(), 0);
+    }
+
+private:
+    int fd_;
+    std::span<iovec> iovecs_;
 };
 
 class AwaitableTimeout : public AwaitableOperation<AwaitableTimeout> {
