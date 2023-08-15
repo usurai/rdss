@@ -30,7 +30,7 @@ public:
         RefreshLRUClock();
     }
 
-    Result Invoke(Command::CommandStrings command_strings);
+    void Invoke(Command::CommandStrings command_strings, Result& result);
 
     void RegisterCommand(CommandName name, Command command) {
         std::transform(

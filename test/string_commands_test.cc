@@ -192,7 +192,7 @@ TEST_F(StringCommandsTest, MSetTest) {
     // MSET should succeed and invalidate expiration no matter key exists / is volatile or not.
     Invoke("SET k1 v0");
     Invoke("SET k2 v0 EX 1000");
-    ExpectString(Invoke("MSET k0 v1 k1 v1 k2 v1"), "OK");
+    ExpectOk(Invoke("MSET k0 v1 k1 v1 k2 v1"));
     ExpectKeyValue("k0", "v1");
     ExpectKeyValue("k1", "v1");
     ExpectKeyValue("k2", "v1");
@@ -229,10 +229,7 @@ TEST_F(StringCommandsTest, GetTest) {
     // key exist
     //      valid   -> value, update lru
     Invoke("SET k0 v0");
-    result = Invoke("GET k0");
-    ASSERT_EQ(result.Size(), 1);
-    EXPECT_EQ(result.data[0], "v0");
-    // TODO: LRU
+    ExpectString(Invoke("GET k0"), "v0");
 
     Invoke("SET k0 v0 EX 10");
     result = Invoke("GET k0");

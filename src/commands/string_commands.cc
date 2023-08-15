@@ -22,9 +22,9 @@ MTSHashTable::EntryPointer
 GetFunctionBase(DataStructureService& service, Command::CommandString key, Result& result) {
     auto entry = service.FindOrExpire(key);
     if (entry == nullptr) {
-        result.AddNull();
+        result.SetNil();
     } else {
-        result.Add(std::string(*entry->value));
+        result.SetString(entry->value);
         entry->GetKey()->SetLRU(service.GetLRUClock());
     }
     return entry;
@@ -32,14 +32,15 @@ GetFunctionBase(DataStructureService& service, Command::CommandString key, Resul
 
 // Call GetFunctionBase, if the key is found, call callback(found_entry).
 template<typename CallbackOnFound>
-Result GetFunctionBaseWithCallback(
-  DataStructureService& service, Command::CommandString key, CallbackOnFound callback) {
-    Result result;
+void GetFunctionBaseWithCallback(
+  DataStructureService& service,
+  Command::CommandString key,
+  Result& result,
+  CallbackOnFound callback) {
     auto entry = GetFunctionBase(service, key, result);
     if (entry != nullptr) {
         callback(entry);
     }
-    return result;
 }
 
 } // namespace detail
@@ -112,22 +113,22 @@ ExtractExpireResult ExtractExpireOptions(
     }
 
     if (i == args.size() - 1) {
-        result.Add("syntax error");
+        result.SetError(Error::kSyntaxError);
         return ExtractExpireResult::kError;
     }
     if (expire_time.has_value()) {
-        result.Add("syntax error");
+        result.SetError(Error::kSyntaxError);
         return ExtractExpireResult::kError;
     }
 
     auto ll = ParseInt<TimePoint::rep>(args[i + 1]);
     if (!ll.has_value() || ll <= 0) {
-        result.Add("value is not an integer or out of range");
+        result.SetError(Error::kNotAnInt);
         return ExtractExpireResult::kError;
     }
     expire_time = rep_to_tp(ll.value());
     if (!expire_time.has_value()) {
-        result.Add("value is not an integer or out of range");
+        result.SetError(Error::kNotAnInt);
         return ExtractExpireResult::kError;
     }
 
@@ -159,21 +160,21 @@ bool ExtractSetOptions(
             continue;
         } else if (!args[i].compare("NX")) {
             if (set_mode != SetMode::kRegular) {
-                result.Add("syntax error");
+                result.SetError(Error::kSyntaxError);
                 return false;
             }
             set_mode = SetMode::kNX;
             continue;
         } else if (!args[i].compare("XX")) {
             if (set_mode != SetMode::kRegular) {
-                result.Add("syntax error");
+                result.SetError(Error::kSyntaxError);
                 return false;
             }
             set_mode = SetMode::kXX;
             continue;
         } else if (!args[i].compare("KEEPTTL")) {
             if (expire_time.has_value()) {
-                result.Add("syntax error");
+                result.SetError(Error::kSyntaxError);
                 return false;
             }
             keep_ttl = true;
@@ -185,14 +186,14 @@ bool ExtractSetOptions(
         case ExtractExpireResult::kError:
             return false;
         case ExtractExpireResult::kNotFound: {
-            result.Add("syntax error");
+            result.SetError(Error::kSyntaxError);
             return false;
         }
         case ExtractExpireResult::kDone: {
             if (!keep_ttl) {
                 break;
             }
-            result.Add("syntax error");
+            result.SetError(Error::kSyntaxError);
             return false;
         }
         }
@@ -200,11 +201,10 @@ bool ExtractSetOptions(
     return true;
 }
 
-Result SetFunction(DataStructureService& service, Args args) {
-    Result result;
+void SetFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 3) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     const auto cmd_time = service.GetCommandTimeSnapshot();
@@ -217,15 +217,15 @@ Result SetFunction(DataStructureService& service, Args args) {
       args.size() > 3
       && !ExtractSetOptions(
         args.subspan(3), cmd_time, result, set_mode, expire_time, keep_ttl, get)) {
-        return result;
+        return;
     }
 
     auto key = args[1];
     auto* expire_ht = service.GetExpireHashTable();
     auto [set_status, entry, old_value] = service.SetData(key, args[2], set_mode, get);
     if (set_status == SetStatus::kNoOp) {
-        result.AddNull();
-        return result;
+        result.SetNil();
+        return;
     }
 
     if (expire_time.has_value()) {
@@ -237,37 +237,32 @@ Result SetFunction(DataStructureService& service, Args args) {
 
     if (get) {
         if (old_value == nullptr) {
-            result.AddNull();
+            result.SetNil();
         } else {
             // TODO: result should take the ownership of shared_ptr.
-            result.Add(std::string(*old_value));
+            result.SetString(std::move(old_value));
         }
     } else {
-        result.Add("OK");
+        result.SetOk();
     }
-    return result;
 }
 
-Result MSetFunction(DataStructureService& service, Args args) {
-    Result result;
+void MSetFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 3 || args.size() % 2 == 0) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     for (size_t i = 1; i < args.size(); i += 2) {
         service.SetData(args[i], args[i + 1], SetMode::kRegular, false);
         service.GetExpireHashTable()->Erase(args[i]);
     }
-    result.Add("OK");
-    return result;
 }
 
-Result MSetNXFunction(DataStructureService& service, Args args) {
-    Result result;
+void MSetNXFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 3 || args.size() % 2 == 0) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     bool succeeded{false};
@@ -275,71 +270,64 @@ Result MSetNXFunction(DataStructureService& service, Args args) {
         auto [set_status, _, __] = service.SetData(args[i], args[i + 1], SetMode::kNX, false);
         succeeded |= (set_status == SetStatus::kInserted);
     }
-    result.Add(((succeeded) ? 1 : 0));
-    return result;
+    result.SetInt(((succeeded) ? 1 : 0));
 }
 
 template<typename RepToTime>
-Result SetEXFunctionBase(
-  DataStructureService& service, Args args, RepToTime rep_to_time) {
-    Result result;
+void SetEXFunctionBase(
+  DataStructureService& service, Args args, Result& result, RepToTime rep_to_time) {
     const auto now = service.GetCommandTimeSnapshot();
     if (args.size() != 4) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto ll = ParseInt<TimePoint::rep>(args[2]);
     if (!ll.has_value()) {
-        result.Add("value is not an integer or out of range");
-        return result;
+        result.SetError(Error::kNotAnInt);
+        return;
     }
 
     auto expire_time = rep_to_time(now, ll.value());
     if (!expire_time.has_value()) {
-        result.Add("value is not an integer or out of range");
-        return result;
+        result.SetError(Error::kNotAnInt);
+        return;
     }
 
     auto [entry, _] = service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
     service.GetExpireHashTable()->Upsert(entry->CopyKey(), expire_time.value());
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    result.Add("OK");
-    return result;
 }
 
-Result SetEXFunction(DataStructureService& service, Args args) {
-    return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::seconds>);
+void SetEXFunction(DataStructureService& service, Args args, Result& result) {
+    SetEXFunctionBase(service, args, result, IntToTimePoint<std::chrono::seconds>);
 }
 
-Result PSetEXFunction(DataStructureService& service, Args args) {
-    return SetEXFunctionBase(service, args, IntToTimePoint<std::chrono::milliseconds>);
+void PSetEXFunction(DataStructureService& service, Args args, Result& result) {
+    SetEXFunctionBase(service, args, result, IntToTimePoint<std::chrono::milliseconds>);
 }
 
-Result SetNXFunction(DataStructureService& service, Args args) {
-    Result result;
+void SetNXFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 3) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto [set_status, _, __] = service.SetData(args[1], args[2], SetMode::kNX, false);
     assert(set_status != SetStatus::kUpdated);
-    result.Add((set_status == SetStatus::kInserted) ? 1 : 0);
-    return result;
+    result.SetInt((set_status == SetStatus::kInserted) ? 1 : 0);
 }
 
-Result SetRangeFunction(DataStructureService& service, Args args) {
-    Result result;
+void SetRangeFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 4) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto start = ParseInt<uint32_t>(args[2]);
     if (!start.has_value()) {
-        result.Add("value is not an integer or out of range");
-        return result;
+        result.SetError(Error::kNotAnInt);
+        return;
     }
     const auto start_index = start.value();
 
@@ -371,66 +359,57 @@ Result SetRangeFunction(DataStructureService& service, Args args) {
         }
     }
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    result.Add(entry->value->size());
-    return result;
+    result.SetInt(entry->value->size());
 }
 
-Result StrlenFunction(DataStructureService& service, Args args) {
-    Result result;
+void StrlenFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 2) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto entry = service.FindOrExpire(args[1]);
     if (entry == nullptr) {
-        result.Add(0);
-        return result;
+        result.SetInt(0);
+        return;
     }
-    result.Add(entry->value->size());
+    result.SetInt(entry->value->size());
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    return result;
 }
 
-Result GetFunction(DataStructureService& service, Args args) {
-    Result result;
+void GetFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 2) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
     detail::GetFunctionBase(service, args[1], result);
-    return result;
 }
 
-Result MGetFunction(DataStructureService& service, Args args) {
-    Result result;
+void MGetFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 2) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
     for (size_t i = 1; i < args.size(); ++i) {
         detail::GetFunctionBase(service, args[i], result);
     }
-    return result;
 }
 
-Result GetDelFunction(DataStructureService& service, Args args) {
+void GetDelFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 2) {
-        Result result;
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
-    return detail::GetFunctionBaseWithCallback(
-      service, args[1], [&service](MTSHashTable::EntryPointer entry) {
+    detail::GetFunctionBaseWithCallback(
+      service, args[1], result, [&service](MTSHashTable::EntryPointer entry) {
           service.EraseKey(entry->GetKey()->StringView());
       });
 }
 
-Result GetEXFunction(DataStructureService& service, Args args) {
-    Result result;
+void GetEXFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 2) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     bool persist{false};
@@ -439,8 +418,8 @@ Result GetEXFunction(DataStructureService& service, Args args) {
         for (size_t i = 2; i < args.size(); ++i) {
             if (!args[i].compare("PERSIST")) {
                 if (expire_time.has_value() || persist) {
-                    result.Add("syntax error");
-                    return result;
+                    result.SetError(Error::kSyntaxError);
+                    return;
                 }
                 persist = true;
                 continue;
@@ -449,15 +428,15 @@ Result GetEXFunction(DataStructureService& service, Args args) {
               args, i, service.GetCommandTimeSnapshot(), result, expire_time);
             switch (expire_result) {
             case ExtractExpireResult::kError:
-                return result;
+                return;
             case ExtractExpireResult::kNotFound: {
-                result.Add("syntax error");
-                return result;
+                result.SetError(Error::kSyntaxError);
+                return;
             }
             case ExtractExpireResult::kDone: {
                 if (persist) {
-                    result.Add("syntax error");
-                    return result;
+                    result.SetError(Error::kSyntaxError);
+                    return;
                 }
                 break;
             }
@@ -465,8 +444,8 @@ Result GetEXFunction(DataStructureService& service, Args args) {
         }
     }
 
-    return detail::GetFunctionBaseWithCallback(
-      service, args[1], [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
+    detail::GetFunctionBaseWithCallback(
+      service, args[1], result, [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
           auto key = entry->GetKey()->StringView();
           if (persist) {
               service.GetExpireHashTable()->Erase(key);
@@ -476,47 +455,44 @@ Result GetEXFunction(DataStructureService& service, Args args) {
       });
 }
 
-Result GetSetFunction(DataStructureService& service, Args args) {
-    Result result;
+void GetSetFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 3) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto [set_status, _, old_value] = service.SetData(args[1], args[2], SetMode::kRegular, true);
     assert(set_status != SetStatus::kNoOp);
 
     if (old_value == nullptr) {
-        result.AddNull();
+        result.SetNil();
     } else {
-        result.Add(std::string(*old_value));
+        result.SetString(std::move(old_value));
         service.GetExpireHashTable()->Erase(args[1]);
     }
-    return result;
 }
 
-Result GetRangeFunction(DataStructureService& service, Args args) {
-    Result result;
+void GetRangeFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 4) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto start = ParseInt<int32_t>(args[2]);
     if (!start.has_value()) {
-        result.Add("value is not an integer or out of range");
-        return result;
+        result.SetError(Error::kNotAnInt);
+        return;
     }
     auto end = ParseInt<int32_t>(args[3]);
     if (!end.has_value()) {
-        result.Add("value is not an integer or out of range");
-        return result;
+        result.SetError(Error::kNotAnInt);
+        return;
     }
 
     auto entry = service.FindOrExpire(args[1]);
     if (entry == nullptr) {
-        result.Add("");
-        return result;
+        result.SetString(CreateMTSPtr(""));
+        return;
     }
 
     auto transform_index = [size = entry->value->size()](int32_t index) {
@@ -530,20 +506,18 @@ Result GetRangeFunction(DataStructureService& service, Args args) {
     const auto start_index = transform_index(start.value());
     const auto end_index = transform_index(end.value());
     if (start_index == entry->value->size() || end_index <= start_index) {
-        result.Add("");
+        result.SetString(CreateMTSPtr(""));
     } else {
-        result.Add(
-          std::string(entry->value->data() + start_index, entry->value->data() + end_index + 1));
+        result.SetString(CreateMTSPtr(
+          std::string_view(entry->value->data() + start_index, end_index - start_index + 1)));
     }
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    return result;
 }
 
-Result AppendFunction(DataStructureService& service, Args args) {
-    Result result;
+void AppendFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() != 3) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto key = args[1];
@@ -560,12 +534,10 @@ Result AppendFunction(DataStructureService& service, Args args) {
         entry->value->append(value);
     }
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    result.Add(entry->value->size());
-    return result;
+    result.SetInt(entry->value->size());
 }
 
-Result ExistsFunction(DataStructureService& service, Args args) {
-    Result result;
+void ExistsFunction(DataStructureService& service, Args args, Result& result) {
     int32_t cnt{0};
     for (size_t i = 1; i < args.size(); ++i) {
         auto entry = service.FindOrExpire(args[i]);
@@ -574,8 +546,7 @@ Result ExistsFunction(DataStructureService& service, Args args) {
             ++cnt;
         }
     }
-    result.Add(cnt);
-    return result;
+    result.SetInt(cnt);
 }
 
 void RegisterStringCommands(DataStructureService* service) {

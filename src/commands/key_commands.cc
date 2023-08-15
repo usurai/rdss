@@ -7,43 +7,40 @@
 
 namespace rdss {
 
-Result TtlFunction(DataStructureService& service, Args args) {
-    Result result;
+void TtlFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() > 2) {
-        result.Add("syntax error");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     auto key = args[1];
     auto data_entry = service.DataHashTable()->Find(key);
     if (data_entry == nullptr) {
-        result.Add(-2);
-        return result;
+        result.SetInt(-2);
+        return;
     }
     auto expire_entry = service.GetExpireHashTable()->Find(key);
     if (expire_entry == nullptr) {
-        result.Add(-1);
-        return result;
+        result.SetInt(-1);
+        return;
     }
     const auto cmd_time = service.GetCommandTimeSnapshot();
     if (expire_entry->value <= cmd_time) {
         service.DataHashTable()->Erase(key);
         service.GetExpireHashTable()->Erase(key);
-        result.Add(-2);
-        return result;
+        result.SetInt(-2);
+        return;
     }
 
     const auto ttl = std::chrono::duration_cast<std::chrono::seconds>(
       expire_entry->value - cmd_time);
-    result.Add(ttl.count());
-    return result;
+    result.SetInt(ttl.count());
 }
 
-Result DelFunction(DataStructureService& service, Args args) {
-    Result result;
+void DelFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() < 2) {
-        result.Add("wrong number of arguments for command");
-        return result;
+        result.SetError(Error::kWrongArgNum);
+        return;
     }
 
     int deleted{0};
@@ -55,8 +52,7 @@ Result DelFunction(DataStructureService& service, Args args) {
             ++deleted;
         }
     }
-    result.Add(deleted);
-    return result;
+    result.SetInt(deleted);
 }
 
 void RegisterKeyCommands(DataStructureService* service) {

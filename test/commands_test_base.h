@@ -32,7 +32,9 @@ protected:
         buffer_.Produce(query.size());
         auto parse_result = InlineParser::ParseInline(&buffer_);
         EXPECT_EQ(parse_result.first, RedisParser::State::kDone);
-        return service_.Invoke(parse_result.second);
+        Result result;
+        service_.Invoke(parse_result.second, result);
+        return result;
     }
 
     void ExpectKeyValue(std::string_view key, std::string_view value) {
@@ -66,21 +68,19 @@ protected:
         }
     }
 
-    void ExpectNull(Result result) {
-        ASSERT_EQ(result.Size(), 1);
-        EXPECT_TRUE(result.is_null[0]);
-    }
+    void ExpectOk(Result result) { EXPECT_EQ(result.type, Result::Type::kOk); }
+
+    void ExpectNull(Result result) { ASSERT_EQ(result.type, Result::Type::kNil); }
 
     void ExpectString(Result result, std::string_view str) {
-        ASSERT_EQ(result.Size(), 1);
-        ASSERT_EQ(result.data.size(), 1);
-        EXPECT_EQ(result.data[0], str);
+        ASSERT_EQ(result.type, Result::Type::kString);
+        ASSERT_NE(result.string_ptr, nullptr);
+        EXPECT_EQ(*result.string_ptr, str);
     }
 
-    void ExpectInt(Result result, int i) {
-        ASSERT_EQ(result.Size(), 1);
-        ASSERT_EQ(result.ints.size(), 1);
-        EXPECT_EQ(result.ints[0], i);
+    void ExpectInt(Result result, int64_t i) {
+        ASSERT_EQ(result.type, Result::Type::kInt);
+        EXPECT_EQ(result.int_value, i);
     }
 
     void AdvanceTime(Clock::TimePoint::duration duration) {

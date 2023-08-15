@@ -1,4 +1,4 @@
-add_library(resp redis_parser.cc)
+add_library(resp error.cc redis_parser.cc)
 
 target_compile_features(resp PRIVATE cxx_std_20)
 

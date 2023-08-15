@@ -5,25 +5,22 @@
 
 namespace rdss {
 
-Result DbSizeFunction(DataStructureService& service, Args) {
-    Result result;
-    result.Add(static_cast<int>(service.DataHashTable()->Count()));
-    return result;
+void DbSizeFunction(DataStructureService& service, Args, Result& result) {
+    result.SetInt(static_cast<int>(service.DataHashTable()->Count()));
 }
 
-Result InfoFunction(DataStructureService& service, Args) {
-    Result result;
-    result.Add(
+void InfoFunction(DataStructureService& service, Args, Result& result) {
+    auto str_ptr = CreateMTSPtr(
       "# Memory\r\nevicted_keys:" + std::to_string(service.GetEvictedKeys())
       + "\r\nactive_expired_keys:" + std::to_string(service.active_expired_keys_));
-    return result;
+
+    result.SetString(std::move(str_ptr));
 }
 
 // TODO: Implementation.
-Result CommandFunction(DataStructureService&, Args) {
-    Result result;
-    result.Add(" ");
-    return result;
+void CommandFunction(DataStructureService&, Args, Result& result) {
+    auto str_ptr = CreateMTSPtr(" ");
+    result.SetString(std::move(str_ptr));
 }
 
 void RegisterMiscCommands(DataStructureService* service) {

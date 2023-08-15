@@ -5,14 +5,13 @@
 
 namespace rdss {
 
-Result HelloFunction(DataStructureService&, Args command_strings) {
-    Result result;
+// TODO: This needs more work.
+void HelloFunction(DataStructureService&, Args command_strings, Result& result) {
     if (command_strings.size() == 2 && !command_strings[1].compare("3")) {
-        result.Add("OK");
+        result.SetOk();
     } else {
-        result.Add("Error");
+        result.SetError(Error::kProtocol);
     }
-    return result;
 }
 
 void RegisterClientCommands(DataStructureService* service) {

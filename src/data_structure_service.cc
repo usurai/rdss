@@ -12,35 +12,30 @@ namespace rdss {
 using SetStatus = DataStructureService::SetStatus;
 using SetMode = DataStructureService::SetMode;
 
-Result DataStructureService::Invoke(Command::CommandStrings command_strings) {
+void DataStructureService::Invoke(Command::CommandStrings command_strings, Result& result) {
     VLOG(3) << "received " << command_strings.size() << " commands:";
     for (const auto& arg : command_strings) {
         VLOG(3) << arg;
     }
 
-    Result result;
-
     auto command_itor = commands_.find(command_strings[0]);
     if (command_itor == commands_.end()) {
-        // TODO: this should be error
-        result.Add("command not found");
-        return result;
+        result.SetError(Error::kUnknownCommand);
+        return;
     }
     auto& command = command_itor->second;
 
     if (command.IsWriteCommand()) {
         size_t bytes_to_free = IsOOM();
         if (bytes_to_free != 0 && !Evict(bytes_to_free)) {
-            // TODO: this should be error
-            result.Add("OOM");
-            return result;
+            result.SetError(Error::kOOM);
+            return;
         }
     }
 
     command_time_snapshot_ = clock_->Now();
 
-    result = command(*this, std::move(command_strings));
-    return result;
+    command(*this, std::move(command_strings), result);
 }
 
 size_t DataStructureService::IsOOM() const {

@@ -4,7 +4,6 @@
 #include "client_manager.h"
 #include "constants.h"
 #include "resp/redis_parser.h"
-#include "resp/replier.h"
 
 #include <glog/logging.h>
 
@@ -89,10 +88,10 @@ Task<void> Client::Process() {
             parse_ongoing = true;
             continue;
         case RedisParser::State::kError:
-            query_result.Add("parse error");
+            query_result.SetError(Error::kProtocol);
             break;
         case RedisParser::State::kDone:
-            query_result = service_->Invoke(command_strings);
+            service_->Invoke(command_strings, query_result);
             break;
         }
 
@@ -104,8 +103,12 @@ Task<void> Client::Process() {
         //     break;
         // }
 
-        const auto bytes_written = co_await conn_->Send(
-          Replier::BuildReply(std::move(query_result)));
+        size_t bytes_written{0};
+        if (query_result.NeedsScatter()) {
+            bytes_written = co_await conn_->Writev(query_result.AsIovecs());
+        } else {
+            bytes_written = co_await conn_->Send(query_result.AsStringView());
+        }
         if (bytes_written == 0) {
             break;
         }

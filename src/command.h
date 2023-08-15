@@ -14,13 +14,13 @@ class Command {
 public:
     using CommandString = std::string_view;
     using CommandStrings = std::span<CommandString>;
-    using HandlerType = std::function<Result(DataStructureService&, CommandStrings)>;
+    using HandlerType = std::function<void(DataStructureService&, CommandStrings, Result&)>;
 
     Command(std::string name)
       : name_(std::move(name)) {}
 
-    Result operator()(DataStructureService& service, CommandStrings command_strings) {
-        return handler_(service, std::move(command_strings));
+    void operator()(DataStructureService& service, CommandStrings command_strings, Result& result) {
+        handler_(service, std::move(command_strings), result);
     }
 
     Command& SetHandler(HandlerType handler) {
