@@ -333,6 +333,16 @@ TEST_F(StringCommandsTest, GetSetTest) {
     ExpectNoTTL("k0");
 }
 
+TEST_F(StringCommandsTest, MGetTest) {
+    Invoke("MSET k0 xx k1 xxxxxx k2 xxxxxxxxxxxxxxx");
+    ExpectStrings(Invoke("MGET k0"), {"xx"});
+    ExpectStrings(Invoke("MGET k0 k1 k2"), {"xx", "xxxxxx", "xxxxxxxxxxxxxxx"});
+    ExpectStrings(Invoke("MGET k0 k1 k3 k2"), {"xx", "xxxxxx", "", "xxxxxxxxxxxxxxx"});
+    Invoke("SET k0 v0 EX 1");
+    AdvanceTime(1s);
+    ExpectStrings(Invoke("MGET k0 k1 k2"), {"", "xxxxxx", "xxxxxxxxxxxxxxx"});
+}
+
 TEST_F(StringCommandsTest, GetRangeTest) {
     ExpectString(Invoke("GETRANGE k 0 2"), "");
 

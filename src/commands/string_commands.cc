@@ -391,7 +391,14 @@ void MGetFunction(DataStructureService& service, Args args, Result& result) {
         return;
     }
     for (size_t i = 1; i < args.size(); ++i) {
-        detail::GetFunctionBase(service, args[i], result);
+        auto key = args[i];
+        auto entry = service.FindOrExpire(key);
+        if (entry == nullptr) {
+            result.AddString(nullptr);
+        } else {
+            result.AddString(entry->value);
+            entry->GetKey()->SetLRU(service.GetLRUClock());
+        }
     }
 }
 

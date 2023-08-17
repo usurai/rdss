@@ -78,6 +78,21 @@ protected:
         EXPECT_EQ(*result.string_ptr, str);
     }
 
+    void ExpectStrings(Result result, std::vector<std::string> strings) {
+        ASSERT_EQ(result.type, Result::Type::kStrings);
+        ASSERT_EQ(result.strings.size(), strings.size());
+        for (size_t i = 0; i < strings.size(); ++i) {
+            if (strings[i].empty()) {
+                if (result.strings[i] == nullptr) {
+                    continue;
+                }
+                EXPECT_TRUE(result.strings[i]->empty());
+            } else {
+                EXPECT_FALSE(result.strings[i]->compare(strings[i]));
+            }
+        }
+    }
+
     void ExpectInt(Result result, int64_t i) {
         ASSERT_EQ(result.type, Result::Type::kInt);
         EXPECT_EQ(result.int_value, i);

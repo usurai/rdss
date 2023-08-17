@@ -4,6 +4,7 @@
 #include "client_manager.h"
 #include "constants.h"
 #include "resp/redis_parser.h"
+#include "resp/replier.h"
 
 #include <glog/logging.h>
 
@@ -45,11 +46,14 @@ Task<void> Client::Echo() {
 
 Task<void> Client::Process() {
     Buffer query_buffer(kIOGenericBufferSize);
+    Buffer output_buffer(kOutputBufferSize);
+    std::vector<iovec> iovecs;
+    Result query_result;
+
     // TODO: Make use of RedisParser::InProgress().
     bool parse_ongoing = false;
     // TODO: Lazily create parser.
     auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
-    Result query_result;
 
     while (true) {
         const auto data_start = query_buffer.EnsureAvailable(
@@ -104,10 +108,11 @@ Task<void> Client::Process() {
         // }
 
         size_t bytes_written{0};
-        if (query_result.NeedsScatter()) {
-            bytes_written = co_await conn_->Writev(query_result.AsIovecs());
+        if (NeedsScatter(query_result)) {
+            ResultToIovecs(query_result, output_buffer, iovecs);
+            bytes_written = co_await conn_->Writev(iovecs);
         } else {
-            bytes_written = co_await conn_->Send(query_result.AsStringView());
+            bytes_written = co_await conn_->Send(ResultToStringView(query_result, output_buffer));
         }
         if (bytes_written == 0) {
             break;
@@ -117,6 +122,8 @@ Task<void> Client::Process() {
         parse_ongoing = false;
         parser->Reset();
         query_result.Reset();
+        output_buffer.Reset();
+        iovecs.clear();
     }
     manager_->RemoveClient(conn_.get());
     conn_->Close();
