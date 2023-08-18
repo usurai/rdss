@@ -61,13 +61,11 @@ ParsingResult InlineParser::Parse() {
 }
 
 ParsingResult MultiBulkParser::Parse() {
-    // assert(state_ != State::kError);
     if (state_ != State::kParsing) {
         Reset();
     }
 
     auto buffer = buffer_->Source();
-
     VLOG(2) << "Parsing:'" << buffer << "'";
     if (result_.size()) {
         VLOG(2) << "Already has:";
@@ -101,6 +99,7 @@ ParsingResult MultiBulkParser::Parse() {
         args_to_parse_ = args_;
         cursor = crlf + 2;
         buffer_->Consume(cursor);
+        result_.reserve(args_);
     }
 
     // while args_to_parse
