@@ -3,8 +3,8 @@
 #include "base/buffer.h"
 #include "client_manager.h"
 #include "constants.h"
-#include "resp/redis_parser.h"
 #include "resp/replier.h"
+#include "resp/resp_parser.h"
 
 #include <glog/logging.h>
 
@@ -12,14 +12,32 @@ namespace rdss {
 
 namespace detail {
 
-RedisParser::ParsingResult Parse(Buffer& buffer, bool parse_ongoing, MultiBulkParser* parser) {
-    if (parse_ongoing) {
-        return parser->Parse();
+// Parses data in 'buffer' inline or multi-bulk way according to 1.If mbulk parser is in
+// progress 2.If the start of 'buffer' is '*'. If necessary, creates 'mbulk_parser'. Fills result
+// into 'result', and updates 'result_size' to reflect the number of result.
+ParserState Parse(
+  Buffer& buffer,
+  std::unique_ptr<MultiBulkParser>& mbulk_parser,
+  StringViews& result,
+  size_t& result_size) {
+    if (mbulk_parser != nullptr && mbulk_parser->InProgress()) {
+        auto res = mbulk_parser->Parse(result);
+        if (res == ParserState::kDone) {
+            result_size = mbulk_parser->GetResultSize();
+        }
+        return res;
     }
     if (buffer.Source().at(0) == '*') {
-        return parser->Parse();
+        if (mbulk_parser == nullptr) {
+            mbulk_parser = std::make_unique<MultiBulkParser>(&buffer);
+        }
+        auto res = mbulk_parser->Parse(result);
+        if (res == ParserState::kDone) {
+            result_size = mbulk_parser->GetResultSize();
+        }
+        return res;
     }
-    return InlineParser::ParseInline(&buffer);
+    return ParseInline(&buffer, result, result_size);
 }
 
 } // namespace detail
@@ -45,21 +63,33 @@ Task<void> Client::Echo() {
 }
 
 Task<void> Client::Process() {
+    // Might expand before each call to recv() to ensure at least 'kIOGenericBufferSize'(16KB)
+    // available. Should be reset after each round of serving to reclaim buffer space.
     Buffer query_buffer(kIOGenericBufferSize);
-    Buffer output_buffer(kOutputBufferSize);
-    std::vector<iovec> iovecs;
+    // Lazily created multi-bulk parser. If it's in error/done state, it will automatically reset
+    // upon new call to Parse().
+    std::unique_ptr<MultiBulkParser> mbulk_parser{nullptr};
+    // View of parsed arguments over 'query_buffer'. We don't clear it after round of serving to
+    // avoid memory gets reclaim / allocate over the turns of serving.
+    // TODO: Clear it if memory gets tight.
+    StringViews arguments;
+    // Ditto, lazily release of memory.
     Result query_result;
-
-    // TODO: Make use of RedisParser::InProgress().
-    bool parse_ongoing = false;
-    // TODO: Lazily create parser.
-    auto parser = std::make_unique<MultiBulkParser>(&query_buffer);
+    Buffer output_buffer(kOutputBufferSize);
+    // For output string/string array, that is, when reply is like "$6\r\nFOOBAR\r\n", there are 3
+    // iovecs, first being view over "$6\r\n" in 'output_buffer', second being view over value
+    // string shared_ptr in 'Result', the last being "\r\n" that references the same CRLF in the
+    // first iovec.
+    std::vector<iovec> iovecs;
 
     while (true) {
+        // If 'query_buffer' gets expanded, it's current data is moved to new memory location. If
+        // parser holds partial result view over the original memory of 'query_buffer', it should be
+        // updated.
         const auto data_start = query_buffer.EnsureAvailable(
           kIOGenericBufferSize, query_buffer.Capacity() < kIOGenericBufferSize);
-        if (data_start != nullptr && parser->InProgress()) {
-            parser->BufferUpdate(data_start, query_buffer.Start());
+        if (data_start != nullptr && mbulk_parser != nullptr && mbulk_parser->InProgress()) {
+            mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
         }
 
         // Ideally:
@@ -79,23 +109,20 @@ Task<void> Client::Process() {
         if (bytes_read == 0) {
             break;
         }
-
         query_buffer.Produce(bytes_read);
 
-        VLOG(1) << "read length:" << bytes_read;
-
-        auto [parse_result, command_strings] = detail::Parse(
-          query_buffer, parse_ongoing, parser.get());
+        size_t num_strings;
+        const auto parse_result = detail::Parse(query_buffer, mbulk_parser, arguments, num_strings);
         switch (parse_result) {
-        case RedisParser::State::kInit:
-        case RedisParser::State::kParsing:
-            parse_ongoing = true;
+        case ParserState::kInit:
+        case ParserState::kParsing:
             continue;
-        case RedisParser::State::kError:
+        case ParserState::kError:
             query_result.SetError(Error::kProtocol);
             break;
-        case RedisParser::State::kDone:
-            service_->Invoke(command_strings, query_result);
+        case ParserState::kDone:
+            assert(num_strings != 0);
+            service_->Invoke(std::span<StringView>(arguments.begin(), num_strings), query_result);
             break;
         }
 
@@ -108,6 +135,7 @@ Task<void> Client::Process() {
         // }
 
         size_t bytes_written{0};
+        // TODO: it's gather
         if (NeedsScatter(query_result)) {
             ResultToIovecs(query_result, output_buffer, iovecs);
             bytes_written = co_await conn_->Writev(iovecs);
@@ -119,8 +147,6 @@ Task<void> Client::Process() {
         }
 
         query_buffer.Reset();
-        parse_ongoing = false;
-        parser->Reset();
         query_result.Reset();
         output_buffer.Reset();
         iovecs.clear();

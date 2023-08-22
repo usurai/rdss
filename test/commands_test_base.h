@@ -3,7 +3,7 @@
 #include "base/buffer.h"
 #include "config.h"
 #include "data_structure_service.h"
-#include "resp/redis_parser.h"
+#include "resp/resp_parser.h"
 
 #include <gtest/gtest.h>
 
@@ -30,10 +30,12 @@ protected:
         buffer_.Reset();
         std::memcpy(buffer_.Sink().data(), query.data(), query.size());
         buffer_.Produce(query.size());
-        auto parse_result = InlineParser::ParseInline(&buffer_);
-        EXPECT_EQ(parse_result.first, RedisParser::State::kDone);
+        StringViews args;
+        size_t arg_size;
+        const auto parse_result = ParseInline(&buffer_, args, arg_size);
+        EXPECT_EQ(parse_result, ParserState::kDone);
         Result result;
-        service_.Invoke(parse_result.second, result);
+        service_.Invoke(std::span<StringView>{args.data(), arg_size}, result);
         return result;
     }
 

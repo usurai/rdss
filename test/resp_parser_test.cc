@@ -1,6 +1,6 @@
 #include "base/buffer.h"
 #include "constants.h"
-#include "resp/redis_parser.h"
+#include "resp/resp_parser.h"
 #include "util.h"
 
 #include <glog/logging.h>
@@ -11,13 +11,27 @@
 
 namespace rdss::test {
 
-using State = RedisParser::State;
-
-class RedisParserTest : public testing::Test {
+class RespParserTest : public testing::Test {
+protected:
     void SetUp() override { std::srand(static_cast<unsigned int>(time(nullptr))); }
+
+    void ExpectEQ(StringViews lhs, std::vector<std::string> expected) {
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(lhs[i], expected[i]);
+        }
+    }
+
+    void ExpectParseInline(Buffer& buffer, std::vector<std::string> expected) {
+        StringViews result;
+        size_t result_size;
+        EXPECT_EQ(ParserState::kDone, ParseInline(&buffer, result, result_size));
+        EXPECT_EQ(result_size, expected.size());
+        EXPECT_GE(result.size(), result_size);
+        ExpectEQ(result, std::move(expected));
+    }
 };
 
-TEST(RedisParserTest, inlineBasic) {
+TEST_F(RespParserTest, inlineBasic) {
     constexpr size_t kBufferCapacity = 1024;
     Buffer buffer(kBufferCapacity);
 
@@ -26,10 +40,7 @@ TEST(RedisParserTest, inlineBasic) {
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_THAT(res.second, testing::ElementsAre("PING"));
+        ExpectParseInline(buffer, {"PING"});
     }
 
     {
@@ -37,10 +48,7 @@ TEST(RedisParserTest, inlineBasic) {
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_THAT(res.second, testing::ElementsAre("PING"));
+        ExpectParseInline(buffer, {"PING"});
     }
 
     {
@@ -48,40 +56,20 @@ TEST(RedisParserTest, inlineBasic) {
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_THAT(res.second, testing::ElementsAre("SET", "K0", "V0"));
+        ExpectParseInline(buffer, {"SET", "K0", "V0"});
     }
 
-    {
+    for (size_t remaining = 2; remaining > 0; --remaining) {
         const std::string content = "PING\r\n";
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
-        buffer.Produce(content.size() - 2);
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kParsing);
+        buffer.Produce(content.size() - remaining);
+        StringViews result;
+        size_t result_size;
+        EXPECT_EQ(ParseInline(&buffer, result, result_size), ParserState::kParsing);
 
-        buffer.Produce(2);
-        auto res1 = parser.Parse();
-        EXPECT_EQ(res1.first, State::kDone);
-        EXPECT_THAT(res1.second, testing::ElementsAre("PING"));
-    }
-
-    {
-        const std::string content = "PING\r\n";
-        buffer.Reset();
-        memcpy(buffer.Data(), content.data(), content.size());
-        buffer.Produce(content.size() - 1);
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kParsing);
-
-        buffer.Produce(1);
-        auto res1 = parser.Parse();
-        EXPECT_EQ(res1.first, State::kDone);
-        EXPECT_THAT(res1.second, testing::ElementsAre("PING"));
+        buffer.Produce(remaining);
+        ExpectParseInline(buffer, {"PING"});
     }
 
     {
@@ -89,14 +77,13 @@ TEST(RedisParserTest, inlineBasic) {
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
-        InlineParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_TRUE(res.second.empty());
+        StringViews result;
+        size_t result_size;
+        EXPECT_EQ(ParseInline(&buffer, result, result_size), ParserState::kParsing);
     }
 }
 
-TEST(RedisParserTest, mbulkBasic) {
+TEST_F(RespParserTest, mbulkBasic) {
     constexpr size_t kBufferCapacity = 1024;
     Buffer buffer(kBufferCapacity);
 
@@ -106,9 +93,10 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_THAT(res.second, testing::ElementsAre("PING"));
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kDone);
+        EXPECT_EQ(parser.GetResultSize(), 1);
+        ExpectEQ(result, {"PING"});
     }
 
     {
@@ -117,9 +105,10 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_THAT(res.second, testing::ElementsAre("SET", "K0", "FOOBAR"));
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kDone);
+        EXPECT_EQ(parser.GetResultSize(), 3);
+        ExpectEQ(result, {"SET", "K0", "FOOBAR"});
     }
 
     {
@@ -128,9 +117,10 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kDone);
-        EXPECT_TRUE(res.second.empty());
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kDone);
+        EXPECT_EQ(parser.GetResultSize(), 0);
+        ExpectEQ(result, {});
     }
 
     {
@@ -139,8 +129,8 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kError);
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kError);
     }
 
     {
@@ -149,8 +139,8 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kError);
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kError);
     }
 
     {
@@ -159,8 +149,8 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kError);
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kError);
     }
 
     {
@@ -169,35 +159,34 @@ TEST(RedisParserTest, mbulkBasic) {
         memcpy(buffer.Data(), content.data(), content.size());
         buffer.Produce(content.size());
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kParsing);
+        StringViews result;
+        EXPECT_EQ(parser.Parse(result), ParserState::kParsing);
     }
 }
 
-TEST(RedisParserTest, mbulkTwoPasses) {
+TEST_F(RespParserTest, mbulkTwoPasses) {
     constexpr size_t kBufferCapacity = 1024;
     Buffer buffer(kBufferCapacity);
     const std::string content = "*3\r\n$3\r\nSET\r\n$2\r\nK0\r\n$6\r\nFOOBAR\r\n";
 
     for (size_t i = 4; i < content.size() - 1; ++i) {
-        VLOG(1) << "First pass size: " << i;
         buffer.Reset();
         memcpy(buffer.Data(), content.data(), i);
         buffer.Produce(i);
         MultiBulkParser parser(&buffer);
-        auto res = parser.Parse();
-        EXPECT_EQ(res.first, State::kParsing);
+        StringViews result;
+        auto res = parser.Parse(result);
+        EXPECT_EQ(res, ParserState::kParsing);
 
         memcpy(buffer.Data(), content.data() + i, content.size() - i);
         buffer.Produce(content.size() - i);
-        auto res1 = parser.Parse();
-        EXPECT_EQ(res1.first, State::kDone) << "Committed buffer:'" << content.substr(0, i) << "'";
-        ASSERT_THAT(res1.second, testing::ElementsAre("SET", "K0", "FOOBAR"))
-          << "Committed buffer:'" << content.substr(0, i) << "'";
+        auto res1 = parser.Parse(result);
+        EXPECT_EQ(res1, ParserState::kDone) << "Committed buffer:'" << content.substr(0, i) << "'";
+        ExpectEQ(result, {"SET", "K0", "FOOBAR"});
     }
 }
 
-TEST(RedisParserTest, bufferExpansion) {
+TEST_F(RespParserTest, bufferExpansion) {
     constexpr size_t num_argument = 100;
     constexpr size_t min_length = 512;
     constexpr size_t max_length = 16 * 1024;
@@ -213,12 +202,13 @@ TEST(RedisParserTest, bufferExpansion) {
 
     Buffer buffer;
     MultiBulkParser parser(&buffer);
+    StringViews result;
     size_t offset{0};
     while (offset < full_query.size()) {
         auto start = buffer.EnsureAvailable(
           kIOGenericBufferSize, buffer.Capacity() >= kIOGenericBufferSize);
         if (start != nullptr && parser.InProgress()) {
-            parser.BufferUpdate(start, buffer.Start());
+            parser.BufferUpdate(start, buffer.Start(), result);
         }
 
         auto sink = buffer.Sink();
@@ -227,16 +217,13 @@ TEST(RedisParserTest, bufferExpansion) {
         buffer.Produce(bytes_to_copy);
         offset += bytes_to_copy;
 
-        auto result = parser.Parse();
-        EXPECT_NE(result.first, RedisParser::State::kError);
+        auto res = parser.Parse(result);
+        EXPECT_NE(res, ParserState::kError);
 
         if (offset == full_query.size()) {
-            EXPECT_EQ(result.first, RedisParser::State::kDone);
-            EXPECT_EQ(result.second.size(), num_argument);
-            for (size_t i = 0; i < num_argument; ++i) {
-                EXPECT_EQ(arguments[i].size(), result.second[i].size());
-                EXPECT_FALSE(arguments[i].compare(result.second[i]));
-            }
+            EXPECT_EQ(res, ParserState::kDone);
+            EXPECT_EQ(parser.GetResultSize(), num_argument);
+            ExpectEQ(result, arguments);
         }
     }
 }
