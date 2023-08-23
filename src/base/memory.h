@@ -23,6 +23,7 @@ public:
 
     void operator=(const MemoryTracker&) = delete;
 
+    // TODO: This is not thread-safe.
     static MemoryTracker& GetInstance();
 
     template<Category C>

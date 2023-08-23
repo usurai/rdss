@@ -1,51 +1,88 @@
 #pragma once
 
 #include "base/buffer.h"
-#include "io/async_operation.h"
-#include "io/async_operation_processor.h"
-#include "io/cancellation.h"
-#include "io/promise.h"
-
-#include <glog/logging.h>
-
-#include <string>
+#include "runtime/ring_executor.h"
 
 namespace rdss {
 
-class AwaitableRecv;
-class AwaitableCancellableRecv;
-class AwaitableSend;
-class AwaitableCancellableSend;
-class AwaitableWritev;
-// TODO
-// class AwaitableClose;
-
 class Connection {
 public:
-    Connection(int fd, AsyncOperationProcessor* processor)
+    Connection(int fd, RingExecutor* executor)
       : fd_(fd)
-      , processor_(processor) {
-        VLOG(1) << "New connection at fd:" << fd_;
+      , executor_(executor) {}
+
+    ~Connection() { Close(); }
+
+    auto Recv(Buffer::SinkType buffer) {
+        struct RingRecv : public RingOperation<RingRecv> {
+            RingRecv(RingExecutor* executor, int fd, Buffer::SinkType buffer)
+              : RingOperation<RingRecv>(executor)
+              , fd(fd)
+              , buffer(buffer) {}
+
+            void Prepare(io_uring_sqe* sqe) {
+                io_uring_prep_recv(sqe, fd, buffer.data(), buffer.size(), 0);
+                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+            }
+
+            int fd;
+            Buffer::SinkType buffer;
+        };
+        return RingRecv(executor_, fd_, buffer);
     }
 
-    ~Connection();
+    auto Send(std::string_view data) {
+        struct RingSend : public RingOperation<RingSend> {
+            RingSend(RingExecutor* executor, int fd, std::string_view data)
+              : RingOperation<RingSend>(executor)
+              , fd(fd)
+              , data(data) {}
 
-    bool Active() const { return active_; }
+            void Prepare(io_uring_sqe* sqe) {
+                io_uring_prep_send(sqe, fd, data.data(), data.size(), 0);
+                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+            }
+
+            int fd;
+            std::string_view data;
+        };
+        return RingSend(executor_, fd_, data);
+    }
+
+    auto Writev(std::span<iovec> iovecs) {
+        struct RingWritev : public RingOperation<RingWritev> {
+            RingWritev(RingExecutor* executor, int fd, std::span<iovec> iovecs)
+              : RingOperation<RingWritev>(executor)
+              , fd(fd)
+              , iovecs(iovecs) {}
+
+            void Prepare(io_uring_sqe* sqe) {
+                io_uring_prep_writev(sqe, fd, iovecs.data(), iovecs.size(), 0);
+                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+            }
+
+            int fd;
+            std::span<iovec> iovecs;
+        };
+        return RingWritev(executor_, fd_, iovecs);
+    }
+
+    void Close() {
+        if (!active_) {
+            return;
+        }
+        close(fd_);
+        active_ = false;
+    }
 
     int GetFD() const { return fd_; }
 
-    AwaitableRecv Recv(Buffer::SinkType buffer);
-    AwaitableCancellableRecv CancellableRecv(Buffer::SinkType buffer, CancellationToken* token);
-    AwaitableSend Send(std::string_view);
-    AwaitableCancellableSend CancellableSend(std::string data, CancellationToken* token);
-    AwaitableWritev Writev(std::span<iovec>);
-    void Close();
-    // AwaitableClose Close();
+    RingExecutor* GetExecutor() { return executor_; }
 
 private:
     bool active_ = true;
     int fd_;
-    AsyncOperationProcessor* processor_;
+    RingExecutor* executor_;
 };
 
 } // namespace rdss

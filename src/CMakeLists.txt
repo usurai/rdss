@@ -15,7 +15,6 @@ add_library(
   commands/misc_commands.cc
   commands/string_commands.cc
   data_structure_service.cc
-  listener.cc
   server.cc)
 
 target_compile_features(librdss PRIVATE cxx_std_20)
@@ -26,18 +25,15 @@ target_link_libraries(
           data_structure
           io
           resp
+          runtime
           glog::glog
           xxhash)
 
-add_executable(
-  rdss
-  main.cc)
+add_executable(rdss main.cc)
 
 target_compile_features(rdss PRIVATE cxx_std_20)
 
-target_link_libraries(
-  rdss
-  PRIVATE librdss)
+target_link_libraries(rdss PRIVATE librdss)
 
 target_include_directories(librdss PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(rdss PUBLIC ${PROJECT_SOURCE_DIR})
@@ -46,3 +42,4 @@ add_subdirectory(base)
 add_subdirectory(data_structure)
 add_subdirectory(io)
 add_subdirectory(resp)
+add_subdirectory(runtime)

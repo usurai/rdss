@@ -3,7 +3,6 @@
 #include "base/buffer.h"
 #include "io/async_operation_processor.h"
 #include "io/cancellation.h"
-#include "io/connection.h"
 
 #include <glog/logging.h>
 #include <sys/uio.h>
@@ -18,7 +17,6 @@
 namespace rdss {
 
 class AsyncOperationProcessor;
-class Connection;
 class CancellationToken;
 
 class CompletionHandler {
@@ -48,51 +46,6 @@ private:
     bool completed = false;
     int result_;
     std::function<void()> callback_;
-};
-
-template<typename Implementation>
-class AwaitableOperation {
-public:
-    explicit AwaitableOperation(AsyncOperationProcessor* processor)
-      : processor_(processor) {
-        VLOG(1) << "AwaitableOperation::ctor()";
-    }
-    ~AwaitableOperation() { VLOG(1) << "AwaitableOperation::dtor()"; }
-
-    bool await_ready() const noexcept {
-        VLOG(1) << ToString() << "::await_ready()";
-        return false;
-    }
-
-    void await_suspend(std::coroutine_handle<> continuation) noexcept {
-        VLOG(1) << ToString() << "::await_suspend()";
-        completion_handler_.SetCallback([c = std::move(continuation)]() {
-            VLOG(1) << "CompletionHandler::callback()";
-            c();
-        });
-        processor_->Execute(this);
-    }
-
-    auto await_resume() noexcept {
-        VLOG(1) << ToString() << "::await_resume(), result:" << completion_handler_.GetResult();
-        return completion_handler_.GetResult();
-    }
-
-    void PrepareSqe(io_uring_sqe* sqe) {
-        Impl()->PrepareSqe(sqe);
-        io_uring_sqe_set_data(sqe, &completion_handler_);
-    }
-
-    AsyncOperationProcessor* GetProcessor() { return processor_; }
-
-    std::string ToString() const { return Impl()->ToString(); }
-
-private:
-    Implementation* Impl() { return static_cast<Implementation*>(this); }
-    const Implementation* Impl() const { return static_cast<const Implementation*>(this); }
-
-    AsyncOperationProcessor* processor_;
-    CompletionHandler completion_handler_;
 };
 
 template<typename Implementation>
@@ -189,23 +142,6 @@ private:
     CompletionHandler* cancel_handler_ = nullptr;
 };
 
-// TODO: Consider multishot/direct variant.
-class AwaitableAccept : public AwaitableOperation<AwaitableAccept> {
-public:
-    AwaitableAccept(AsyncOperationProcessor* processor, int sockfd)
-      : AwaitableOperation<AwaitableAccept>(processor)
-      , sockfd_(sockfd) {}
-
-    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, sockfd_, nullptr, nullptr, 0); }
-
-    Connection* await_resume() noexcept;
-
-    std::string ToString() const { return "AwaitableAccept"; }
-
-private:
-    int sockfd_;
-};
-
 class AwaitableCancellableAccept
   : public AwaitableCancellableOperation<AwaitableCancellableAccept> {
 public:
@@ -217,24 +153,6 @@ public:
     void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, GetFD(), nullptr, nullptr, 0); }
 
     std::string ToString() const { return "AwaitableCancellableAccept"; }
-};
-
-class AwaitableRecv : public AwaitableOperation<AwaitableRecv> {
-public:
-    AwaitableRecv(AsyncOperationProcessor* processor, int fd, Buffer::SinkType buffer)
-      : AwaitableOperation<AwaitableRecv>(processor)
-      , fd_(fd)
-      , buffer_(std::move(buffer)) {}
-
-    void PrepareSqe(io_uring_sqe* sqe) {
-        io_uring_prep_recv(sqe, fd_, buffer_.data(), buffer_.size(), 0);
-    }
-
-    std::string ToString() const { return "AwaitableRecv"; }
-
-private:
-    int fd_;
-    Buffer::SinkType buffer_;
 };
 
 class AwaitableCancellableRecv : public AwaitableCancellableOperation<AwaitableCancellableRecv> {
@@ -256,24 +174,6 @@ private:
     Buffer::SinkType buffer_;
 };
 
-class AwaitableSend : public AwaitableOperation<AwaitableSend> {
-public:
-    AwaitableSend(AsyncOperationProcessor* processor, int fd, std::string_view data)
-      : AwaitableOperation<AwaitableSend>(processor)
-      , fd_(fd)
-      , data_(data) {}
-
-    void PrepareSqe(io_uring_sqe* sqe) {
-        io_uring_prep_send(sqe, fd_, data_.data(), data_.size(), 0);
-    }
-
-    std::string ToString() const { return "AwaitableSend"; }
-
-private:
-    int fd_;
-    std::string_view data_;
-};
-
 class AwaitableCancellableSend : public AwaitableCancellableOperation<AwaitableCancellableSend> {
 public:
     AwaitableCancellableSend(
@@ -289,38 +189,6 @@ public:
 
 private:
     std::string data_;
-};
-
-class AwaitableWritev : public AwaitableOperation<AwaitableWritev> {
-public:
-    AwaitableWritev(AsyncOperationProcessor* processor, int fd, std::span<iovec> iovecs)
-      : AwaitableOperation<AwaitableWritev>(processor)
-      , fd_(fd)
-      , iovecs_(iovecs) {}
-
-    void PrepareSqe(io_uring_sqe* sqe) {
-        io_uring_prep_writev(sqe, fd_, iovecs_.data(), iovecs_.size(), 0);
-    }
-
-private:
-    int fd_;
-    std::span<iovec> iovecs_;
-};
-
-class AwaitableTimeout : public AwaitableOperation<AwaitableTimeout> {
-public:
-    AwaitableTimeout(AsyncOperationProcessor* processor, std::chrono::nanoseconds nanoseconds)
-      : AwaitableOperation<AwaitableTimeout>(processor)
-      , ts_{.tv_sec = 0, .tv_nsec = nanoseconds.count()} {}
-
-    void PrepareSqe(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 0, 0); }
-
-    void await_resume() noexcept;
-
-    std::string ToString() const { return "AwaitableTimeout"; }
-
-private:
-    __kernel_timespec ts_;
 };
 
 } // namespace rdss

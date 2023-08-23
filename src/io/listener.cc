@@ -7,17 +7,11 @@
 
 namespace rdss {
 
-Listener::Listener(int listen_fd, AsyncOperationProcessor* processor)
-  : listened_fd_(listen_fd)
-  , processor_(processor) {}
+Listener::Listener(int listen_fd, RingExecutor* executor)
+  : fd_(listen_fd)
+  , executor_(executor) {}
 
-AwaitableAccept Listener::Accept() { return AwaitableAccept(processor_, listened_fd_); }
-
-AwaitableCancellableAccept Listener::CancellableAccept(CancellationToken* token) {
-    return AwaitableCancellableAccept(processor_, listened_fd_, token);
-}
-
-std::unique_ptr<Listener> Listener::Create(int port, AsyncOperationProcessor* processor) {
+std::unique_ptr<Listener> Listener::Create(int port, RingExecutor* executor) {
     auto create_listening_socket = [port]() {
         // socket
         auto sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -57,7 +51,7 @@ std::unique_ptr<Listener> Listener::Create(int port, AsyncOperationProcessor* pr
     if (fd == 0) {
         return nullptr;
     }
-    return std::unique_ptr<Listener>(new Listener(fd, processor));
+    return std::unique_ptr<Listener>(new Listener(fd, executor));
 }
 
 } // namespace rdss

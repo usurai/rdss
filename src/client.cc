@@ -3,8 +3,10 @@
 #include "base/buffer.h"
 #include "client_manager.h"
 #include "constants.h"
+#include "data_structure_service.h"
 #include "resp/replier.h"
 #include "resp/resp_parser.h"
+#include "runtime/ring_executor.h"
 
 #include <glog/logging.h>
 
@@ -42,7 +44,16 @@ ParserState Parse(
 
 } // namespace detail
 
-Task<void> Client::Echo() {
+Client::Client(Connection* conn, ClientManager* manager, DataStructureService* service)
+  : conn_(std::unique_ptr<Connection>(conn))
+  , manager_(manager)
+  , service_(service) {}
+
+Task<void> Client::Echo(RingExecutor* from) {
+    if (from != conn_->GetExecutor()) {
+        co_await Transfer(from, conn_->GetExecutor());
+    }
+
     Buffer buffer(1024);
     while (true) {
         const auto bytes_read = co_await conn_->Recv(buffer.Sink());
@@ -62,7 +73,11 @@ Task<void> Client::Echo() {
     OnConnectionClose();
 }
 
-Task<void> Client::Process() {
+Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
+    if (from != conn_->GetExecutor()) {
+        co_await Transfer(from, conn_->GetExecutor());
+    }
+
     // Might expand before each call to recv() to ensure at least 'kIOGenericBufferSize'(16KB)
     // available. Should be reset after each round of serving to reclaim buffer space.
     Buffer query_buffer(kIOGenericBufferSize);
@@ -92,19 +107,8 @@ Task<void> Client::Process() {
             mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
         }
 
-        // Ideally:
-        // auto some_result = co_await conn_->Recv(SOME_PROCESSOR,  buffer, cancel_token_,);
-        // Underlying, recv sqe is submitted to ring of SOME_PROCESSOR
-
-        // Cancellable recv
-        // const auto [cancelled, bytes_read] = co_await conn_->CancellableRecv(
-        //   query_buffer.Sink(), &cancel_token_);
-        // VLOG(1) << "CancellableRecv returns: {" << cancelled << ", " << bytes_read << "}.";
-        // if (cancelled || bytes_read == 0) {
-        //     break;
-        // }
-
         // Normal recv
+        // TODO: Optionally enable cancellable recv
         const auto bytes_read = co_await conn_->Recv(query_buffer.Sink());
         if (bytes_read == 0) {
             break;
@@ -122,18 +126,13 @@ Task<void> Client::Process() {
             break;
         case ParserState::kDone:
             assert(num_strings != 0);
+            co_await Transfer(conn_->GetExecutor(), dss_executor);
             service_->Invoke(std::span<StringView>(arguments.begin(), num_strings), query_result);
+            co_await Transfer(dss_executor, conn_->GetExecutor());
             break;
         }
 
-        // TODO: Handle short write.
-        // Cancellable send
-        // const auto [send_cancelled, bytes_written] = co_await conn_->CancellableSend(
-        //   Replier::BuildReply(std::move(query_result)), &cancel_token_);
-        // if (send_cancelled || bytes_written == 0) {
-        //     break;
-        // }
-
+        // TODO: 1.Cancellable send. 2.Handle short write.
         size_t bytes_written{0};
         // TODO: it's gather
         if (NeedsScatter(query_result)) {

@@ -1,0 +1,18 @@
+add_library(runtime ring_executor.cc)
+
+target_compile_features(runtime PRIVATE cxx_std_20)
+target_link_libraries(
+  runtime
+  base
+  uring
+  glog::glog)
+
+add_executable(ring_executor_test ring_executor_test.cc)
+target_compile_features(ring_executor_test PRIVATE cxx_std_20)
+target_include_directories(ring_executor_test PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(
+  ring_executor_test
+  runtime
+  uring
+  io
+  glog::glog)
