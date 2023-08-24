@@ -14,7 +14,7 @@ namespace rdss {
 Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
-  , dss_executor_(std::make_unique<RingExecutor>("dss_executor"))
+  , dss_executor_(std::make_unique<RingExecutor>("dss_executor", RingConfig{.async_sqe = false}))
   , service_(std::make_unique<DataStructureService>(&config_, clock_.get()))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Consider move into DSS.

@@ -21,6 +21,8 @@ public:
 
             void Prepare(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, fd, nullptr, nullptr, 0); }
 
+            bool IsIoOperation() const { return false; }
+
             auto await_resume() {
                 if (result < 0) {
                     LOG(FATAL) << "Accept: " << strerror(-result);

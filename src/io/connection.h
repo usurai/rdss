@@ -22,8 +22,9 @@ public:
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_recv(sqe, fd, buffer.data(), buffer.size(), 0);
-                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
             }
+
+            bool IsIoOperation() const { return true; }
 
             int fd;
             Buffer::SinkType buffer;
@@ -40,8 +41,9 @@ public:
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_send(sqe, fd, data.data(), data.size(), 0);
-                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
             }
+
+            bool IsIoOperation() const { return true; }
 
             int fd;
             std::string_view data;
@@ -58,8 +60,9 @@ public:
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_writev(sqe, fd, iovecs.data(), iovecs.size(), 0);
-                io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
             }
+
+            bool IsIoOperation() const { return true; }
 
             int fd;
             std::span<iovec> iovecs;

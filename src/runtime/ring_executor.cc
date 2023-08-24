@@ -2,30 +2,40 @@
 
 namespace rdss {
 
-RingExecutor::RingExecutor(std::string name)
-  : name_(std::move(name)) {
-    // TODO: constant/config {SQPOLL, sq/cq_entries, max_workers}.
+RingExecutor::RingExecutor(std::string name, RingConfig config)
+  : name_(std::move(name))
+  , config_(std::move(config)) {
     io_uring_params params = {};
-    params.cq_entries = 50000;
-    params.flags |= IORING_SETUP_SQPOLL;
-    int res;
-    if ((res = io_uring_queue_init_params(4096, &ring_, &params)) != 0) {
-        LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-res);
+    params.cq_entries = config_.cq_entries;
+    if (config_.sqpoll) {
+        params.flags |= IORING_SETUP_SQPOLL;
     }
+    // TODO: This caused EEXIST when submitting.
+    // params.flags |= IORING_SETUP_SINGLE_ISSUER;
 
-    unsigned int max_workers[2] = {0, 5};
-    auto ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
-    if (ret != 0) {
-        LOG(FATAL) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
+    int ret;
+    if ((ret = io_uring_queue_init_params(config_.sq_entries, &ring_, &params)) != 0) {
+        LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
     }
-
     if (!(params.features & IORING_FEAT_NODROP)) {
         LOG(FATAL) << "No IORING_FEAT_NODROP";
     }
 
+    if (config_.async_sqe) {
+        unsigned int max_workers[2] = {0, config_.max_unbound_workers};
+        ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
+        if (ret != 0) {
+            LOG(FATAL) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
+        }
+    }
+
     thread_ = std::thread([this]() {
         LOG(INFO) << "Executor " << name_ << " at thread " << gettid();
-        this->Loop();
+        if (this->config_.sqpoll) {
+            this->Loop();
+        } else {
+            this->LoopTimeoutWait();
+        }
     });
 }
 
@@ -43,23 +53,57 @@ void RingExecutor::Shutdown() {
     thread_.join();
 }
 
+// For SQPOLL enabled ring.
 void RingExecutor::Loop() {
-    // TODO: move out.
-    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{200'000}.count()};
-
     io_uring_cqe* cqe;
+    int ret;
     while (active_.load()) {
-        // auto result = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
-        auto result = io_uring_wait_cqe(&ring_, &cqe);
+        ret = io_uring_wait_cqe(&ring_, &cqe);
         // TODO: Try io_uring_cq_advance.
         do {
-            // if (result != 0) {
-            //     if (io_uring_sq_ready(&ring_)) {
-            //         // TOOD: submit_and_wait
-            //         io_uring_submit(&ring_);
-            //     }
-            //     break;
-            // }
+            if (ret != 0) {
+                LOG(FATAL) << "io_uring_wait_cqe:" << strerror(-ret);
+            }
+
+            const auto data = cqe->user_data;
+            const auto res = cqe->res;
+            io_uring_cqe_seen(&ring_, cqe);
+
+            if (data == 0) {
+                continue;
+            }
+            auto awaitable = reinterpret_cast<Continuation*>(data);
+            awaitable->result = res;
+            awaitable->handle();
+        } while (!io_uring_peek_cqe(&ring_, &cqe));
+    }
+    LOG(INFO) << "Terminating thread " << gettid();
+}
+
+void RingExecutor::LoopTimeoutWait() {
+    // TODO: move out.
+    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{500'000}.count()};
+
+    io_uring_cqe* cqe;
+    int ret;
+    while (active_.load()) {
+        ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
+        // TODO: Try io_uring_cq_advance.
+        do {
+            if (ret == -ETIME) {
+                if (io_uring_sq_ready(&ring_)) {
+                    // TOOD: submit_and_wait
+                    ret = io_uring_submit(&ring_);
+                    if (ret < 0) {
+                        LOG(FATAL) << name_ << ": io_uring_submit " << strerror(-ret);
+                    }
+                    VLOG(1) << name_ << " submitted " << ret << " SQEs at wait side.";
+                }
+                break;
+            }
+            if (ret) {
+                LOG(FATAL) << "io_uring_wait_cqe_timeout:" << strerror(ret);
+            }
 
             const auto data = cqe->user_data;
             const auto res = cqe->res;
@@ -77,12 +121,12 @@ void RingExecutor::Loop() {
 }
 
 void RingExecutor::MaybeSubmit() {
-    // if (io_uring_sq_ready(Ring()) < kRingSubmitBatchSize) {
-    //     return;
-    // }
-    auto res = io_uring_submit(Ring());
-    if (res < 0) {
-        LOG(FATAL) << "io_uring_submit:" << strerror(-res);
+    if (!config_.sqpoll && io_uring_sq_ready(Ring()) < config_.submit_batch_size) {
+        return;
+    }
+    auto ret = io_uring_submit(Ring());
+    if (ret < 0) {
+        LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
     }
 }
 

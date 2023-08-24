@@ -31,8 +31,12 @@ struct RingOperation
 
     void Prepare(io_uring_sqe* sqe) { Impl()->Prepare(sqe); }
 
+    bool IsIoOperation() const { return Impl()->IsIoOperation(); }
+
 private:
     Implementation* Impl() { return static_cast<Implementation*>(this); }
+
+    const Implementation* Impl() const { return static_cast<const Implementation*>(this); }
 
     RingExecutor* executor_;
 };
@@ -45,14 +49,23 @@ struct RingTimeout : public RingOperation<RingTimeout> {
 
     void Prepare(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 0, 0); }
 
+    bool IsIoOperation() const { return false; }
+
     __kernel_timespec ts_;
+};
+
+struct RingConfig {
+    size_t sq_entries = 4096;
+    size_t cq_entries = 4096 * 16;
+    bool sqpoll = true;
+    bool async_sqe = true;
+    uint32_t max_unbound_workers = 5;
+    size_t submit_batch_size = 10;
 };
 
 class RingExecutor {
 public:
-    static constexpr size_t kRingSubmitBatchSize = 10;
-
-    RingExecutor(std::string name = "");
+    RingExecutor(std::string name = "", RingConfig config = RingConfig{});
 
     io_uring* Ring() { return &ring_; }
 
@@ -63,12 +76,16 @@ public:
 
     auto Timeout(std::chrono::nanoseconds nanoseconds) { return RingTimeout(this, nanoseconds); }
 
+    bool AsyncSqe() const { return config_.async_sqe; }
+
 private:
     void Loop();
+    void LoopTimeoutWait();
 
     void MaybeSubmit();
 
-    std::string name_;
+    const std::string name_;
+    const RingConfig config_;
     std::atomic<bool> active_ = true;
     io_uring ring_;
     std::thread thread_;
@@ -81,6 +98,9 @@ void RingExecutor::Initiate(Operation* operation) {
         LOG(FATAL) << "io_uring_sqe";
     }
     operation->Prepare(sqe);
+    if (AsyncSqe() && operation->IsIoOperation()) {
+        io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
+    }
     io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(operation));
     MaybeSubmit();
 }
@@ -106,6 +126,8 @@ inline auto Transfer(RingExecutor* src, RingExecutor* dest) {
             io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
         }
 
+        bool IsIoOperation() const { return false; }
+
         RingExecutor* dest;
     };
     return RingTransfer(src, dest);
@@ -120,6 +142,8 @@ inline auto ResumeOn(RingExecutor* re) {
           : RingOperation<RingResume>(re) {}
 
         void Prepare(io_uring_sqe* sqe) { io_uring_prep_nop(sqe); }
+
+        bool IsIoOperation() const { return false; }
 
         RingExecutor* re;
     };
