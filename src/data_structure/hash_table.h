@@ -12,7 +12,7 @@
 #include <vector>
 #include <xxhash.h>
 
-namespace detail {
+namespace rdss::detail {
 
 static size_t rev(size_t v) {
     unsigned long s = CHAR_BIT * sizeof(v); // bit size; must be power of 2
@@ -40,7 +40,7 @@ static size_t NextIndex(size_t index, size_t size) {
     return index;
 }
 
-} // namespace detail
+} // namespace rdss::detail
 
 namespace rdss {
 

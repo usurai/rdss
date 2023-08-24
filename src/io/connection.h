@@ -1,7 +1,29 @@
 #pragma once
 
 #include "base/buffer.h"
+#include "base/system_error.h"
 #include "runtime/ring_executor.h"
+
+namespace rdss::detail {
+
+template<typename Impl>
+struct RingIO : public RingOperation<RingIO<Impl>> {
+    RingIO(RingExecutor* executor)
+      : RingOperation<RingIO<Impl>>(executor) {}
+
+    bool IsIoOperation() const { return true; }
+
+    void Prepare(io_uring_sqe* sqe) { static_cast<Impl*>(this)->Prepare(sqe); }
+
+    auto await_resume() -> std::pair<std::error_code, size_t> {
+        if (this->result >= 0) {
+            return {{}, this->result};
+        }
+        return {ErrnoToErrorCode(-this->result), 0};
+    }
+};
+
+} // namespace rdss::detail
 
 namespace rdss {
 
@@ -14,17 +36,15 @@ public:
     ~Connection() { Close(); }
 
     auto Recv(Buffer::SinkType buffer) {
-        struct RingRecv : public RingOperation<RingRecv> {
+        struct RingRecv : public detail::RingIO<RingRecv> {
             RingRecv(RingExecutor* executor, int fd, Buffer::SinkType buffer)
-              : RingOperation<RingRecv>(executor)
+              : RingIO<RingRecv>(executor)
               , fd(fd)
               , buffer(buffer) {}
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_recv(sqe, fd, buffer.data(), buffer.size(), 0);
             }
-
-            bool IsIoOperation() const { return true; }
 
             int fd;
             Buffer::SinkType buffer;
@@ -33,17 +53,15 @@ public:
     }
 
     auto Send(std::string_view data) {
-        struct RingSend : public RingOperation<RingSend> {
+        struct RingSend : public detail::RingIO<RingSend> {
             RingSend(RingExecutor* executor, int fd, std::string_view data)
-              : RingOperation<RingSend>(executor)
+              : RingIO<RingSend>(executor)
               , fd(fd)
               , data(data) {}
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_send(sqe, fd, data.data(), data.size(), 0);
             }
-
-            bool IsIoOperation() const { return true; }
 
             int fd;
             std::string_view data;
@@ -52,17 +70,15 @@ public:
     }
 
     auto Writev(std::span<iovec> iovecs) {
-        struct RingWritev : public RingOperation<RingWritev> {
+        struct RingWritev : public detail::RingIO<RingWritev> {
             RingWritev(RingExecutor* executor, int fd, std::span<iovec> iovecs)
-              : RingOperation<RingWritev>(executor)
+              : RingIO<RingWritev>(executor)
               , fd(fd)
               , iovecs(iovecs) {}
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_writev(sqe, fd, iovecs.data(), iovecs.size(), 0);
             }
-
-            bool IsIoOperation() const { return true; }
 
             int fd;
             std::span<iovec> iovecs;

@@ -10,6 +10,8 @@
 
 #include <glog/logging.h>
 
+#include <tuple>
+
 namespace rdss {
 
 namespace detail {
@@ -55,13 +57,24 @@ Task<void> Client::Echo(RingExecutor* from) {
     }
 
     Buffer buffer(1024);
+    std::error_code error;
+    size_t bytes_read, bytes_written;
     while (true) {
-        const auto bytes_read = co_await conn_->Recv(buffer.Sink());
+        std::tie(error, bytes_read) = co_await conn_->Recv(buffer.Sink());
+        if (error) {
+            LOG(ERROR) << "recv: " << error.message();
+            break;
+        }
         if (bytes_read == 0) {
             break;
         }
         buffer.Produce(bytes_read);
-        auto bytes_written = co_await conn_->Send(buffer.Source());
+
+        std::tie(error, bytes_written) = co_await conn_->Send(buffer.Source());
+        if (error) {
+            LOG(ERROR) << "send: " << error.message();
+            break;
+        }
         if (bytes_written == 0) {
             break;
         }
@@ -97,6 +110,9 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
     // first iovec.
     std::vector<iovec> iovecs;
 
+    std::error_code error;
+    size_t bytes_read, bytes_written;
+    // size_t bytes_written;
     while (true) {
         // If 'query_buffer' gets expanded, it's current data is moved to new memory location. If
         // parser holds partial result view over the original memory of 'query_buffer', it should be
@@ -109,7 +125,11 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
 
         // Normal recv
         // TODO: Optionally enable cancellable recv
-        const auto bytes_read = co_await conn_->Recv(query_buffer.Sink());
+        std::tie(error, bytes_read) = co_await conn_->Recv(query_buffer.Sink());
+        if (error) {
+            LOG(ERROR) << "recv: " << error.message();
+            break;
+        }
         if (bytes_read == 0) {
             break;
         }
@@ -133,13 +153,13 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         }
 
         // TODO: 1.Cancellable send. 2.Handle short write.
-        size_t bytes_written{0};
         // TODO: it's gather
         if (NeedsScatter(query_result)) {
             ResultToIovecs(query_result, output_buffer, iovecs);
-            bytes_written = co_await conn_->Writev(iovecs);
+            std::tie(error, bytes_written) = co_await conn_->Writev(iovecs);
         } else {
-            bytes_written = co_await conn_->Send(ResultToStringView(query_result, output_buffer));
+            std::tie(error, bytes_written) = co_await conn_->Send(
+              ResultToStringView(query_result, output_buffer));
         }
         if (bytes_written == 0) {
             break;
