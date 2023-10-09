@@ -90,7 +90,9 @@ public:
         if (!active_) {
             return;
         }
-        close(fd_);
+        if (close(fd_) != 0) {
+            LOG(ERROR) << "close: " << strerror(errno);
+        }
         active_ = false;
     }
 

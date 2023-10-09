@@ -18,14 +18,14 @@ RingExecutor::RingExecutor(std::string name, RingConfig config)
         LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
     }
     if (!(params.features & IORING_FEAT_NODROP)) {
-        LOG(FATAL) << "No IORING_FEAT_NODROP";
+        LOG(WARNING) << "io_uring: No IORING_FEAT_NODROP";
     }
 
     if (config_.async_sqe) {
         unsigned int max_workers[2] = {0, config_.max_unbound_workers};
         ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
         if (ret != 0) {
-            LOG(FATAL) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
+            LOG(ERROR) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
         }
     }
 

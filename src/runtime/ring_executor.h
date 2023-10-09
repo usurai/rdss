@@ -51,6 +51,12 @@ struct RingTimeout : public RingOperation<RingTimeout> {
 
     bool IsIoOperation() const { return false; }
 
+    void await_resume() {
+        if (result != -ETIME && result != 0) {
+            LOG(FATAL) << "io_uring timeout: " << strerror(-result);
+        }
+    }
+
     __kernel_timespec ts_;
 };
 

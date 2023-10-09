@@ -24,10 +24,10 @@ public:
             bool IsIoOperation() const { return false; }
 
             auto await_resume() {
-                if (result < 0) {
-                    LOG(FATAL) << "Accept: " << strerror(-result);
+                if (result > 0) {
+                    return new Connection(result, client_executor);
                 }
-                return new Connection(result, client_executor);
+                LOG(FATAL) << "io_uring accept: " << strerror(-result);
             }
 
             RingExecutor* executor;

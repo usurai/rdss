@@ -49,8 +49,9 @@ std::unique_ptr<Listener> Listener::Create(int port, RingExecutor* executor) {
 
     const auto fd = create_listening_socket();
     if (fd == 0) {
-        return nullptr;
+        LOG(FATAL) << "Unable to create listener";
     }
+    LOG(INFO) << "Listening on port " << port << " with fd " << fd;
     return std::unique_ptr<Listener>(new Listener(fd, executor));
 }
 
