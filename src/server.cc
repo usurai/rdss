@@ -3,8 +3,7 @@
 #include "client.h"
 #include "command.h"
 #include "command_registry.h"
-
-#include <sys/resource.h>
+#include "util.h"
 
 #include <chrono>
 #include <thread>
@@ -64,21 +63,7 @@ Task<void> Server::Cron() {
 }
 
 void Server::Run() {
-    // TODO: Make this a util function
-    rlimit rlim;
-    if (getrlimit(RLIMIT_NOFILE, &rlim)) {
-        LOG(FATAL) << "getrlimit";
-    }
-    LOG(INFO) << "NOFILE rlimit: " << rlim.rlim_cur << ' ' << rlim.rlim_max;
-    rlim.rlim_cur = 1024 * 20;
-    rlim.rlim_max = 1024 * 20;
-    if (setrlimit(RLIMIT_NOFILE, &rlim)) {
-        LOG(FATAL) << "setrlimit";
-    }
-    if (getrlimit(RLIMIT_NOFILE, &rlim)) {
-        LOG(FATAL) << "getrlimit";
-    }
-    LOG(INFO) << "NOFILE rlimit after modification: " << rlim.rlim_cur << ' ' << rlim.rlim_max;
+    SetNofileLimit(std::numeric_limits<uint16_t>::max());
 
     Cron();
 

@@ -15,7 +15,8 @@ add_library(
   commands/misc_commands.cc
   commands/string_commands.cc
   data_structure_service.cc
-  server.cc)
+  server.cc
+  util.cc)
 
 target_compile_features(librdss PRIVATE cxx_std_20)
 
