@@ -1,4 +1,4 @@
-add_library(base memory.cc buffer.cc system_error.cc)
+add_library(base memory.cc buffer.cc)
 
 target_compile_features(base PRIVATE cxx_std_20)
 

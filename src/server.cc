@@ -3,7 +3,7 @@
 #include "client.h"
 #include "command.h"
 #include "command_registry.h"
-#include "util.h"
+#include "sys/util.h"
 
 #include <chrono>
 #include <thread>

@@ -6,4 +6,4 @@ namespace rdss {
 
 std::error_code ErrnoToErrorCode(int err);
 
-}
+} // namespace rdss

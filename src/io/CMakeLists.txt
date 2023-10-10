@@ -8,6 +8,7 @@ target_link_libraries(
   io
   PRIVATE base
           runtime
+          sys
           uring
           glog::glog)
 
@@ -18,5 +19,6 @@ target_link_libraries(
   listener_test
   PRIVATE runtime
           uring
+          sys
           io
           glog::glog)

@@ -15,8 +15,7 @@ add_library(
   commands/misc_commands.cc
   commands/string_commands.cc
   data_structure_service.cc
-  server.cc
-  util.cc)
+  server.cc)
 
 target_compile_features(librdss PRIVATE cxx_std_20)
 
@@ -27,6 +26,7 @@ target_link_libraries(
           io
           resp
           runtime
+          sys
           glog::glog
           xxhash)
 
@@ -44,3 +44,4 @@ add_subdirectory(data_structure)
 add_subdirectory(io)
 add_subdirectory(resp)
 add_subdirectory(runtime)
+add_subdirectory(sys)
