@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -29,7 +30,7 @@ public:
     template<Category C>
     void Allocate(size_t n) {
         static_assert(C != Category::kAll);
-        counter_[static_cast<size_t>(C)] += n;
+        counter_[static_cast<size_t>(C)].fetch_add(n, std::memory_order_relaxed);
         VLOG(1) << '[' << C << "] Allocate [" << n << " | " << counter_[static_cast<size_t>(C)]
                 << "].";
     }
@@ -37,7 +38,7 @@ public:
     template<Category C>
     void Deallocate(size_t n) {
         static_assert(C != Category::kAll);
-        counter_[static_cast<size_t>(C)] -= n;
+        counter_[static_cast<size_t>(C)].fetch_sub(n, std::memory_order_relaxed);
         VLOG(1) << '[' << C << "] Deallocate [" << n << " | " << counter_[static_cast<size_t>(C)]
                 << "].";
     }
@@ -55,7 +56,7 @@ protected:
     static MemoryTracker* instance_;
 
 private:
-    size_t counter_[2] = {};
+    std::atomic<size_t> counter_[2] = {};
 };
 
 template<class T>
