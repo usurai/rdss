@@ -321,4 +321,21 @@ std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::
     return {set_status, set_entry, old_value};
 }
 
+void DataStructureService::IncrementalRehashing(std::chrono::steady_clock::duration time_limit) {
+    auto rehash = [time_limit](auto table) {
+        if (!table->IsRehashing()) {
+            return;
+        }
+        const auto start = std::chrono::steady_clock::now();
+        do {
+            if (table->RehashSome(100)) {
+                break;
+            }
+        } while (std::chrono::steady_clock::now() - start < time_limit);
+    };
+
+    rehash(DataHashTable());
+    rehash(GetExpireHashTable());
+}
+
 } // namespace rdss

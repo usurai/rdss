@@ -84,6 +84,10 @@ public:
 
     size_t GetEvictedKeys() const { return evicted_keys_; }
 
+    /// Try rehash data / expiry table for 'time_limit' duration if they are rehashing. This is
+    /// called at cron.
+    void IncrementalRehashing(std::chrono::steady_clock::duration time_limit);
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);

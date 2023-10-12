@@ -59,6 +59,7 @@ Task<void> Server::Cron() {
 
         service_->RefreshLRUClock();
         service_->ActiveExpire();
+        service_->IncrementalRehashing(std::chrono::milliseconds{1});
     }
 }
 

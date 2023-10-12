@@ -149,7 +149,7 @@ public:
             return {entry, true};
         }
         if (create_on_missing) {
-            if (Expand() == ExpandResult::kExpandDone) {
+            if (Expand() != ExpandResult::kNoExpand) {
                 bucket = FindBucket(key);
             }
             entry = CreateEntryInBucket(bucket, key, create_shared_key);
@@ -197,16 +197,19 @@ public:
         if (buckets_[0].empty()) {
             return nullptr;
         }
-        if (!IsRehashing()) {
-            EntryPointer bucket{nullptr};
-            while (bucket == nullptr) {
-                const auto bucket_index = std::rand() % buckets_[0].size();
+
+        EntryPointer bucket{nullptr};
+        while (bucket == nullptr) {
+            const auto rand = std::rand();
+            const int32_t bucket_index = rand % buckets_[0].size();
+            if (bucket_index >= rehash_index_) {
                 bucket = buckets_[0][bucket_index];
+            } else {
+                assert(IsRehashing());
+                bucket = buckets_[1][rand % buckets_[1].size()];
             }
-            return GetRandomEntryInBucket(bucket);
         }
-        // TODO: rehash case
-        return nullptr;
+        return GetRandomEntryInBucket(bucket);
     }
 
     bool Erase(std::string_view key) {
@@ -253,7 +256,10 @@ public:
 
     size_t TraverseBucket(size_t bucket_index, auto func) {
         // TODO: support rehashing.
-        assert(!IsRehashing());
+        if (IsRehashing()) {
+            return 0;
+        }
+
         assert(bucket_index < buckets_[0].size());
         auto entry = buckets_[0][bucket_index];
 
@@ -266,7 +272,36 @@ public:
         return bucket_index;
     }
 
-    // TODO: void RehashStep(size_t steps) const;
+    /// Rehashes 'buckets_to_rehash' non-empty buckets, or 10 * 'buckets_to_rehash'. Returns if
+    /// rehashing has finished. If all the buckets have been rehashed, move the second bucket vector
+    /// to the first.
+    bool RehashSome(size_t buckets_to_rehash) {
+        assert(IsRehashing());
+        assert(rehash_index_ != buckets_[0].size());
+        assert(buckets_to_rehash != 0);
+
+        auto empty_buckets_allowed = buckets_to_rehash * 10;
+        while (true) {
+            const auto moved = RehashBucket(buckets_[0].begin() + rehash_index_);
+
+            if (++rehash_index_ == buckets_[0].size()) {
+                rehash_index_ = -1;
+                buckets_[0] = std::move(buckets_[1]);
+                return true;
+            }
+
+            if (moved == 0) {
+                if (--empty_buckets_allowed == 0) {
+                    return false;
+                }
+            } else {
+                if (--buckets_to_rehash == 0) {
+                    return false;
+                }
+            }
+        }
+    }
+
     // TODO: iterate
     // TODO: mem-related APIs
 
@@ -286,6 +321,10 @@ private:
 
     // Assumes the table is not empty.
     BucketVector::iterator FindBucket(std::string_view key) {
+        if (IsRehashing()) {
+            RehashSome(1);
+        }
+
         const auto hash = Hash(key);
         const int32_t index = static_cast<int32_t>(hash % buckets_[0].size());
         if (index >= rehash_index_) {
@@ -344,51 +383,63 @@ private:
         return true;
     }
 
-    enum class ExpandResult { kNoExpand, kExpandDone };
+    enum class ExpandResult { kNoExpand, kRehashing, kExpandDone };
 
     ExpandResult Expand() {
+        if (IsRehashing()) {
+            // return (RehashSome(1) ? ExpandResult::kExpandDone : ExpandResult::kRehashing);
+            return ExpandResult::kRehashing;
+        }
+
         if (!NeedsToExpand()) {
             return ExpandResult::kNoExpand;
         }
 
         assert(buckets_[1].empty());
-        // TODO: what if cannot allocate
         VLOG(1) << "BucketVector: resizing to " << buckets_[0].size() * 2;
-        buckets_[1].resize(buckets_[0].size() * 2, nullptr);
-        Rehash();
-        buckets_[0] = std::move(buckets_[1]);
-        return ExpandResult::kExpandDone;
+        buckets_[1].resize(buckets_[0].size() * 2);
+        StartRehashing();
+        return (IsRehashing() ? ExpandResult::kRehashing : ExpandResult::kExpandDone);
     }
 
     bool NeedsToExpand() {
         if (buckets_[0].empty()) {
             VLOG(1) << "BucketVector: init resize: 4";
-            // TODO: parameterize this.
             buckets_[0].resize(4, nullptr);
             return false;
         }
+        // TODO: More on this later.
         if (entries_ >= buckets_[0].size()) {
             return true;
         }
         return false;
     }
 
-    // TODO: Adaptive rehashing.
-    void Rehash() {
-        for (auto bucket = buckets_[0].begin(); bucket != buckets_[0].end(); ++bucket) {
-            if (*bucket == nullptr) {
-                continue;
-            }
-            auto entry = *bucket;
-            while (entry) {
-                auto* next_entry = entry->next;
-                const auto hash = Hash(entry->GetKey()->StringView());
-                auto target_bucket = buckets_[1].begin() + (hash % buckets_[1].size());
-                entry->next = *target_bucket;
-                *target_bucket = entry;
-                entry = next_entry;
-            }
+    void StartRehashing() {
+        assert(!IsRehashing());
+        assert(!buckets_[1].empty());
+
+        rehash_index_ = 0;
+        RehashSome(1);
+    }
+
+    size_t RehashBucket(BucketVector::iterator bucket) {
+        if (*bucket == nullptr) {
+            return 0;
         }
+        auto entry = *bucket;
+        size_t num_rehashed{0};
+        while (entry) {
+            auto* next_entry = entry->next;
+            const auto hash = Hash(entry->GetKey()->StringView());
+            auto target_bucket = buckets_[1].begin() + (hash % buckets_[1].size());
+            entry->next = *target_bucket;
+            *target_bucket = entry;
+            entry = next_entry;
+            ++num_rehashed;
+        }
+        *bucket = nullptr;
+        return num_rehashed;
     }
 
 private:
