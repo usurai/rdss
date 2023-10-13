@@ -74,7 +74,7 @@ struct Mallocator {
             throw std::bad_array_new_length();
 
         if (auto p = static_cast<T*>(std::malloc(n * sizeof(T)))) {
-            report(p, n);
+            report<true>(p, n);
             return p;
         }
 
@@ -82,14 +82,15 @@ struct Mallocator {
     }
 
     void deallocate(T* p, std::size_t n) noexcept {
-        report(p, n, 0);
+        report<false>(p, n);
         std::free(p);
     }
 
 private:
-    void report([[maybe_unused]] T* p, std::size_t n, bool alloc = true) const {
+    template<bool IsAlloc>
+    void report([[maybe_unused]] T* p, std::size_t n) const {
         const auto bytes = sizeof(T) * n;
-        if (alloc) {
+        if constexpr (IsAlloc) {
             MemoryTracker::GetInstance().Allocate<MemCategory>(bytes);
         } else {
             MemoryTracker::GetInstance().Deallocate<MemCategory>(bytes);
