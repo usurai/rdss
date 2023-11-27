@@ -73,7 +73,20 @@ class RingExecutor {
 public:
     RingExecutor(std::string name = "", RingConfig config = RingConfig{});
 
+    RingExecutor(const RingExecutor&) = delete;
+    RingExecutor(RingExecutor&&) = delete;
+    RingExecutor& operator=(const RingExecutor&) = delete;
+    RingExecutor& operator=(RingExecutor&&) = delete;
+
+    ~RingExecutor();
+
     io_uring* Ring() { return &ring_; }
+
+    /// To stop the executor, one needs to first call 'Deactivate()', then send a ring msg with
+    /// user_data set as 0 to wake the worker thread of the executor. After that, call 'Shutdown()'
+    /// to blocking wait for the worker thread to terminate. Finally, call the destructor implicitly
+    /// to exit the io_uring.
+    void Deactivate() { active_.store(false, std::memory_order_relaxed); }
 
     void Shutdown();
 

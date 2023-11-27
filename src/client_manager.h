@@ -16,6 +16,8 @@ public:
 
     void RemoveClient(Connection* conn);
 
+    std::vector<Client*>& GetClients() { return clients_; }
+
     size_t ActiveClients() const { return active_clients_.load(); }
 
 private:

@@ -30,7 +30,7 @@ RingExecutor::RingExecutor(std::string name, RingConfig config)
     }
 
     thread_ = std::thread([this]() {
-        LOG(INFO) << "Executor " << name_ << " at thread " << gettid();
+        LOG(INFO) << "Executor " << name_ << " starting at thread " << gettid();
         if (this->config_.sqpoll) {
             this->Loop();
         } else {
@@ -39,17 +39,16 @@ RingExecutor::RingExecutor(std::string name, RingConfig config)
     });
 }
 
+RingExecutor::~RingExecutor() {
+    io_uring_queue_exit(Ring());
+    LOG(INFO) << "Executor " << name_ << " exiting.";
+}
+
 void RingExecutor::Shutdown() {
     if (!thread_.joinable()) {
-        LOG(FATAL) << "Thread not joinable";
+        LOG(ERROR) << "Thread not joinable";
+        return;
     }
-    active_.store(false);
-
-    auto sqe = io_uring_get_sqe(&ring_);
-    io_uring_prep_nop(sqe);
-    io_uring_sqe_set_data64(sqe, 0);
-    io_uring_submit(&ring_);
-
     thread_.join();
 }
 
@@ -57,7 +56,7 @@ void RingExecutor::Shutdown() {
 void RingExecutor::Loop() {
     io_uring_cqe* cqe;
     int ret;
-    while (active_.load()) {
+    while (active_.load(std::memory_order_relaxed)) {
         ret = io_uring_wait_cqe(&ring_, &cqe);
         // TODO: Try io_uring_cq_advance.
         do {
@@ -86,7 +85,7 @@ void RingExecutor::LoopTimeoutWait() {
 
     io_uring_cqe* cqe;
     int ret;
-    while (active_.load()) {
+    while (active_.load(std::memory_order_relaxed)) {
         ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
         // TODO: Try io_uring_cq_advance.
         do {

@@ -6,6 +6,7 @@
 #include "data_structure/tracking_hash_table.h"
 
 #include <chrono>
+#include <future>
 #include <set>
 
 namespace rdss {
@@ -22,9 +23,10 @@ public:
     using LastAccessTimeDuration = MTSHashTable::EntryType::KeyType::LastAccessTimeDuration;
 
 public:
-    explicit DataStructureService(Config* config, Clock* clock)
+    explicit DataStructureService(Config* config, Clock* clock, std::promise<void> shutdown_promise)
       : config_(config)
       , clock_(clock)
+      , shutdown_promise_(std::move(shutdown_promise))
       , data_ht_(new MTSHashTable())
       , expire_ht_(new ExpireHashTable()) {
         RefreshLRUClock();
@@ -88,6 +90,8 @@ public:
     /// called at cron.
     void IncrementalRehashing(std::chrono::steady_clock::duration time_limit);
 
+    void Shutdown() { shutdown_promise_.set_value(); }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
@@ -95,6 +99,7 @@ private:
 
     Config* config_;
     Clock* clock_;
+    std::promise<void> shutdown_promise_;
     CommandDictionary commands_;
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;

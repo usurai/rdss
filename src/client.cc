@@ -81,9 +81,7 @@ Task<void> Client::Echo(RingExecutor* from) {
         buffer.Consume(bytes_written);
         buffer.Reset();
     }
-    manager_->RemoveClient(conn_.get());
-    conn_->Close();
-    OnConnectionClose();
+    Close();
 }
 
 Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
@@ -170,6 +168,12 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         output_buffer.Reset();
         iovecs.clear();
     }
+    manager_->RemoveClient(conn_.get());
+    conn_->Close();
+    OnConnectionClose();
+}
+
+void Client::Close() {
     manager_->RemoveClient(conn_.get());
     conn_->Close();
     OnConnectionClose();

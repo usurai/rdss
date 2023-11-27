@@ -23,10 +23,21 @@ void CommandFunction(DataStructureService&, Args, Result& result) {
     result.SetString(std::move(str_ptr));
 }
 
+void ShutdownFunction(DataStructureService& service, Args args, Result& result) {
+    if (args.size() > 1) {
+        result.SetError(Error::kWrongArgNum);
+        return;
+    }
+    LOG(INFO) << "User requested shutdown.";
+    service.Shutdown();
+    result.SetNil();
+}
+
 void RegisterMiscCommands(DataStructureService* service) {
     service->RegisterCommand("DBSIZE", Command("DBSIZE").SetHandler(DbSizeFunction));
     service->RegisterCommand("INFO", Command("INFO").SetHandler(InfoFunction));
     service->RegisterCommand("COMMAND", Command("COMMAND").SetHandler(CommandFunction));
+    service->RegisterCommand("SHUTDOWN", Command("SHUTDOWN").SetHandler(ShutdownFunction));
 }
 
 } // namespace rdss

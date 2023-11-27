@@ -14,11 +14,7 @@ Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
   , dss_executor_(std::make_unique<RingExecutor>("dss_executor", RingConfig{.async_sqe = false}))
-  , service_(std::make_unique<DataStructureService>(&config_, clock_.get()))
   , client_manager_(std::make_unique<ClientManager>()) {
-    // TODO: Consider move into DSS.
-    RegisterCommands(service_.get());
-
     // TODO: Into init list.
     client_executors_.reserve(ces_);
     for (size_t i = 0; i < ces_; ++i) {
@@ -28,9 +24,17 @@ Server::Server(Config config)
 
     // TODO: Use port in Config.
     listener_ = Listener::Create(6379, client_executors_[0].get());
+
+    std::promise<void> shutdown_promise;
+    shutdown_future_ = shutdown_promise.get_future();
+    service_ = std::make_unique<DataStructureService>(
+      &config_, clock_.get(), std::move(shutdown_promise));
+
+    // TODO: Consider move into DSS.
+    RegisterCommands(service_.get());
 }
 
-Task<void> Server::AcceptLoop(RingExecutor* executor, std::promise<void> promise) {
+Task<void> Server::AcceptLoop(RingExecutor* executor) {
     co_await ResumeOn(executor);
 
     size_t ce_index{0};
@@ -45,7 +49,6 @@ Task<void> Server::AcceptLoop(RingExecutor* executor, std::promise<void> promise
         auto* client = client_manager_->AddClient(conn, service_.get());
         client->Process(executor, dss_executor_.get());
     }
-    promise.set_value();
 }
 
 // Consider move to dss
@@ -68,10 +71,55 @@ void Server::Run() {
 
     Cron();
 
-    std::promise<void> promise;
-    auto future = promise.get_future();
-    AcceptLoop(client_executors_[0].get(), std::move(promise));
-    future.wait();
+    AcceptLoop(client_executors_[0].get());
+
+    shutdown_future_.wait();
+    LOG(INFO) << "Shutting down the server";
+    Shutdown();
+}
+
+void Server::Shutdown() {
+    LOG(INFO) << "Stopping executors.";
+    io_uring ring;
+    int ret;
+    ret = io_uring_queue_init(128, &ring, 0);
+    if (ret) {
+        LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
+    }
+    std::vector<int> fds;
+    for (auto& e : client_executors_) {
+        e->Deactivate();
+        fds.push_back(e->Ring()->enter_ring_fd);
+    }
+    dss_executor_->Deactivate();
+    fds.push_back(dss_executor_->Ring()->enter_ring_fd);
+
+    for (auto fd : fds) {
+        auto sqe = io_uring_get_sqe(&ring);
+        if (sqe == nullptr) {
+            LOG(FATAL) << "io_uring_get_sqe";
+        }
+        io_uring_prep_msg_ring(sqe, fd, 0, 0, 0);
+        io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
+    }
+    ret = io_uring_submit(&ring);
+    if (ret < 0) {
+        LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
+    }
+    dss_executor_->Shutdown();
+    for (auto& e : client_executors_) {
+        e->Shutdown();
+    }
+    io_uring_queue_exit(&ring);
+
+    LOG(INFO) << "Closing active connections.";
+    auto clients = client_manager_->GetClients();
+    for (auto client : clients) {
+        if (client != nullptr) {
+            client->Close();
+        }
+    }
+    assert(client_manager_->ActiveClients() == 0);
 }
 
 } // namespace rdss

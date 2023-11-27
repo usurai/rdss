@@ -14,7 +14,7 @@ class CommandsTestBase : public testing::Test {
 protected:
     CommandsTestBase()
       : clock_(false)
-      , service_(&config_, &clock_)
+      , service_(&config_, &clock_, std::promise<void>{})
       , buffer_(1024 * 16) {}
 
     void SetUp() override {

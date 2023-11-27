@@ -18,6 +18,9 @@ public:
 
     Task<void> Process(RingExecutor* from, RingExecutor* dss_executor);
 
+    void Close();
+
+    // TODO
     void Disconnect();
 
 private:

@@ -20,7 +20,13 @@ public:
 
     void Run();
 
-    void Shutdown() { active_.store(false); }
+    /// Actively shutdowns the server:
+    /// 1. Set every executor's 'active' to false.
+    /// 2. Wake every executor's worker thread by ring message so that they can realize the
+    /// deactivation.
+    /// 3. Call every executor's Shutdown() to blocking wait the worker threads to terminate.
+    /// 4. Release all the active clients by close the socket and delete them.
+    void Shutdown();
 
 private:
     Task<void> Cron();
@@ -31,7 +37,7 @@ private:
     // threshold is exceeded, the connection is declined. Otherwise, a new client is instantiated
     // with the connection, and the client's processing is scheduled on one of the
     // 'client_executors_' in a round-robin manner.
-    Task<void> AcceptLoop(RingExecutor* executor, std::promise<void> promise);
+    Task<void> AcceptLoop(RingExecutor* executor);
 
     Task<void> Setup();
 
@@ -45,6 +51,7 @@ private:
     const size_t ces_ = 2;
     std::vector<std::unique_ptr<RingExecutor>> client_executors_;
     std::unique_ptr<Listener> listener_;
+    std::future<void> shutdown_future_;
     std::unique_ptr<DataStructureService> service_;
     std::unique_ptr<ClientManager> client_manager_;
 };
