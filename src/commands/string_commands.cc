@@ -221,7 +221,7 @@ void SetFunction(DataStructureService& service, Args args, Result& result) {
     }
 
     auto key = args[1];
-    auto* expire_ht = service.GetExpireHashTable();
+    auto* expire_ht = service.ExpireTable();
     auto [set_status, entry, old_value] = service.SetData(key, args[2], set_mode, get);
     if (set_status == SetStatus::kNoOp) {
         result.SetNil();
@@ -255,7 +255,7 @@ void MSetFunction(DataStructureService& service, Args args, Result& result) {
 
     for (size_t i = 1; i < args.size(); i += 2) {
         service.SetData(args[i], args[i + 1], SetMode::kRegular, false);
-        service.GetExpireHashTable()->Erase(args[i]);
+        service.ExpireTable()->Erase(args[i]);
     }
 }
 
@@ -294,8 +294,8 @@ void SetEXFunctionBase(
         return;
     }
 
-    auto [entry, _] = service.DataHashTable()->Upsert(args[1], CreateMTSPtr(args[3]));
-    service.GetExpireHashTable()->Upsert(entry->CopyKey(), expire_time.value());
+    auto [entry, _] = service.DataTable()->Upsert(args[1], CreateMTSPtr(args[3]));
+    service.ExpireTable()->Upsert(entry->CopyKey(), expire_time.value());
     entry->GetKey()->SetLRU(service.GetLRUClock());
 }
 
@@ -332,12 +332,12 @@ void SetRangeFunction(DataStructureService& service, Args args, Result& result) 
     const auto start_index = start.value();
 
     auto key = args[1];
-    auto [entry, exists] = service.DataHashTable()->FindOrCreate(key, true);
+    auto [entry, exists] = service.DataTable()->FindOrCreate(key, true);
     if (exists) {
-        auto expire_entry = service.GetExpireHashTable()->Find(key);
+        auto expire_entry = service.ExpireTable()->Find(key);
         if (expire_entry != nullptr && expire_entry->value <= service.GetCommandTimeSnapshot()) {
             entry->value.reset();
-            service.GetExpireHashTable()->Erase(key);
+            service.ExpireTable()->Erase(key);
             exists = false;
         }
     }
@@ -455,9 +455,9 @@ void GetEXFunction(DataStructureService& service, Args args, Result& result) {
       service, args[1], result, [&service, persist, expire_time](MTSHashTable::EntryPointer entry) {
           auto key = entry->GetKey()->StringView();
           if (persist) {
-              service.GetExpireHashTable()->Erase(key);
+              service.ExpireTable()->Erase(key);
           } else if (expire_time.has_value()) {
-              service.GetExpireHashTable()->Upsert(key, expire_time.value());
+              service.ExpireTable()->Upsert(key, expire_time.value());
           }
       });
 }
@@ -475,7 +475,7 @@ void GetSetFunction(DataStructureService& service, Args args, Result& result) {
         result.SetNil();
     } else {
         result.SetString(std::move(old_value));
-        service.GetExpireHashTable()->Erase(args[1]);
+        service.ExpireTable()->Erase(args[1]);
     }
 }
 
@@ -530,7 +530,7 @@ void AppendFunction(DataStructureService& service, Args args, Result& result) {
     auto key = args[1];
     auto value = args[2];
 
-    auto [entry, exists] = service.DataHashTable()->FindOrCreate(key, true);
+    auto [entry, exists] = service.DataTable()->FindOrCreate(key, true);
     if (!exists) {
         entry->value = CreateMTSPtr(value);
     } else {

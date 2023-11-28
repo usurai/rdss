@@ -4,20 +4,29 @@
 
 #include <glog/logging.h>
 
-#include <chrono>
-#include <memory.h>
-
 namespace rdss {
 
 using SetStatus = DataStructureService::SetStatus;
 using SetMode = DataStructureService::SetMode;
 
-void DataStructureService::Invoke(Command::CommandStrings command_strings, Result& result) {
-    VLOG(3) << "received " << command_strings.size() << " commands:";
-    for (const auto& arg : command_strings) {
-        VLOG(3) << arg;
-    }
+DataStructureService::DataStructureService(
+  Config* config, Clock* clock, std::promise<void> shutdown_promise)
+  : config_(config)
+  , clock_(clock)
+  , shutdown_promise_(std::move(shutdown_promise))
+  , data_ht_(new MTSHashTable())
+  , expire_ht_(new ExpireHashTable()) {
+    RefreshLRUClock();
+}
 
+void DataStructureService::RegisterCommand(CommandName name, Command command) {
+    std::transform(name.begin(), name.end(), name.begin(), [](char c) { return std::tolower(c); });
+    commands_.emplace(name, command);
+    std::transform(name.begin(), name.end(), name.begin(), [](char c) { return std::toupper(c); });
+    commands_.emplace(std::move(name), std::move(command));
+}
+
+void DataStructureService::Invoke(Command::CommandStrings command_strings, Result& result) {
     auto command_itor = commands_.find(command_strings[0]);
     if (command_itor == commands_.end()) {
         result.SetError(Error::kUnknownCommand);
@@ -32,9 +41,7 @@ void DataStructureService::Invoke(Command::CommandStrings command_strings, Resul
             return;
         }
     }
-
     command_time_snapshot_ = clock_->Now();
-
     command(*this, std::move(command_strings), result);
 }
 
@@ -45,7 +52,7 @@ size_t DataStructureService::IsOOM() const {
 
     const auto allocated
       = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kAll>();
-    if (allocated < config_->maxmemory) {
+    if (allocated <= config_->maxmemory) {
         return 0;
     }
     return allocated - config_->maxmemory;
@@ -182,8 +189,8 @@ void DataStructureService::ActiveExpire() {
                   }
                   auto key_sv = entry->key->StringView();
                   // TODO: Consolidate the erase method.
-                  this->DataHashTable()->Erase(key_sv);
-                  this->GetExpireHashTable()->Erase(key_sv);
+                  this->DataTable()->Erase(key_sv);
+                  this->ExpireTable()->Erase(key_sv);
                   ++expired_this_iter;
               });
 
@@ -334,8 +341,8 @@ void DataStructureService::IncrementalRehashing(std::chrono::steady_clock::durat
         } while (std::chrono::steady_clock::now() - start < time_limit);
     };
 
-    rehash(DataHashTable());
-    rehash(GetExpireHashTable());
+    rehash(DataTable());
+    rehash(ExpireTable());
 }
 
 } // namespace rdss

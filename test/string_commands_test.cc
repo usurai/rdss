@@ -239,8 +239,8 @@ TEST_F(StringCommandsTest, GetTest) {
     AdvanceTime(10s);
     result = Invoke("GET k0");
     ExpectNull(result);
-    EXPECT_EQ(service_.DataHashTable()->Find("k0"), nullptr);
-    EXPECT_EQ(service_.GetExpireHashTable()->Find("k0"), nullptr);
+    EXPECT_EQ(service_.DataTable()->Find("k0"), nullptr);
+    EXPECT_EQ(service_.ExpireTable()->Find("k0"), nullptr);
 }
 
 TEST_F(StringCommandsTest, GetDelTest) {

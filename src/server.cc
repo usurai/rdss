@@ -29,8 +29,6 @@ Server::Server(Config config)
     shutdown_future_ = shutdown_promise.get_future();
     service_ = std::make_unique<DataStructureService>(
       &config_, clock_.get(), std::move(shutdown_promise));
-
-    // TODO: Consider move into DSS.
     RegisterCommands(service_.get());
 }
 

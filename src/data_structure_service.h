@@ -13,8 +13,6 @@ namespace rdss {
 
 struct Config;
 
-// TODO: Add thread-safe queue command interface, so that multiple read thread can queue to the same
-// service simultaneously.
 class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
@@ -23,25 +21,18 @@ public:
     using LastAccessTimeDuration = MTSHashTable::EntryType::KeyType::LastAccessTimeDuration;
 
 public:
-    explicit DataStructureService(Config* config, Clock* clock, std::promise<void> shutdown_promise)
-      : config_(config)
-      , clock_(clock)
-      , shutdown_promise_(std::move(shutdown_promise))
-      , data_ht_(new MTSHashTable())
-      , expire_ht_(new ExpireHashTable()) {
-        RefreshLRUClock();
-    }
+    explicit DataStructureService(
+      Config* config, Clock* clock, std::promise<void> shutdown_promise);
+
+    void RegisterCommand(CommandName name, Command command);
 
     void Invoke(Command::CommandStrings command_strings, Result& result);
 
-    void RegisterCommand(CommandName name, Command command) {
-        std::transform(
-          name.begin(), name.end(), name.begin(), [](char c) { return std::tolower(c); });
-        commands_.emplace(name, command);
-        std::transform(
-          name.begin(), name.end(), name.begin(), [](char c) { return std::toupper(c); });
-        commands_.emplace(std::move(name), std::move(command));
-    }
+    TimePoint GetCommandTimeSnapshot() const { return command_time_snapshot_; }
+
+    MTSHashTable* DataTable() { return data_ht_.get(); }
+
+    ExpireHashTable* ExpireTable() { return expire_ht_.get(); }
 
     /// Find and return the entry of 'key' if it's valid. Expire the key if it's stale.
     MTSHashTable::EntryPointer FindOrExpire(std::string_view key);
@@ -62,12 +53,6 @@ public:
 
     /// Erase key in both data and expire table.
     void EraseKey(std::string_view key);
-
-    MTSHashTable* DataHashTable() { return data_ht_.get(); }
-
-    ExpireHashTable* GetExpireHashTable() { return expire_ht_.get(); }
-
-    TimePoint GetCommandTimeSnapshot() const { return command_time_snapshot_; }
 
     /// Triggers a cycle of active expiration. The expiration process will repeatly scan a portion
     /// of volatile keys, and erase the expired keys. The process only stops in one of the following

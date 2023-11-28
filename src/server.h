@@ -39,8 +39,6 @@ private:
     // 'client_executors_' in a round-robin manner.
     Task<void> AcceptLoop(RingExecutor* executor);
 
-    Task<void> Setup();
-
     Config config_;
 
     std::atomic<bool> active_ = true;

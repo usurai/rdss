@@ -14,20 +14,20 @@ void TtlFunction(DataStructureService& service, Args args, Result& result) {
     }
 
     auto key = args[1];
-    auto data_entry = service.DataHashTable()->Find(key);
+    auto data_entry = service.DataTable()->Find(key);
     if (data_entry == nullptr) {
         result.SetInt(-2);
         return;
     }
-    auto expire_entry = service.GetExpireHashTable()->Find(key);
+    auto expire_entry = service.ExpireTable()->Find(key);
     if (expire_entry == nullptr) {
         result.SetInt(-1);
         return;
     }
     const auto cmd_time = service.GetCommandTimeSnapshot();
     if (expire_entry->value <= cmd_time) {
-        service.DataHashTable()->Erase(key);
-        service.GetExpireHashTable()->Erase(key);
+        service.DataTable()->Erase(key);
+        service.ExpireTable()->Erase(key);
         result.SetInt(-2);
         return;
     }

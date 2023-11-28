@@ -6,7 +6,7 @@
 namespace rdss {
 
 void DbSizeFunction(DataStructureService& service, Args, Result& result) {
-    result.SetInt(static_cast<int>(service.DataHashTable()->Count()));
+    result.SetInt(static_cast<int>(service.DataTable()->Count()));
 }
 
 void InfoFunction(DataStructureService& service, Args, Result& result) {

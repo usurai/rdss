@@ -40,15 +40,15 @@ protected:
     }
 
     void ExpectKeyValue(std::string_view key, std::string_view value) {
-        auto entry = service_.DataHashTable()->Find(key);
+        auto entry = service_.DataTable()->Find(key);
         ASSERT_NE(entry, nullptr);
         EXPECT_EQ(*entry->value, value);
     }
 
     void ExpectNoKey(std::string_view key) {
-        auto data_entry = service_.DataHashTable()->Find(key);
+        auto data_entry = service_.DataTable()->Find(key);
         if (data_entry != nullptr) {
-            auto expire_entry = service_.GetExpireHashTable()->Find(key);
+            auto expire_entry = service_.ExpireTable()->Find(key);
             if (expire_entry) {
                 EXPECT_LE(expire_entry->value, clock_.Now());
             }
@@ -56,15 +56,15 @@ protected:
     }
 
     void ExpectTTL(std::string_view key, std::chrono::milliseconds ttl) {
-        auto data_entry = service_.DataHashTable()->Find(key);
+        auto data_entry = service_.DataTable()->Find(key);
         ASSERT_NE(data_entry, nullptr);
-        auto expire_entry = service_.GetExpireHashTable()->Find(key);
+        auto expire_entry = service_.ExpireTable()->Find(key);
         ASSERT_NE(expire_entry, nullptr);
         EXPECT_EQ(expire_entry->value - clock_.Now(), ttl);
     }
 
     void ExpectNoTTL(std::string_view key) {
-        auto entry = service_.GetExpireHashTable()->Find(key);
+        auto entry = service_.ExpireTable()->Find(key);
         if (entry != nullptr) {
             EXPECT_LE(entry->value, clock_.Now());
         }
