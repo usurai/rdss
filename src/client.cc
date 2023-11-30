@@ -120,6 +120,7 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         if (data_start != nullptr && mbulk_parser != nullptr && mbulk_parser->InProgress()) {
             mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
         }
+        manager_->UpdateInputBufferSize(query_buffer.Capacity());
 
         // Normal recv
         // TODO: Optionally enable cancellable recv
@@ -162,6 +163,7 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         if (bytes_written == 0) {
             break;
         }
+        manager_->UpdateOutputBufferSize(output_buffer.Capacity());
 
         query_buffer.Reset();
         query_result.Reset();

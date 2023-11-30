@@ -10,11 +10,13 @@ namespace rdss::detail {
 
 std::string CollectClientsInfo(DataStructureService& service) {
     std::stringstream stream;
-    stream << "# Clients\n";
+    const auto* client_manager = service.GetServer()->GetClientManager();
 
-    stream << "connected_clients:" << service.GetServer()->GetClientManager()->ActiveClients()
-           << '\n';
+    stream << "# Clients\n";
+    stream << "connected_clients:" << client_manager->ActiveClients() << '\n';
     stream << "maxclients:" << service.GetConfig()->maxclients << '\n';
+    stream << "client_recent_max_input_buffer:" << client_manager->GetMaxInputBuffer() << '\n';
+    stream << "client_recent_max_output_buffer:" << client_manager->GetMaxOutputBuffer() << "\n\n";
 
     return stream.str();
 }
