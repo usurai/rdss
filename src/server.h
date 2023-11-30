@@ -28,6 +28,8 @@ public:
     /// 4. Release all the active clients by close the socket and delete them.
     void Shutdown();
 
+    ClientManager* GetClientManager() { return client_manager_.get(); }
+
 private:
     Task<void> Cron();
 

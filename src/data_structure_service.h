@@ -12,6 +12,7 @@
 namespace rdss {
 
 struct Config;
+class Server;
 
 class DataStructureService {
 public:
@@ -22,7 +23,11 @@ public:
 
 public:
     explicit DataStructureService(
-      Config* config, Clock* clock, std::promise<void> shutdown_promise);
+      Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise);
+
+    Server* GetServer() { return server_; }
+
+    const Config* GetConfig() const { return config_; }
 
     void RegisterCommand(CommandName name, Command command);
 
@@ -83,6 +88,7 @@ private:
     MTSHashTable::EntryPointer GetSomeOldEntry(size_t samples);
 
     Config* config_;
+    Server* server_;
     Clock* clock_;
     std::promise<void> shutdown_promise_;
     CommandDictionary commands_;

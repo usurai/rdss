@@ -10,8 +10,9 @@ using SetStatus = DataStructureService::SetStatus;
 using SetMode = DataStructureService::SetMode;
 
 DataStructureService::DataStructureService(
-  Config* config, Clock* clock, std::promise<void> shutdown_promise)
+  Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise)
   : config_(config)
+  , server_(server)
   , clock_(clock)
   , shutdown_promise_(std::move(shutdown_promise))
   , data_ht_(new MTSHashTable())

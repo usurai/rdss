@@ -2,6 +2,24 @@
 
 #include "command.h"
 #include "data_structure_service.h"
+#include "server.h"
+
+#include <sstream>
+
+namespace rdss::detail {
+
+std::string CollectClientsInfo(DataStructureService& service) {
+    std::stringstream stream;
+    stream << "# Clients\n";
+
+    stream << "connected_clients:" << service.GetServer()->GetClientManager()->ActiveClients()
+           << '\n';
+    stream << "maxclients:" << service.GetConfig()->maxclients << '\n';
+
+    return stream.str();
+}
+
+} // namespace rdss::detail
 
 namespace rdss {
 
@@ -10,10 +28,13 @@ void DbSizeFunction(DataStructureService& service, Args, Result& result) {
 }
 
 void InfoFunction(DataStructureService& service, Args, Result& result) {
-    auto str_ptr = CreateMTSPtr(
-      "# Memory\r\nevicted_keys:" + std::to_string(service.GetEvictedKeys())
-      + "\r\nactive_expired_keys:" + std::to_string(service.active_expired_keys_));
+    // auto str_ptr = CreateMTSPtr(
+    //   "# Memory\r\nevicted_keys:" + std::to_string(service.GetEvictedKeys())
+    //   + "\r\nactive_expired_keys:" + std::to_string(service.active_expired_keys_));
 
+    // result.SetString(std::move(str_ptr));
+
+    auto str_ptr = CreateMTSPtr(detail::CollectClientsInfo(service));
     result.SetString(std::move(str_ptr));
 }
 

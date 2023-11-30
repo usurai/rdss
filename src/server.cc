@@ -28,7 +28,7 @@ Server::Server(Config config)
     std::promise<void> shutdown_promise;
     shutdown_future_ = shutdown_promise.get_future();
     service_ = std::make_unique<DataStructureService>(
-      &config_, clock_.get(), std::move(shutdown_promise));
+      &config_, this, clock_.get(), std::move(shutdown_promise));
     RegisterCommands(service_.get());
 }
 
