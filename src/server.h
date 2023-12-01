@@ -30,6 +30,8 @@ public:
 
     ClientManager* GetClientManager() { return client_manager_.get(); }
 
+    auto GetStartupTime() const { return start_time_; }
+
 private:
     Task<void> Cron();
 
@@ -54,6 +56,8 @@ private:
     std::future<void> shutdown_future_;
     std::unique_ptr<DataStructureService> service_;
     std::unique_ptr<ClientManager> client_manager_;
+
+    Clock::TimePoint start_time_;
 };
 
 } // namespace rdss

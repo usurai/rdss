@@ -82,6 +82,8 @@ public:
 
     void Shutdown() { shutdown_promise_.set_value(); }
 
+    Clock* GetClock() { return clock_; }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);

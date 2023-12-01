@@ -66,6 +66,7 @@ Task<void> Server::Cron() {
 
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
+    start_time_ = clock_->Now();
 
     Cron();
 
