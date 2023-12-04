@@ -31,6 +31,13 @@ public:
     void Allocate(size_t n) {
         static_assert(C != Category::kAll);
         counter_[static_cast<size_t>(C)].fetch_add(n, std::memory_order_relaxed);
+
+        const auto sum = counter_[0].load(std::memory_order_relaxed)
+                         + counter_[1].load(std::memory_order_relaxed);
+        auto peak = peak_.load(std::memory_order_relaxed);
+        while (sum > peak && !peak_.compare_exchange_weak(peak, sum)) {
+        }
+
         VLOG(1) << '[' << C << "] Allocate [" << n << " | " << counter_[static_cast<size_t>(C)]
                 << "].";
     }
@@ -51,12 +58,15 @@ public:
         return counter_[static_cast<size_t>(C)];
     }
 
+    size_t GetPeakAllocated() const { return peak_.load(std::memory_order_relaxed); }
+
 protected:
     MemoryTracker() = default;
     static MemoryTracker* instance_;
 
 private:
     std::atomic<size_t> counter_[2] = {};
+    std::atomic<size_t> peak_{0};
 };
 
 template<class T>
