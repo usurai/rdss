@@ -10,9 +10,7 @@
 namespace rdss::detail {
 
 // TODO: lru_clock: Clock incrementing every minute, for LRU management
-std::string CollectServerInfo(DataStructureService& service) {
-    std::stringstream stream;
-
+void CollectServerInfo(DataStructureService& service, std::stringstream& stream) {
     stream << "# Server\n";
     stream << "multiplexing_api:io_uring\n";
     stream << "process_id:" << getpid() << '\n';
@@ -32,12 +30,9 @@ std::string CollectServerInfo(DataStructureService& service) {
 
     stream << "hz:" << service.GetConfig()->hz << '\n';
     stream << "configured_hz:" << service.GetConfig()->hz << "\n\n";
-
-    return stream.str();
 }
 
-std::string CollectClientsInfo(DataStructureService& service) {
-    std::stringstream stream;
+void CollectClientsInfo(DataStructureService& service, std::stringstream& stream) {
     const auto* client_manager = service.GetServer()->GetClientManager();
 
     stream << "# Clients\n";
@@ -64,24 +59,26 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
 
     // result.SetString(std::move(str_ptr));
 
-    std::string s;
+    std::stringstream stream;
     if (args.size() == 1) {
-        s += detail::CollectServerInfo(service);
-        s += detail::CollectClientsInfo(service);
+        detail::CollectServerInfo(service, stream);
+        detail::CollectClientsInfo(service, stream);
     } else {
         for (size_t i = 1; i < args.size(); ++i) {
             if (!args[i].compare("SERVER") || !args[i].compare("server")) {
-                s += detail::CollectServerInfo(service);
+                detail::CollectServerInfo(service, stream);
                 continue;
             }
             if (!args[i].compare("CLIENTS") || !args[i].compare("clients")) {
-                s += detail::CollectClientsInfo(service);
+                detail::CollectClientsInfo(service, stream);
+                continue;
+            }
                 continue;
             }
         }
     }
 
-    result.SetString(CreateMTSPtr(std::move(s)));
+    result.SetString(CreateMTSPtr(stream.str()));
 }
 
 // TODO: Implementation.
