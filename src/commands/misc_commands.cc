@@ -1,8 +1,12 @@
 #include "misc_commands.h"
 
+#include "base/memory.h"
 #include "command.h"
 #include "data_structure_service.h"
 #include "server.h"
+
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
 
 #include <sstream>
 #include <unistd.h>
@@ -40,8 +44,30 @@ void CollectClientsInfo(DataStructureService& service, std::stringstream& stream
     stream << "maxclients:" << service.GetConfig()->maxclients << '\n';
     stream << "client_recent_max_input_buffer:" << client_manager->GetMaxInputBuffer() << '\n';
     stream << "client_recent_max_output_buffer:" << client_manager->GetMaxOutputBuffer() << "\n\n";
+}
 
-    return stream.str();
+void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream) {
+    stream << "# Memory\n";
+    stream << "used_memory:"
+           << MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kAll>() << '\n';
+
+    rusage usage;
+    if (getrusage(RUSAGE_SELF, &usage) != 0) {
+        LOG(ERROR) << "getrusage:" << strerror(errno);
+    } else {
+        stream << "used_memory_rss:" << usage.ru_maxrss << '\n';
+    }
+
+    stream << "used_memory_peak:" << MemoryTracker::GetInstance().GetPeakAllocated() << '\n';
+
+    struct sysinfo info;
+    if (sysinfo(&info) != 0) {
+        LOG(ERROR) << "sysinfo:" << strerror(errno);
+    } else {
+        stream << "total_system_memory:" << info.totalram << '\n';
+    }
+
+    stream << '\n';
 }
 
 } // namespace rdss::detail
@@ -63,6 +89,7 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
     if (args.size() == 1) {
         detail::CollectServerInfo(service, stream);
         detail::CollectClientsInfo(service, stream);
+        detail::CollectMemoryInfo(service, stream);
     } else {
         for (size_t i = 1; i < args.size(); ++i) {
             if (!args[i].compare("SERVER") || !args[i].compare("server")) {
@@ -73,6 +100,8 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
                 detail::CollectClientsInfo(service, stream);
                 continue;
             }
+            if (!args[i].compare("MEMORY") || !args[i].compare("memory")) {
+                detail::CollectMemoryInfo(service, stream);
                 continue;
             }
         }
