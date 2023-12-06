@@ -14,6 +14,11 @@
 
 namespace rdss {
 
+struct ServerStats {
+    Clock::TimePoint start_time;
+    std::atomic<uint64_t> connections_received{0};
+};
+
 class Server {
 public:
     explicit Server(Config config);
@@ -30,7 +35,7 @@ public:
 
     ClientManager* GetClientManager() { return client_manager_.get(); }
 
-    auto GetStartupTime() const { return start_time_; }
+    ServerStats& Stats() { return stats_; }
 
 private:
     Task<void> Cron();
@@ -57,7 +62,7 @@ private:
     std::unique_ptr<DataStructureService> service_;
     std::unique_ptr<ClientManager> client_manager_;
 
-    Clock::TimePoint start_time_;
+    ServerStats stats_;
 };
 
 } // namespace rdss

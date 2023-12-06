@@ -14,6 +14,10 @@ namespace rdss {
 struct Config;
 class Server;
 
+struct DSSStats {
+    std::atomic<uint64_t> commands_processed;
+};
+
 class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
@@ -84,6 +88,8 @@ public:
 
     Clock* GetClock() { return clock_; }
 
+    DSSStats& Stats() { return stats_; }
+
 private:
     size_t IsOOM() const;
     bool Evict(size_t bytes_to_free);
@@ -113,6 +119,8 @@ private:
 
     // Index of next bucket of expire table to scan for expired key.
     size_t bucket_index_{0};
+
+    DSSStats stats_;
 
 public:
     // TODO: move somewhere

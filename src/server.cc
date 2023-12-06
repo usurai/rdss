@@ -38,6 +38,7 @@ Task<void> Server::AcceptLoop(RingExecutor* executor) {
     size_t ce_index{0};
     while (active_) {
         auto conn = co_await listener_->Accept(client_executors_[ce_index].get());
+        stats_.connections_received.fetch_add(1, std::memory_order_relaxed);
         if (client_manager_->ActiveClients() == config_.maxclients) {
             conn->Close();
             delete conn;
@@ -66,7 +67,7 @@ Task<void> Server::Cron() {
 
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
-    start_time_ = clock_->Now();
+    stats_.start_time = clock_->Now();
 
     Cron();
 

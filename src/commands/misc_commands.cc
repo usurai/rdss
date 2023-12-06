@@ -26,7 +26,7 @@ void CollectServerInfo(DataStructureService& service, std::stringstream& stream)
                 .count()
            << '\n';
 
-    const auto uptime = service.GetClock()->Now() - service.GetServer()->GetStartupTime();
+    const auto uptime = service.GetClock()->Now() - service.GetServer()->Stats().start_time;
     stream << "uptime_in_seconds:"
            << std::chrono::duration_cast<std::chrono::seconds>(uptime).count() << '\n';
     stream << "uptime_in_days:" << std::chrono::duration_cast<std::chrono::days>(uptime).count()
@@ -70,6 +70,24 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
     stream << '\n';
 }
 
+// total_connections_received
+// total_commands_processed
+// total_net_input_bytes
+// total_net_output_bytes
+// rejected_connections
+// expired_keys
+// expired_stale_perc
+// expired_time_cap_reached_count
+// expire_cycle_cpu_milliseconds
+// evicted_keys
+// evicted_clients
+void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) {
+    stream << "# Stats\n";
+    stream << "total_connections_received:" << service.GetServer()->Stats().connections_received
+           << '\n';
+    stream << "total_commands_processed:" << service.Stats().commands_processed << '\n';
+}
+
 } // namespace rdss::detail
 
 namespace rdss {
@@ -102,6 +120,10 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
             }
             if (!args[i].compare("MEMORY") || !args[i].compare("memory")) {
                 detail::CollectMemoryInfo(service, stream);
+                continue;
+            }
+            if (!args[i].compare("STATS") || !args[i].compare("stats")) {
+                detail::CollectStatsInfo(service, stream);
                 continue;
             }
         }

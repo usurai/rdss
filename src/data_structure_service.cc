@@ -44,6 +44,7 @@ void DataStructureService::Invoke(Command::CommandStrings command_strings, Resul
     }
     command_time_snapshot_ = clock_->Now();
     command(*this, std::move(command_strings), result);
+    stats_.commands_processed.fetch_add(1, std::memory_order_relaxed);
 }
 
 size_t DataStructureService::IsOOM() const {
