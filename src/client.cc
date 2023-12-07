@@ -120,7 +120,7 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         if (data_start != nullptr && mbulk_parser != nullptr && mbulk_parser->InProgress()) {
             mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
         }
-        manager_->UpdateInputBufferSize(query_buffer.Capacity());
+        manager_->Stats().UpdateInputBufferSize(query_buffer.Capacity());
 
         // Normal recv
         // TODO: Optionally enable cancellable recv
@@ -132,6 +132,7 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         if (bytes_read == 0) {
             break;
         }
+        manager_->Stats().net_input_bytes.fetch_add(bytes_read, std::memory_order_relaxed);
         query_buffer.Produce(bytes_read);
 
         size_t num_strings;
@@ -163,7 +164,8 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
         if (bytes_written == 0) {
             break;
         }
-        manager_->UpdateOutputBufferSize(output_buffer.Capacity());
+        manager_->Stats().UpdateOutputBufferSize(output_buffer.Capacity());
+        manager_->Stats().net_output_bytes.fetch_add(bytes_written, std::memory_order_relaxed);
 
         query_buffer.Reset();
         query_result.Reset();

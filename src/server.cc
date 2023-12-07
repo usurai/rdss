@@ -40,6 +40,7 @@ Task<void> Server::AcceptLoop(RingExecutor* executor) {
         auto conn = co_await listener_->Accept(client_executors_[ce_index].get());
         stats_.connections_received.fetch_add(1, std::memory_order_relaxed);
         if (client_manager_->ActiveClients() == config_.maxclients) {
+            stats_.rejected_connections.fetch_add(1, std::memory_order_relaxed);
             conn->Close();
             delete conn;
             continue;

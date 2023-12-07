@@ -37,13 +37,15 @@ void CollectServerInfo(DataStructureService& service, std::stringstream& stream)
 }
 
 void CollectClientsInfo(DataStructureService& service, std::stringstream& stream) {
-    const auto* client_manager = service.GetServer()->GetClientManager();
+    auto* client_manager = service.GetServer()->GetClientManager();
 
     stream << "# Clients\n";
     stream << "connected_clients:" << client_manager->ActiveClients() << '\n';
     stream << "maxclients:" << service.GetConfig()->maxclients << '\n';
-    stream << "client_recent_max_input_buffer:" << client_manager->GetMaxInputBuffer() << '\n';
-    stream << "client_recent_max_output_buffer:" << client_manager->GetMaxOutputBuffer() << "\n\n";
+    stream << "client_recent_max_input_buffer:"
+           << client_manager->Stats().max_input_buffer.load(std::memory_order_relaxed) << '\n';
+    stream << "client_recent_max_output_buffer:"
+           << client_manager->Stats().max_output_buffer.load(std::memory_order_relaxed) << "\n\n";
 }
 
 void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream) {
@@ -70,11 +72,6 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
     stream << '\n';
 }
 
-// total_connections_received
-// total_commands_processed
-// total_net_input_bytes
-// total_net_output_bytes
-// rejected_connections
 // expired_keys
 // expired_stale_perc
 // expired_time_cap_reached_count
@@ -82,10 +79,22 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
 // evicted_keys
 // evicted_clients
 void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) {
+    auto& server_stats = service.GetServer()->Stats();
+    auto& client_stats = service.GetServer()->GetClientManager()->Stats();
+
     stream << "# Stats\n";
-    stream << "total_connections_received:" << service.GetServer()->Stats().connections_received
-           << '\n';
-    stream << "total_commands_processed:" << service.Stats().commands_processed << '\n';
+    stream << "total_connections_received:"
+           << server_stats.connections_received.load(std::memory_order_relaxed) << '\n';
+    stream << "total_commands_processed:"
+           << service.Stats().commands_processed.load(std::memory_order_relaxed) << '\n';
+    stream << "total_net_input_bytes:"
+           << client_stats.net_input_bytes.load(std::memory_order_relaxed) << '\n';
+    stream << "total_net_output_bytes:"
+           << client_stats.net_output_bytes.load(std::memory_order_relaxed) << '\n';
+    stream << "rejected_connections:"
+           << server_stats.rejected_connections.load(std::memory_order_relaxed) << '\n';
+
+    stream << '\n';
 }
 
 } // namespace rdss::detail
@@ -108,6 +117,7 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
         detail::CollectServerInfo(service, stream);
         detail::CollectClientsInfo(service, stream);
         detail::CollectMemoryInfo(service, stream);
+        detail::CollectStatsInfo(service, stream);
     } else {
         for (size_t i = 1; i < args.size(); ++i) {
             if (!args[i].compare("SERVER") || !args[i].compare("server")) {

@@ -16,7 +16,8 @@ namespace rdss {
 
 struct ServerStats {
     Clock::TimePoint start_time;
-    std::atomic<uint64_t> connections_received{0};
+    std::atomic<uint64_t> connections_received{};
+    std::atomic<uint64_t> rejected_connections{};
 };
 
 class Server {

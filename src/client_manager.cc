@@ -32,15 +32,15 @@ void ClientManager::RemoveClient(Connection* conn) {
     active_clients_.fetch_sub(1, std::memory_order_release);
 }
 
-void ClientManager::UpdateInputBufferSize(uint64_t s) {
-    auto cur = max_input_buffer_.load(std::memory_order_relaxed);
-    while (s > cur && !max_input_buffer_.compare_exchange_weak(cur, s)) {
+void ClientStats::UpdateInputBufferSize(uint64_t s) {
+    auto cur = max_input_buffer.load(std::memory_order_relaxed);
+    while (s > cur && !max_input_buffer.compare_exchange_weak(cur, s)) {
     }
 }
 
-void ClientManager::UpdateOutputBufferSize(uint64_t s) {
-    auto cur = max_output_buffer_.load(std::memory_order_relaxed);
-    while (s > cur && !max_output_buffer_.compare_exchange_weak(cur, s)) {
+void ClientStats::UpdateOutputBufferSize(uint64_t s) {
+    auto cur = max_output_buffer.load(std::memory_order_relaxed);
+    while (s > cur && !max_output_buffer.compare_exchange_weak(cur, s)) {
     }
 }
 
