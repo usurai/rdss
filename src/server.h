@@ -1,12 +1,8 @@
 #pragma once
 
 #include "base/clock.h"
-#include "client_manager.h"
 #include "config.h"
-#include "data_structure_service.h"
-#include "io/listener.h"
 #include "io/promise.h"
-#include "runtime/ring_executor.h"
 
 #include <atomic>
 #include <future>
@@ -20,9 +16,16 @@ struct ServerStats {
     std::atomic<uint64_t> rejected_connections{};
 };
 
+class ClientManager;
+class DataStructureService;
+class Listener;
+class RingExecutor;
+
 class Server {
 public:
     explicit Server(Config config);
+
+    ~Server();
 
     void Run();
 

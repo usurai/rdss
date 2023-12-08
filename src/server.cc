@@ -1,8 +1,12 @@
 #include "server.h"
 
 #include "client.h"
+#include "client_manager.h"
 #include "command.h"
 #include "command_registry.h"
+#include "data_structure_service.h"
+#include "io/listener.h"
+#include "runtime/ring_executor.h"
 #include "sys/util.h"
 
 #include <chrono>
@@ -50,6 +54,8 @@ Task<void> Server::AcceptLoop(RingExecutor* executor) {
         client->Process(executor, dss_executor_.get());
     }
 }
+
+Server::~Server() = default;
 
 // Consider move to dss
 // TODO: Adaptive hz
