@@ -66,7 +66,7 @@ Task<void> Server::Cron() {
     while (active_) {
         co_await dss_executor_->Timeout(std::chrono::milliseconds(interval_in_millisecond));
 
-        service_->RefreshLRUClock();
+        service_->GetEvictor().RefreshLRUClock();
         service_->ActiveExpire();
         service_->IncrementalRehashing(std::chrono::milliseconds{1});
     }

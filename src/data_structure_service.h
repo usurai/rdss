@@ -4,6 +4,7 @@
 #include "command.h"
 #include "command_dictionary.h"
 #include "data_structure/tracking_hash_table.h"
+#include "eviction_strategy.h"
 
 #include <chrono>
 #include <future>
@@ -22,8 +23,6 @@ class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
     using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
-    using LastAccessTimePoint = MTSHashTable::EntryType::KeyType::LastAccessTimePoint;
-    using LastAccessTimeDuration = MTSHashTable::EntryType::KeyType::LastAccessTimeDuration;
 
 public:
     explicit DataStructureService(
@@ -71,14 +70,7 @@ public:
     /// scanned.
     void ActiveExpire();
 
-    LastAccessTimePoint GetLRUClock() const { return lru_clock_; }
-
-    void RefreshLRUClock() {
-        lru_clock_ = std::chrono::time_point_cast<LastAccessTimeDuration>(
-          LastAccessTimePoint::clock::now());
-    }
-
-    size_t GetEvictedKeys() const { return evicted_keys_; }
+    auto GetLRUClock() const { return evictor_.GetLRUClock(); }
 
     /// Try rehash data / expiry table for 'time_limit' duration if they are rehashing. This is
     /// called at cron.
@@ -90,10 +82,10 @@ public:
 
     DSSStats& Stats() { return stats_; }
 
+    EvictionStrategy& GetEvictor() { return evictor_; }
+
 private:
     size_t IsOOM() const;
-    bool Evict(size_t bytes_to_free);
-    MTSHashTable::EntryPointer GetSomeOldEntry(size_t samples);
 
     Config* config_;
     Server* server_;
@@ -102,24 +94,10 @@ private:
     CommandDictionary commands_;
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;
-
+    EvictionStrategy evictor_;
     TimePoint command_time_snapshot_;
-
-    // LRU-related
-    using LRUEntry = std::pair<LastAccessTimePoint, MTSHashTable::EntryType::KeyPointer>;
-    struct CompareLRUEntry {
-        constexpr bool operator()(const LRUEntry& lhs, const LRUEntry& rhs) const {
-            return lhs.first < rhs.first;
-        }
-    };
-    static constexpr size_t kEvictionPoolLimit = 16;
-    std::set<LRUEntry, CompareLRUEntry> eviction_pool_;
-    LastAccessTimePoint lru_clock_;
-    size_t evicted_keys_{0};
-
     // Index of next bucket of expire table to scan for expired key.
     size_t bucket_index_{0};
-
     DSSStats stats_;
 
 public:

@@ -16,9 +16,8 @@ DataStructureService::DataStructureService(
   , clock_(clock)
   , shutdown_promise_(std::move(shutdown_promise))
   , data_ht_(new MTSHashTable())
-  , expire_ht_(new ExpireHashTable()) {
-    RefreshLRUClock();
-}
+  , expire_ht_(new ExpireHashTable())
+  , evictor_(this) {}
 
 void DataStructureService::RegisterCommand(CommandName name, Command command) {
     std::transform(name.begin(), name.end(), name.begin(), [](char c) { return std::tolower(c); });
@@ -36,8 +35,8 @@ void DataStructureService::Invoke(Command::CommandStrings command_strings, Resul
     auto& command = command_itor->second;
 
     if (command.IsWriteCommand()) {
-        size_t bytes_to_free = IsOOM();
-        if (bytes_to_free != 0 && !Evict(bytes_to_free)) {
+        size_t bytes_to_free = evictor_.MaxmemoryExceeded();
+        if (bytes_to_free != 0 && !evictor_.Evict(bytes_to_free)) {
             result.SetError(Error::kOOM);
             return;
         }
@@ -45,113 +44,6 @@ void DataStructureService::Invoke(Command::CommandStrings command_strings, Resul
     command_time_snapshot_ = clock_->Now();
     command(*this, std::move(command_strings), result);
     stats_.commands_processed.fetch_add(1, std::memory_order_relaxed);
-}
-
-size_t DataStructureService::IsOOM() const {
-    if (config_->maxmemory == 0) {
-        return 0;
-    }
-
-    const auto allocated
-      = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kAll>();
-    if (allocated <= config_->maxmemory) {
-        return 0;
-    }
-    return allocated - config_->maxmemory;
-}
-
-bool DataStructureService::Evict(size_t bytes_to_free) {
-    assert(bytes_to_free != 0);
-    VLOG(1) << "Start eviction, policy:" << MaxmemoryPolicyEnumToStr(config_->maxmemory_policy)
-            << ", bytes_to_free:" << bytes_to_free;
-
-    if (config_->maxmemory_policy == MaxmemoryPolicy::kNoEviction) {
-        return false;
-    }
-
-    if (config_->maxmemory_policy == MaxmemoryPolicy::kAllKeysRandom) {
-        size_t freed = 0;
-        while (freed < bytes_to_free) {
-            if (data_ht_->Count() == 0) {
-                return false;
-            }
-
-            MTSHashTable::EntryPointer entry = data_ht_->GetRandomEntry();
-            if (entry == nullptr) {
-                return false;
-            }
-            auto delta
-              = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
-            // TODO: dont convert to string_view
-            VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
-            expire_ht_->Erase(entry->GetKey()->StringView());
-            data_ht_->Erase(entry->GetKey()->StringView());
-            ++evicted_keys_;
-            delta
-              -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
-            VLOG(1) << "Freed " << delta << " bytes.";
-            freed += delta;
-        }
-        return true;
-    }
-
-    assert(config_->maxmemory_policy == MaxmemoryPolicy::kAllKeysLru);
-    size_t freed = 0;
-    while (freed < bytes_to_free) {
-        if (data_ht_->Count() == 0) {
-            return false;
-        }
-        MTSHashTable::EntryPointer entry = GetSomeOldEntry(config_->maxmemory_samples);
-        if (entry == nullptr) {
-            return false;
-        }
-        auto delta
-          = MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
-        // TODO: dont convert to string_view
-        VLOG(1) << "Evicting key " << entry->GetKey()->StringView();
-        expire_ht_->Erase(entry->GetKey()->StringView());
-        data_ht_->Erase(entry->GetKey()->StringView());
-        ++evicted_keys_;
-        delta -= MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kMallocator>();
-        VLOG(1) << "Freed " << delta << " bytes.";
-        freed += delta;
-    }
-    return true;
-}
-
-// TODO: Current implementation doesn't care execution time. Consider stop eviction after some
-// time or attempts.
-MTSHashTable::EntryPointer DataStructureService::GetSomeOldEntry(size_t samples) {
-    assert(eviction_pool_.size() < kEvictionPoolLimit);
-    assert(data_ht_->Count() > 0);
-
-    MTSHashTable::EntryPointer result{nullptr};
-    while (result == nullptr) {
-        for (size_t i = 0; i < std::min(samples, data_ht_->Count()); ++i) {
-            auto entry = data_ht_->GetRandomEntry();
-            assert(entry != nullptr);
-            eviction_pool_.emplace(entry->GetKey()->GetLRU(), entry->CopyKey());
-        }
-
-        while (eviction_pool_.size() > kEvictionPoolLimit) {
-            auto it = eviction_pool_.end();
-            --it;
-            eviction_pool_.erase(it);
-        }
-
-        while (!eviction_pool_.empty()) {
-            auto& [lru, key] = *eviction_pool_.begin();
-            auto entry = data_ht_->Find(key->StringView());
-            if (entry == nullptr || entry->GetKey()->GetLRU() != lru) {
-                eviction_pool_.erase(eviction_pool_.begin());
-                continue;
-            }
-            result = entry;
-            eviction_pool_.erase(eviction_pool_.begin());
-            break;
-        }
-    }
-    return result;
 }
 
 void DataStructureService::ActiveExpire() {

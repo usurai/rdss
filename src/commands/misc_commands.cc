@@ -77,7 +77,6 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
 // expired_stale_perc
 // expired_time_cap_reached_count
 // expire_cycle_cpu_milliseconds
-// evicted_keys
 // evicted_clients
 void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) {
     auto& server_stats = service.GetServer()->Stats();
@@ -94,6 +93,8 @@ void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) 
            << client_stats.net_output_bytes.load(std::memory_order_relaxed) << '\n';
     stream << "rejected_connections:"
            << server_stats.rejected_connections.load(std::memory_order_relaxed) << '\n';
+
+    stream << "evicted_keys:" << service.GetEvictor().GetEvictedKeys() << '\n';
 
     stream << '\n';
 }
