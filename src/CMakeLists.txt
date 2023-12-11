@@ -16,6 +16,7 @@ add_library(
   commands/string_commands.cc
   data_structure_service.cc
   eviction_strategy.cc
+  expire_strategy.cc
   server.cc)
 
 target_compile_features(librdss PRIVATE cxx_std_20)

@@ -5,6 +5,7 @@
 #include "command_dictionary.h"
 #include "data_structure/tracking_hash_table.h"
 #include "eviction_strategy.h"
+#include "expire_strategy.h"
 
 #include <chrono>
 #include <future>
@@ -62,14 +63,6 @@ public:
     /// Erase key in both data and expire table.
     void EraseKey(std::string_view key);
 
-    /// Triggers a cycle of active expiration. The expiration process will repeatly scan a portion
-    /// of volatile keys, and erase the expired keys. The process only stops in one of the following
-    /// condition: 1. The expired rate of the last iteration is below the threshold specified by
-    /// 'active_expire_acceptable_stale_percent'. 2. The elapsed time of the process has exceeded
-    /// the time limit specified by 'active_expire_cycle_time_percent'. 3. The whole table has been
-    /// scanned.
-    void ActiveExpire();
-
     auto GetLRUClock() const { return evictor_.GetLRUClock(); }
 
     /// Try rehash data / expiry table for 'time_limit' duration if they are rehashing. This is
@@ -84,6 +77,8 @@ public:
 
     EvictionStrategy& GetEvictor() { return evictor_; }
 
+    ExpireStrategy& GetExpirer() { return expirer_; }
+
 private:
     size_t IsOOM() const;
 
@@ -95,14 +90,9 @@ private:
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;
     EvictionStrategy evictor_;
+    ExpireStrategy expirer_;
     TimePoint command_time_snapshot_;
-    // Index of next bucket of expire table to scan for expired key.
-    size_t bucket_index_{0};
     DSSStats stats_;
-
-public:
-    // TODO: move somewhere
-    size_t active_expired_keys_{0};
 };
 
 } // namespace rdss

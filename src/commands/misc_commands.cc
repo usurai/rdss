@@ -73,7 +73,6 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
     stream << '\n';
 }
 
-// expired_keys
 // expired_stale_perc
 // expired_time_cap_reached_count
 // expire_cycle_cpu_milliseconds
@@ -81,6 +80,7 @@ void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream)
 void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) {
     auto& server_stats = service.GetServer()->Stats();
     auto& client_stats = service.GetServer()->GetClientManager()->Stats();
+    auto& expire_stats = service.GetExpirer().GetStats();
 
     stream << "# Stats\n";
     stream << "total_connections_received:"
@@ -93,6 +93,9 @@ void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) 
            << client_stats.net_output_bytes.load(std::memory_order_relaxed) << '\n';
     stream << "rejected_connections:"
            << server_stats.rejected_connections.load(std::memory_order_relaxed) << '\n';
+
+    stream << "expired_keys:" << expire_stats.active_expired_keys.load(std::memory_order_relaxed)
+           << '\n';
 
     stream << "evicted_keys:" << service.GetEvictor().GetEvictedKeys() << '\n';
 

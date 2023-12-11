@@ -13,7 +13,7 @@ class EvictionStrategy {
 public:
     using LastAccessTimePoint = MTSHashTable::EntryType::KeyType::LastAccessTimePoint;
 
-    EvictionStrategy(DataStructureService* service);
+    explicit EvictionStrategy(DataStructureService* service);
 
     auto GetLRUClock() const { return lru_clock_; }
 
