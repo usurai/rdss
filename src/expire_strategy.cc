@@ -29,6 +29,7 @@ void ExpireStrategy::ActiveExpire() {
             keys_to_sample = expire_ht->Count();
         }
         if (keys_to_sample == 0) {
+            stats_.expired_stale_perc.store(0, std::memory_order_relaxed);
             break;
         }
 
@@ -64,7 +65,10 @@ void ExpireStrategy::ActiveExpire() {
         sampled_keys += sampled_this_iter;
         expired_keys += expired_this_iter;
         const auto expired_rate = static_cast<double>(expired_this_iter * 100) / sampled_this_iter;
+        stats_.expired_stale_perc.store(
+          static_cast<uint32_t>(expired_rate), std::memory_order_relaxed);
         const auto elapsed = std::chrono::steady_clock::now() - start_time;
+        stats_.elapsed_time.fetch_add(elapsed.count(), std::memory_order_relaxed);
 
         VLOG(2) << "ActiveExpire loop | sampled:" << sampled_this_iter
                 << " expired:" << expired_this_iter << " expired rate:" << expired_rate
@@ -76,6 +80,7 @@ void ExpireStrategy::ActiveExpire() {
         }
 
         if (elapsed >= time_limit) {
+            stats_.expired_time_cap_reached_count.fetch_add(1, std::memory_order_relaxed);
             VLOG(2) << "ActiveExpire quits because timeout.";
             break;
         }

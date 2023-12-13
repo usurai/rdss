@@ -10,6 +10,9 @@ class Config;
 
 struct ExpireStats {
     std::atomic<size_t> active_expired_keys{0};
+    std::atomic<uint32_t> expired_stale_perc{0};
+    std::atomic<size_t> expired_time_cap_reached_count{0};
+    std::atomic<uint64_t> elapsed_time{0};
 };
 
 class ExpireStrategy {
