@@ -110,6 +110,13 @@ void CollectStatsInfo(DataStructureService& service, std::stringstream& stream) 
     stream << '\n';
 }
 
+void CollectKeyspaceInfo(DataStructureService& service, std::stringstream& stream) {
+    stream << "# Keyspace\n";
+    // TODO:  avg_ttl.
+    stream << "db0: keys=" << service.DataTable()->Count()
+           << ",expires=" << service.ExpireTable()->Count() << "\n\n";
+}
+
 } // namespace rdss::detail
 
 namespace rdss {
@@ -131,6 +138,7 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
         detail::CollectClientsInfo(service, stream);
         detail::CollectMemoryInfo(service, stream);
         detail::CollectStatsInfo(service, stream);
+        detail::CollectKeyspaceInfo(service, stream);
     } else {
         for (size_t i = 1; i < args.size(); ++i) {
             if (!args[i].compare("SERVER") || !args[i].compare("server")) {
@@ -147,6 +155,10 @@ void InfoFunction(DataStructureService& service, Args args, Result& result) {
             }
             if (!args[i].compare("STATS") || !args[i].compare("stats")) {
                 detail::CollectStatsInfo(service, stream);
+                continue;
+            }
+            if (!args[i].compare("KEYSPACE") || !args[i].compare("keyspace")) {
+                detail::CollectKeyspaceInfo(service, stream);
                 continue;
             }
         }
