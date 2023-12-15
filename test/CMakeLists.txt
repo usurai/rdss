@@ -23,10 +23,10 @@ target_compile_features(string_commands_test PRIVATE cxx_std_20)
 add_executable(key_commands_test key_commands_test.cc)
 target_compile_features(key_commands_test PRIVATE cxx_std_20)
 
-target_include_directories(hash_table_test PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(resp_parser_test PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(string_commands_test PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(key_commands_test PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(hash_table_test PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(resp_parser_test PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(string_commands_test PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(key_commands_test PRIVATE ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(
   hash_table_test

@@ -18,9 +18,7 @@ add_library(
   eviction_strategy.cc
   expire_strategy.cc
   server.cc)
-
 target_compile_features(librdss PRIVATE cxx_std_20)
-
 target_link_libraries(
   librdss
   PRIVATE base
@@ -31,15 +29,12 @@ target_link_libraries(
           sys
           glog::glog
           xxhash)
+target_include_directories(librdss PUBLIC ${PROJECT_SOURCE_DIR})
 
 add_executable(rdss main.cc)
-
 target_compile_features(rdss PRIVATE cxx_std_20)
-
 target_link_libraries(rdss PRIVATE librdss)
-
-target_include_directories(librdss PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(rdss PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(rdss PRIVATE ${PROJECT_SOURCE_DIR})
 
 add_subdirectory(base)
 add_subdirectory(data_structure)
