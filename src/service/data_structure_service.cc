@@ -1,6 +1,6 @@
 #include "data_structure_service.h"
 
-#include "config.h"
+#include "base/config.h"
 
 #include <glog/logging.h>
 

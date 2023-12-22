@@ -1,7 +1,7 @@
 #include "client_commands.h"
 
-#include "command.h"
-#include "data_structure_service.h"
+#include "service/command.h"
+#include "service/data_structure_service.h"
 
 namespace rdss {
 

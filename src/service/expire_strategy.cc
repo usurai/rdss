@@ -1,6 +1,6 @@
 #include "expire_strategy.h"
 
-#include "config.h"
+#include "base/config.h"
 #include "data_structure_service.h"
 
 namespace rdss {

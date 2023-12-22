@@ -3,10 +3,10 @@
 #include "base/buffer.h"
 #include "client_manager.h"
 #include "constants.h"
-#include "data_structure_service.h"
 #include "resp/replier.h"
 #include "resp/resp_parser.h"
 #include "runtime/ring_executor.h"
+#include "service/data_structure_service.h"
 
 #include <glog/logging.h>
 

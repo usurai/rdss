@@ -2,8 +2,8 @@
 
 #include "base/memory.h"
 #include "client_manager.h"
-#include "command.h"
-#include "data_structure_service.h"
+#include "service/command.h"
+#include "service/data_structure_service.h"
 #include "server.h"
 
 #include <sys/resource.h>

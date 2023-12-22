@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include "base/config.h"
 #include "data_structure/tracking_hash_table.h"
 
 #include <set>

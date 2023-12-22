@@ -1,5 +1,12 @@
 #include "config.h"
 
+#include "external/tortellini.hh"
+
+#include <glog/logging.h>
+
+#include <fstream>
+#include <sstream>
+
 namespace rdss {
 
 MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str) {

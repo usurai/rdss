@@ -4,28 +4,13 @@ project(rdss)
 
 find_package(glog REQUIRED)
 
-add_library(
-  librdss
-  config.cc
-  client.cc
-  client_manager.cc
-  command_registry.cc
-  commands/client_commands.cc
-  commands/key_commands.cc
-  commands/misc_commands.cc
-  commands/string_commands.cc
-  data_structure_service.cc
-  eviction_strategy.cc
-  expire_strategy.cc
-  server.cc)
+add_library(librdss client.cc client_manager.cc server.cc)
 target_compile_features(librdss PRIVATE cxx_std_20)
 target_link_libraries(
   librdss
-  PRIVATE base
-          data_structure
-          io
-          resp
+  PRIVATE io
           runtime
+          service
           sys
           glog::glog
           xxhash)
@@ -41,4 +26,5 @@ add_subdirectory(data_structure)
 add_subdirectory(io)
 add_subdirectory(resp)
 add_subdirectory(runtime)
+add_subdirectory(service)
 add_subdirectory(sys)

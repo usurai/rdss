@@ -2,11 +2,10 @@
 
 #include "client.h"
 #include "client_manager.h"
-#include "command.h"
-#include "command_registry.h"
-#include "data_structure_service.h"
 #include "io/listener.h"
 #include "runtime/ring_executor.h"
+#include "service/command_registry.h"
+#include "service/data_structure_service.h"
 #include "sys/util.h"
 
 #include <chrono>

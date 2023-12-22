@@ -1,12 +1,6 @@
 #pragma once
 
-#include "tortellini.hh"
-
-#include <glog/logging.h>
-
 #include <cstdint>
-#include <fstream>
-#include <sstream>
 #include <string>
 
 namespace rdss {
