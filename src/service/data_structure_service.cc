@@ -20,6 +20,12 @@ DataStructureService::DataStructureService(
   , evictor_(this)
   , expirer_(this) {}
 
+void DataStructureService::Cron() {
+    GetEvictor().RefreshLRUClock();
+    GetExpirer().ActiveExpire();
+    IncrementalRehashing(kIncrementalRehashingTimeLimit);
+}
+
 void DataStructureService::RegisterCommand(CommandName name, Command command) {
     std::transform(name.begin(), name.end(), name.begin(), [](char c) { return std::tolower(c); });
     commands_.emplace(name, command);

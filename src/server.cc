@@ -16,17 +16,17 @@ namespace rdss {
 Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
-  , dss_executor_(std::make_unique<RingExecutor>("dss_executor", RingConfig{.async_sqe = false}))
+  , dss_executor_(std::make_unique<RingExecutor>(
+      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
-    client_executors_.reserve(ces_);
-    for (size_t i = 0; i < ces_; ++i) {
-        client_executors_.emplace_back(
-          std::make_unique<RingExecutor>("client_executor_" + std::to_string(i)));
+    client_executors_.reserve(config_.client_executors);
+    for (size_t i = 0; i < config_.client_executors; ++i) {
+        client_executors_.emplace_back(std::make_unique<RingExecutor>(
+          "client_executor_" + std::to_string(i), RingConfig{.sqpoll = config_.sqpoll}));
     }
 
-    // TODO: Use port in Config.
-    listener_ = Listener::Create(6379, client_executors_[0].get());
+    listener_ = Listener::Create(config_.port, client_executors_[0].get());
 
     std::promise<void> shutdown_promise;
     shutdown_future_ = shutdown_promise.get_future();
@@ -56,7 +56,6 @@ Task<void> Server::AcceptLoop(RingExecutor* executor) {
 
 Server::~Server() = default;
 
-// Consider move to dss
 // TODO: Adaptive hz
 Task<void> Server::Cron() {
     co_await ResumeOn(dss_executor_.get());
@@ -64,10 +63,7 @@ Task<void> Server::Cron() {
     const auto interval_in_millisecond = 1000 / config_.hz;
     while (active_) {
         co_await dss_executor_->Timeout(std::chrono::milliseconds(interval_in_millisecond));
-
-        service_->GetEvictor().RefreshLRUClock();
-        service_->GetExpirer().ActiveExpire();
-        service_->IncrementalRehashing(std::chrono::milliseconds{1});
+        service_->Cron();
     }
 }
 

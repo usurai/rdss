@@ -24,10 +24,13 @@ class DataStructureService {
 public:
     using TimePoint = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>;
     using ExpireHashTable = HashTable<TimePoint, Mallocator<TimePoint>>;
+    static constexpr auto kIncrementalRehashingTimeLimit = std::chrono::milliseconds{1};
 
 public:
     explicit DataStructureService(
       Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise);
+
+    void Cron();
 
     Server* GetServer() { return server_; }
 

@@ -60,7 +60,6 @@ private:
     std::unique_ptr<Clock> clock_;
     std::unique_ptr<RingExecutor> dss_executor_;
     // TODO: Make this config or something
-    const size_t ces_ = 2;
     std::vector<std::unique_ptr<RingExecutor>> client_executors_;
     std::unique_ptr<Listener> listener_;
     std::future<void> shutdown_future_;

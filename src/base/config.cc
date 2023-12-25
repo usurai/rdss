@@ -65,6 +65,8 @@ void Config::ReadFromFile(const std::string& file_name) {
     active_expire_keys_per_loop = global_section["active_expire_keys_per_loop"] | 20;
 
     io_uring_wq_max_unbound_workers = global_section["io_uring_wq_max_unbound_workers"] | 16;
+    client_executors = global_section["client_executors"] | 2;
+    sqpoll = global_section["sqpoll"] | true;
 }
 
 void Config::SanityCheck() {
@@ -90,7 +92,9 @@ std::string Config::ToString() const {
     stream << "active_expire_acceptable_stale_percent:" << active_expire_acceptable_stale_percent
            << ", ";
     stream << "active_expire_keys_per_loop:" << active_expire_keys_per_loop << ",";
-    stream << "io_uring_wq_max_unbound_workers:" << io_uring_wq_max_unbound_workers;
+    stream << "io_uring_wq_max_unbound_workers:" << io_uring_wq_max_unbound_workers << ", ";
+    stream << "client_executors:" << client_executors << ", ";
+    stream << "sqpoll:" << sqpoll;
 
     stream << "].";
     return stream.str();
