@@ -27,3 +27,4 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf-4")
 
 add_subdirectory(src)
 add_subdirectory(test)
+add_subdirectory(benchmark)
