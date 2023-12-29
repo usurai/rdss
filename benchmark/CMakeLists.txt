@@ -13,3 +13,7 @@ target_compile_features(io_uring_bench PRIVATE cxx_std_20)
 target_link_libraries(io_uring_bench PRIVATE uring glog::glog benchmark::benchmark)
 target_include_directories(io_uring_bench PRIVATE ${PROJECT_SOURCE_DIR})
 
+add_executable(ring_executor_bench ring_executor_bench.cc util.cc)
+target_compile_features(ring_executor_bench PRIVATE cxx_std_20)
+target_link_libraries(ring_executor_bench PRIVATE librdss benchmark::benchmark)
+target_include_directories(ring_executor_bench PRIVATE ${PROJECT_SOURCE_DIR})
