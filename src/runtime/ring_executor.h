@@ -63,8 +63,8 @@ struct RingTimeout : public RingOperation<RingTimeout> {
 struct RingConfig {
     size_t sq_entries = 4096;
     size_t cq_entries = 4096 * 16;
-    bool sqpoll = true;
-    bool async_sqe = true;
+    bool sqpoll = false;
+    bool async_sqe = false;
     uint32_t max_unbound_workers = 5;
     size_t submit_batch_size = 10;
 };
@@ -82,11 +82,14 @@ public:
 
     io_uring* Ring() { return &ring_; }
 
-    /// To stop the executor, one needs to first call 'Deactivate()', then send a ring msg with
-    /// user_data set as 0 to wake the worker thread of the executor. After that, call 'Shutdown()'
-    /// to blocking wait for the worker thread to terminate. Finally, call the destructor implicitly
-    /// to exit the io_uring.
-    void Deactivate() { active_.store(false, std::memory_order_relaxed); }
+    /// To stop the executor, one needs to first call 'Deactivate()', which sets 'active_' flag of
+    /// executor to false and then sends a ring msg with user_data set as 0 to wake the worker
+    /// thread of the executor. This will terminate the worker thread. After that, one needs to call
+    /// 'Shutdown()' to blocking wait for the worker thread to terminate. Finally, call the
+    /// destructor implicitly to exit the io_uring.
+    /// The caller can provide the io_uring for this function to send the ring message, or make the
+    /// function to create the ring itself by passing nullptr.
+    void Deactivate(io_uring* ring = nullptr);
 
     void Shutdown();
 

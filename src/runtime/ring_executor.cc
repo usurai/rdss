@@ -52,6 +52,32 @@ void RingExecutor::Shutdown() {
     thread_.join();
 }
 
+void RingExecutor::Deactivate(io_uring* ring) {
+    active_.store(false, std::memory_order_relaxed);
+    const auto local_ring = (ring == nullptr);
+    if (local_ring) {
+        ring = new io_uring{};
+        auto ret = io_uring_queue_init(4, ring, 0);
+        if (ret) {
+            LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
+        }
+    }
+    auto sqe = io_uring_get_sqe(ring);
+    if (sqe == nullptr) {
+        LOG(FATAL) << "io_uring_get_sqe";
+    }
+    io_uring_prep_msg_ring(sqe, Ring()->enter_ring_fd, 0, 0, 0);
+    io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
+    auto ret = io_uring_submit(ring);
+    if (ret < 0) {
+        LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
+    }
+    if (local_ring) {
+        io_uring_queue_exit(ring);
+        delete ring;
+    }
+}
+
 // For SQPOLL enabled ring.
 void RingExecutor::Loop() {
     io_uring_cqe* cqe;

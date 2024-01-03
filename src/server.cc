@@ -82,37 +82,24 @@ void Server::Run() {
 
 void Server::Shutdown() {
     LOG(INFO) << "Stopping executors.";
+
     io_uring ring;
-    int ret;
-    ret = io_uring_queue_init(128, &ring, 0);
+    int ret = io_uring_queue_init(16, &ring, 0);
     if (ret) {
         LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
     }
-    std::vector<int> fds;
-    for (auto& e : client_executors_) {
-        e->Deactivate();
-        fds.push_back(e->Ring()->enter_ring_fd);
-    }
-    dss_executor_->Deactivate();
-    fds.push_back(dss_executor_->Ring()->enter_ring_fd);
 
-    for (auto fd : fds) {
-        auto sqe = io_uring_get_sqe(&ring);
-        if (sqe == nullptr) {
-            LOG(FATAL) << "io_uring_get_sqe";
-        }
-        io_uring_prep_msg_ring(sqe, fd, 0, 0, 0);
-        io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
+    for (auto& e : client_executors_) {
+        e->Deactivate(&ring);
     }
-    ret = io_uring_submit(&ring);
-    if (ret < 0) {
-        LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
-    }
+    dss_executor_->Deactivate(&ring);
+
+    io_uring_queue_exit(&ring);
+
     dss_executor_->Shutdown();
     for (auto& e : client_executors_) {
         e->Shutdown();
     }
-    io_uring_queue_exit(&ring);
 
     LOG(INFO) << "Closing active connections.";
     auto clients = client_manager_->GetClients();
