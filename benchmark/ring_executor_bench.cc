@@ -1,19 +1,10 @@
-#include "io/promise.h"
-#include "runtime/ring_executor.h"
 #include "util.h"
 
-#include <benchmark/benchmark.h>
 #include <glog/logging.h>
 
-#include <future>
-#include <iostream>
 #include <thread>
 
-using namespace rdss;
-using namespace std::chrono;
-
-constexpr size_t kRepeat = 1'000'000;
-
+constexpr size_t kRepeat = 10'000'000;
 io_uring src_ring;
 
 struct Awaitable
@@ -78,106 +69,41 @@ static void BenchTransfer(benchmark::State& s) {
 
 BENCHMARK(BenchTransfer)->UseManualTime()->RangeMultiplier(2)->Range(1, 1 << 12);
 
-BENCHMARK(BenchTransfer)->Name("BenchTransferSqpoll")->UseManualTime()->Arg(1);
+struct PingPong {
+    static void nop(size_t, size_t) {}
 
-constexpr size_t tasks = 1'000;
-std::mutex mu;
-
-Task<void> PingPong(
-  size_t index,
-  RingExecutor* main,
-  RingExecutor* re1,
-  std::vector<std::unique_ptr<RingExecutor>>& executors,
+    Task<void> operator()(
+      RingExecutor* main_executor,
+      RingExecutor* service_executor,
+      std::vector<std::unique_ptr<RingExecutor>>& client_executors,
+      size_t shard_index,
   size_t repeat,
+      std::mutex& mu,
   std::vector<size_t>& remainings,
-  std::promise<void>& promise) {
-    size_t cnt{0};
-    auto* re2 = executors[index].get();
-    co_await Transfer(main, re2);
-    while (cnt < repeat) {
-        co_await Transfer(re2, re1);
-        co_await Transfer(re1, re2);
-        ++cnt;
-    }
-
-    if (--remainings[index] != 0) {
-        co_return;
-    }
-    std::lock_guard l(mu);
-    for (auto r : remainings) {
-        if (r != 0) {
-            co_return;
-        }
-    }
-    promise.set_value();
-}
-
-static void BenchPingPong(benchmark::State& s) {
-    for (auto _ : s) {
-        const auto batch_size = s.range(0);
-        const auto num_client_executors = s.range(1);
-
-        RingConfig config{};
-        if (batch_size == 0) {
-            config.sqpoll = true;
-        } else {
-            config.submit_batch_size = batch_size;
-        }
-
-        RingExecutor main("", config);
-        RingExecutor service_executor("", config);
-        std::vector<std::unique_ptr<RingExecutor>> client_executors;
-        client_executors.reserve(num_client_executors);
-        std::vector<size_t> remaining_tasks(num_client_executors, 0);
-        for (size_t i = 0; i < num_client_executors; ++i) {
-            client_executors.emplace_back(std::make_unique<RingExecutor>("", config));
-            remaining_tasks[i] = tasks / num_client_executors
-                                 + (i < (tasks % num_client_executors) ? 1 : 0);
-        }
-        constexpr size_t repeat = 4'000;
-
-        std::promise<void> promise;
-        auto future = promise.get_future();
-
-        const auto start = steady_clock::now();
-        size_t ce_index = 0;
-        for (size_t i = 0; i < tasks; ++i) {
-            PingPong(
-              ce_index,
-              &main,
-              &service_executor,
+      std::promise<void>& finish_promise) {
+        return ShardTask(
+          nop,
+          main_executor,
+          service_executor,
               client_executors,
+          shard_index,
               repeat,
-              remaining_tasks,
-              promise);
-            if (++ce_index == num_client_executors) {
-                ce_index = 0;
-            }
-        }
-        const auto submission_finish = steady_clock::now();
-        future.wait();
-        const auto processing_finish = steady_clock::now();
-
-        const auto iteration_time = duration_cast<duration<double>>(processing_finish - start);
-        s.SetIterationTime(iteration_time.count());
-        s.counters["op/s"] = static_cast<double>(tasks * repeat) / iteration_time.count();
-
-        main.Deactivate();
-        service_executor.Deactivate();
-        for (auto& e : client_executors) {
-            e->Deactivate();
-        }
-        main.Shutdown();
-        service_executor.Shutdown();
-        for (auto& e : client_executors) {
-            e->Shutdown();
-        }
+          mu,
+          remainings,
+          finish_promise);
     }
-}
+};
 
-BENCHMARK(BenchPingPong)
+BENCHMARK(BenchSharded<PingPong>)
+  ->Name("PingPong")
   ->UseManualTime()
-  ->ArgsProduct({{0, 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10, 1 << 12}, {1, 2, 3, 4, 5, 6}});
+  ->ArgsProduct({
+    {1000},                                                   // total tasks
+    {10'000},                                                 // repeats within each task
+    {0, 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10, 1 << 12}, // submission batch size (0 mean
+                                                              // sqpoll)
+    {1, 2, 3, 4, 5, 6}                                        // shard number
+  });
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
