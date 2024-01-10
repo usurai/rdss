@@ -126,3 +126,6 @@ static void BenchSharded(benchmark::State& s) {
         }
     }
 }
+
+void GenerateRandomKeys(
+  std::vector<std::string>& keys, size_t num, const std::string prefix, size_t key_digits);

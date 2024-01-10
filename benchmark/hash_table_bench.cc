@@ -1,24 +1,14 @@
 #include "data_structure/tracking_hash_table.h"
+#include "util.h"
 
 #include <benchmark/benchmark.h>
-
-#include <algorithm>
 
 using namespace rdss;
 
 class HashTableBenchmark : public benchmark::Fixture {
 public:
     void SetUp(const benchmark::State&) {
-        keys.reserve(key_max);
-        for (size_t i = 0; i < key_max; ++i) {
-            const auto s = std::to_string(i);
-            if (s.size() < key_digits) {
-                keys.push_back(key_prefix + std::string(key_digits - s.size(), 0) + s);
-            } else {
-                keys.push_back(key_prefix + s);
-            }
-        }
-        std::random_shuffle(keys.begin(), keys.end());
+        GenerateRandomKeys(keys, key_max, key_prefix, key_digits);
     }
 
     const size_t key_max = 10'000'000;
