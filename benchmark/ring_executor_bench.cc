@@ -46,13 +46,17 @@ static void BenchTransfer(benchmark::State& s) {
         auto f = p.get_future();
         RingExecutor executor;
         size_t cnt{0};
-        SetupRing(&src_ring);
-
         const size_t submit_batch = s.range(0);
+        if (submit_batch == 0) {
+            SetupRingSqpoll(&src_ring);
+        } else {
+            SetupRing(&src_ring);
+        }
 
         const auto start = steady_clock::now();
         for (size_t i = 0; i < kRepeat; ++i) {
-            const auto submit = (i % submit_batch == submit_batch - 1) || (i == kRepeat - 1);
+            const auto submit = (submit_batch == 0) || (i % submit_batch == submit_batch - 1)
+                                || (i == kRepeat - 1);
             benchmark::DoNotOptimize(TransferTo(&src_ring, &executor, submit, cnt, p));
         }
         const auto submission_finish = steady_clock::now();
@@ -67,6 +71,7 @@ static void BenchTransfer(benchmark::State& s) {
     }
 }
 
+BENCHMARK(BenchTransfer)->Name("BenchTransferSqpoll")->UseManualTime()->Arg(0);
 BENCHMARK(BenchTransfer)->UseManualTime()->RangeMultiplier(2)->Range(1, 1 << 12);
 
 struct PingPong {
@@ -77,17 +82,17 @@ struct PingPong {
       RingExecutor* service_executor,
       std::vector<std::unique_ptr<RingExecutor>>& client_executors,
       size_t shard_index,
-  size_t repeat,
+      size_t repeat,
       std::mutex& mu,
-  std::vector<size_t>& remainings,
+      std::vector<size_t>& remainings,
       std::promise<void>& finish_promise) {
         return ShardTask(
           nop,
           main_executor,
           service_executor,
-              client_executors,
+          client_executors,
           shard_index,
-              repeat,
+          repeat,
           mu,
           remainings,
           finish_promise);
