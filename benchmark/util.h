@@ -43,7 +43,6 @@ Task<void> ShardTask(
         co_await Transfer(client_executor, service_executor);
         service_func(shard_index, cnt);
         co_await Transfer(service_executor, client_executor);
-        ++cnt;
     } while (++cnt < repeat);
 
     if (--remainings[shard_index] != 0) {
