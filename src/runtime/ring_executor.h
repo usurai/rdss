@@ -115,9 +115,8 @@ private:
 
 template<typename Operation>
 void RingExecutor::Initiate(Operation* operation) {
-    auto sqe = io_uring_get_sqe(Ring());
-    if (sqe == nullptr) {
-        LOG(FATAL) << "io_uring_sqe";
+    io_uring_sqe* sqe{nullptr};
+    while ((sqe = io_uring_get_sqe(Ring())) == nullptr) {
     }
     operation->Prepare(sqe);
     if (AsyncSqe() && operation->IsIoOperation()) {
