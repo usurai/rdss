@@ -40,6 +40,8 @@ TransferTo(io_uring* ring, RingExecutor* to, bool submit, size_t& cnt, std::prom
     }
 }
 
+// Benchmark the performance of coroutine execution transfermation via io_uring ring message. Takes
+// io_uring submission batch size as argument.
 static void BenchTransfer(benchmark::State& s) {
     for (auto _ : s) {
         std::promise<void> p;
@@ -72,43 +74,33 @@ static void BenchTransfer(benchmark::State& s) {
 }
 
 BENCHMARK(BenchTransfer)->Name("BenchTransferSqpoll")->UseManualTime()->Arg(0);
-BENCHMARK(BenchTransfer)->UseManualTime()->RangeMultiplier(2)->Range(1, 1 << 12);
+BENCHMARK(BenchTransfer)
+  ->UseManualTime()
+  ->RangeMultiplier(2)
+  ->Range(1, 1 << 12)
+  ->ArgName("submit_batch");
 
 struct PingPong {
-    static void nop(size_t, size_t) {}
+    static void nop(size_t, size_t, size_t) {}
 
-    Task<void> operator()(
-      RingExecutor* main_executor,
-      RingExecutor* service_executor,
-      std::vector<std::unique_ptr<RingExecutor>>& client_executors,
-      size_t shard_index,
-      size_t repeat,
-      std::mutex& mu,
-      std::vector<size_t>& remainings,
-      std::promise<void>& finish_promise) {
-        return ShardTask(
-          nop,
-          main_executor,
-          service_executor,
-          client_executors,
-          shard_index,
-          repeat,
-          mu,
-          remainings,
-          finish_promise);
+    template<typename... Args>
+    Task<void> operator()(Args&&... args) {
+        return ShardTask(nop, std::forward<Args>(args)...);
     }
 };
 
+// Benchmark the performance of coroutine execution 'ping-pong', that is, transfer from one executor
+// to another, then transfer back. One 'ping-pong' is counted as one operation.
 BENCHMARK(BenchSharded<PingPong>)
   ->Name("PingPong")
   ->UseManualTime()
   ->ArgsProduct({
-    {1000},                                                   // total tasks
-    {10'000},                                                 // repeats within each task
-    {0, 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10, 1 << 12}, // submission batch size (0 mean
-                                                              // sqpoll)
-    {1, 2, 3, 4, 5, 6}                                        // shard number
-  });
+    {1'000, 4'000},                                  // total tasks
+    {1'000},                                         // repeats within each task
+    {0, 1, 1 << 2, 1 << 4, 1 << 6, 1 << 8, 1 << 10}, // submit batch(0 mean sqpoll)
+    {1, 2, 4}                                        // shard number
+  })
+  ->ArgNames({"tasks", "repeat_per_task", "submit_batch", "shards"});
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
