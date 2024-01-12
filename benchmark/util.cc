@@ -28,7 +28,7 @@ void SetupRingSqpoll(io_uring* ring) {
 }
 
 void GenerateRandomKeys(
-  std::vector<std::string>& keys, size_t num, const std::string prefix, size_t key_digits) {
+  std::vector<std::string>& keys, size_t num, const std::string& prefix, size_t key_digits) {
     keys.reserve(num);
     for (size_t i = 0; i < num; ++i) {
         const auto s = std::to_string(i);

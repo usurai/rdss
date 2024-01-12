@@ -21,9 +21,9 @@ void SetupRingSqpoll(io_uring* ring);
 /// sharded. After that, transfer execution to service_executor to execute the logic should be
 /// single-threaded. Then transfer back the execution back to client_executors[shard_index]. Repeats
 /// this process for 'repeat' times. Then decrements remainings[shard_index] by one, if it's zero
-/// after the decrement, it means this client_executor has finished its job. It should hold the
-/// global mutex and check if rest of the executors have also finished. The last one to finish
-/// should set promise to notify the main thread that all the tasks has finished.
+/// after the decrement, it means this client_executor has finished its job. It should decrese
+/// remaining_shards and check if it's zero, if so, it sets the finish_promise to notify the end of
+/// tasks.
 template<typename ServiceFunc>
 Task<void> ShardTask(
   ServiceFunc service_func,
@@ -32,27 +32,25 @@ Task<void> ShardTask(
   std::vector<std::unique_ptr<RingExecutor>>& client_executors,
   size_t shard_index,
   size_t repeat,
-  std::mutex& mu,
-  std::vector<size_t>& remainings,
+  size_t& shard_remaining_tasks,
+  std::atomic<size_t>& remaining_shards,
   std::promise<void>& finish_promise) {
     auto* client_executor = client_executors[shard_index].get();
     co_await Transfer(main_executor, client_executor);
 
     size_t cnt{0};
+    const auto num_shards = client_executors.size();
     do {
         co_await Transfer(client_executor, service_executor);
-        service_func(shard_index, cnt);
+        service_func(num_shards, shard_index, cnt);
         co_await Transfer(service_executor, client_executor);
     } while (++cnt < repeat);
 
-    if (--remainings[shard_index] != 0) {
+    if (--shard_remaining_tasks != 0) {
         co_return;
     }
-    std::lock_guard l(mu);
-    for (auto r : remainings) {
-        if (r != 0) {
-            co_return;
-        }
+    if (remaining_shards.fetch_sub(1, std::memory_order_relaxed) != 1) {
+        co_return;
     }
     finish_promise.set_value();
 }
@@ -75,12 +73,12 @@ static void BenchSharded(benchmark::State& s) {
         }
 
         RingExecutor main("", config);
-        RingExecutor service_executor("", config);
+        RingExecutor service_executor("service", config);
         std::vector<std::unique_ptr<RingExecutor>> client_executors;
         client_executors.reserve(num_client_executors);
         std::vector<size_t> remaining_tasks(num_client_executors, 0);
         for (size_t i = 0; i < num_client_executors; ++i) {
-            client_executors.emplace_back(std::make_unique<RingExecutor>("", config));
+            client_executors.emplace_back(std::make_unique<RingExecutor>("client", config));
             remaining_tasks[i] = total_tasks / num_client_executors
                                  + (i < (total_tasks % num_client_executors) ? 1 : 0);
         }
@@ -90,7 +88,7 @@ static void BenchSharded(benchmark::State& s) {
 
         const auto start = steady_clock::now();
         size_t ce_index = 0;
-        std::mutex mu;
+        std::atomic<size_t> remaining_shards = num_client_executors;
         for (size_t i = 0; i < total_tasks; ++i) {
             TaskType()(
               &main,
@@ -98,8 +96,8 @@ static void BenchSharded(benchmark::State& s) {
               client_executors,
               ce_index,
               repeat,
-              mu,
-              remaining_tasks,
+              remaining_tasks[ce_index],
+              remaining_shards,
               promise);
             if (++ce_index == num_client_executors) {
                 ce_index = 0;
@@ -127,4 +125,4 @@ static void BenchSharded(benchmark::State& s) {
 }
 
 void GenerateRandomKeys(
-  std::vector<std::string>& keys, size_t num, const std::string prefix, size_t key_digits);
+  std::vector<std::string>& keys, size_t num, const std::string& prefix, size_t key_digits);
