@@ -17,3 +17,8 @@ add_executable(ring_executor_bench ring_executor_bench.cc util.cc)
 target_compile_features(ring_executor_bench PRIVATE cxx_std_20)
 target_link_libraries(ring_executor_bench PRIVATE librdss benchmark::benchmark)
 target_include_directories(ring_executor_bench PRIVATE ${PROJECT_SOURCE_DIR})
+
+add_executable(dss_bench dss_bench.cc util.cc)
+target_compile_features(dss_bench PRIVATE cxx_std_20)
+target_link_libraries(dss_bench PRIVATE librdss benchmark::benchmark)
+target_include_directories(dss_bench PRIVATE ${PROJECT_SOURCE_DIR})
