@@ -16,9 +16,15 @@ io_uring dest_ring;
 
 namespace detail {
 
-static void SetupRingPair(const benchmark::State&) {
-    SetupRing(&src_ring);
-    SetupRing(&dest_ring);
+template<bool SingIssuer = false>
+static void SetupRingPair(const benchmark::State& s) {
+    if (s.range(0) != 0) {
+        SetupRing<SingIssuer, false>(&src_ring);
+        SetupRing<SingIssuer, false>(&dest_ring);
+    } else {
+        SetupRing<SingIssuer, true>(&src_ring);
+        SetupRing<SingIssuer, true>(&dest_ring);
+    }
 }
 
 static void SetupRingPairSqpoll(const benchmark::State&) {
@@ -134,14 +140,20 @@ static void BenchRing(
     for (auto _ : s) {
         std::thread t(ConsumeMethodFunction(consume_method), consume_ring);
         const size_t submit_batch = s.range(0);
+        // TODO: get future when thread finishing setup
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         const auto start = steady_clock::now();
         io_uring_sqe* sqe;
+        uint64_t get_sqe_fail{0};
         for (size_t i = 0; i < kRepeat; ++i) {
             while ((sqe = io_uring_get_sqe(submit_ring)) == nullptr) {
-                LOG(WARNING) << "Unable to get sqe";
+                ++get_sqe_fail;
+                LOG(WARNING) << "Unable to get sqe, sleeping...";
+                std::this_thread::sleep_for(std::chrono::microseconds{750});
+                LOG(WARNING) << "Unable to get sqe after sleeping " << i;
             }
             prepare_sqe(sqe);
-            if ((i % submit_batch == submit_batch - 1) || i == kRepeat - 1) {
+            if (submit_batch == 0 || i % submit_batch == submit_batch - 1 || i == kRepeat - 1) {
                 auto ret = io_uring_submit(submit_ring);
                 if (ret < 0) {
                     LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
@@ -154,7 +166,14 @@ static void BenchRing(
         const auto iteration_time = duration_cast<duration<double>>(processing_finish - start);
         s.SetIterationTime(iteration_time.count());
         s.counters["op/s"] = static_cast<double>(kRepeat) / iteration_time.count();
+        s.counters["sqe_fail"] = get_sqe_fail;
     }
+}
+
+static void Nop(benchmark::State& s) {
+    BenchRing(s, ConsumeMethod::kWait, &src_ring, &src_ring, [](io_uring_sqe* sqe) {
+        io_uring_prep_nop(sqe);
+    });
 }
 
 static void BenchRingMsgWait(benchmark::State& s) {
@@ -169,6 +188,22 @@ static void BenchRingMsgTimeoutWait(benchmark::State& s) {
     BenchRing(s, ConsumeMethod::kTimeoutWait, &src_ring, &dest_ring, detail::PrepareRingMsg);
 }
 
+BENCHMARK(Nop)
+  ->Name("NopNonSingleIssuer")
+  ->UseManualTime()
+  ->Setup(detail::SetupRingPair<false>)
+  ->Teardown(detail::TeardownRingPair)
+  ->RangeMultiplier(4)
+  ->Range(0, 1 << 12);
+
+BENCHMARK(Nop)
+  ->Name("NopSingleIssuer")
+  ->UseManualTime()
+  ->Setup(detail::SetupRingPair<true>)
+  ->Teardown(detail::TeardownRingPair)
+  ->RangeMultiplier(4)
+  ->Range(0, 1 << 12);
+
 BENCHMARK(BenchRingMsgWait)
   ->Name("BenchRingMsgWaitSqpoll")
   ->UseManualTime()
@@ -178,7 +213,7 @@ BENCHMARK(BenchRingMsgWait)
 
 BENCHMARK(BenchRingMsgWait)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair)
+  ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(1, 1 << 12);
@@ -192,14 +227,14 @@ BENCHMARK(BenchRingMsgPeek)
 
 BENCHMARK(BenchRingMsgPeek)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair)
+  ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(1, 1 << 12);
 
 BENCHMARK(BenchRingMsgTimeoutWait)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair)
+  ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(1, 1 << 12);

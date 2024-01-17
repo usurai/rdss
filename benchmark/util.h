@@ -11,7 +11,25 @@ using namespace std::chrono;
 
 struct io_uring;
 
-void SetupRing(io_uring* ring);
+constexpr size_t kSqEntries = 4096;
+constexpr size_t kCqEntries = 4096 * 16;
+
+template<bool SingIssuer = false, bool SqPoll = false>
+void SetupRing(io_uring* ring) {
+    io_uring_params params{};
+    params.cq_entries = kCqEntries;
+    if constexpr (SingIssuer) {
+        params.flags |= IORING_SETUP_SINGLE_ISSUER;
+    }
+    if constexpr (SqPoll) {
+        params.flags |= IORING_SETUP_SQPOLL;
+    }
+
+    int ret;
+    if ((ret = io_uring_queue_init_params(kSqEntries, ring, &params)) != 0) {
+        LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
+    }
+}
 
 void SetupRingSqpoll(io_uring* ring);
 
