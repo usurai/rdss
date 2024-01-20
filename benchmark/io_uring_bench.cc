@@ -102,6 +102,32 @@ void RingConsumeTimeoutWait(io_uring* ring) {
     }
 }
 
+void RingConsumeWaitCqes(io_uring* ring) {
+    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{500'000}.count()};
+    sigset_t sigset{};
+
+    io_uring_cqe* cqe;
+    int ret;
+    size_t cnt{0};
+    const unsigned int wait_nr = 4096;
+    bool finished = false;
+    while (!finished) {
+        ret = io_uring_wait_cqes(ring, &cqe, wait_nr, &ts, &sigset);
+        if (ret != 0 && ret != -ETIME) {
+            LOG(FATAL) << "io_uring_wait_cqes:" << strerror(-ret);
+        }
+        unsigned head;
+        size_t i{0};
+        io_uring_for_each_cqe(ring, head, cqe) {
+            if (++cnt == kRepeat) {
+                finished = true;
+            }
+            ++i;
+        }
+        io_uring_cq_advance(ring, i);
+    }
+}
+
 void PrepareRingMsg(io_uring_sqe* sqe) {
     io_uring_prep_msg_ring(sqe, dest_ring.enter_ring_fd, 0, 0, 0);
     io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
@@ -113,6 +139,7 @@ enum class ConsumeMethod {
     kWait,
     kPeek,
     kTimeoutWait,
+    kWaitCqes,
 };
 
 auto ConsumeMethodFunction(ConsumeMethod m) {
@@ -123,6 +150,8 @@ auto ConsumeMethodFunction(ConsumeMethod m) {
         return detail::RingConsumePeek;
     case ConsumeMethod::kTimeoutWait:
         return detail::RingConsumeTimeoutWait;
+    case ConsumeMethod::kWaitCqes:
+        return detail::RingConsumeWaitCqes;
     }
 }
 
@@ -145,6 +174,7 @@ static void BenchRing(
         const auto start = steady_clock::now();
         io_uring_sqe* sqe;
         uint64_t get_sqe_fail{0};
+        const auto initial_sleep = std::chrono::milliseconds{1};
         for (size_t i = 0; i < kRepeat; ++i) {
             while ((sqe = io_uring_get_sqe(submit_ring)) == nullptr) {
                 ++get_sqe_fail;
@@ -166,14 +196,14 @@ static void BenchRing(
         const auto iteration_time = duration_cast<duration<double>>(processing_finish - start);
         s.SetIterationTime(iteration_time.count());
         s.counters["op/s"] = static_cast<double>(kRepeat) / iteration_time.count();
-        s.counters["sqe_fail"] = get_sqe_fail;
+        s.counters["sqe_fail"] += get_sqe_fail;
     }
 }
 
+template<ConsumeMethod consume_method>
 static void Nop(benchmark::State& s) {
-    BenchRing(s, ConsumeMethod::kWait, &src_ring, &src_ring, [](io_uring_sqe* sqe) {
-        io_uring_prep_nop(sqe);
-    });
+    BenchRing(
+      s, consume_method, &src_ring, &src_ring, [](io_uring_sqe* sqe) { io_uring_prep_nop(sqe); });
 }
 
 static void BenchRingMsgWait(benchmark::State& s) {
@@ -188,16 +218,36 @@ static void BenchRingMsgTimeoutWait(benchmark::State& s) {
     BenchRing(s, ConsumeMethod::kTimeoutWait, &src_ring, &dest_ring, detail::PrepareRingMsg);
 }
 
-BENCHMARK(Nop)
-  ->Name("NopNonSingleIssuer")
+static void BenchRingMsgWaitCqes(benchmark::State& s) {
+    BenchRing(s, ConsumeMethod::kWaitCqes, &src_ring, &dest_ring, detail::PrepareRingMsg);
+}
+
+BENCHMARK(Nop<ConsumeMethod::kWaitCqes>)
+  ->Name("NopNonSingleIssuerWaitCqes")
   ->UseManualTime()
   ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
-BENCHMARK(Nop)
-  ->Name("NopSingleIssuer")
+BENCHMARK(Nop<ConsumeMethod::kWaitCqes>)
+  ->Name("NopSingleIssuerWaitCqes")
+  ->UseManualTime()
+  ->Setup(detail::SetupRingPair<true>)
+  ->Teardown(detail::TeardownRingPair)
+  ->RangeMultiplier(4)
+  ->Range(0, 1 << 12);
+
+BENCHMARK(Nop<ConsumeMethod::kWait>)
+  ->Name("NopNonSingleIssuerWait")
+  ->UseManualTime()
+  ->Setup(detail::SetupRingPair<false>)
+  ->Teardown(detail::TeardownRingPair)
+  ->RangeMultiplier(4)
+  ->Range(0, 1 << 12);
+
+BENCHMARK(Nop<ConsumeMethod::kWait>)
+  ->Name("NopSingleIssuerWait")
   ->UseManualTime()
   ->Setup(detail::SetupRingPair<true>)
   ->Teardown(detail::TeardownRingPair)
@@ -205,39 +255,32 @@ BENCHMARK(Nop)
   ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgWait)
-  ->Name("BenchRingMsgWaitSqpoll")
-  ->UseManualTime()
-  ->Setup(detail::SetupRingPairSqpoll)
-  ->Teardown(detail::TeardownRingPair)
-  ->Arg(1);
-
-BENCHMARK(BenchRingMsgWait)
   ->UseManualTime()
   ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
-  ->Range(1, 1 << 12);
-
-BENCHMARK(BenchRingMsgPeek)
-  ->Name("BenchRingMsgPeekSqpoll")
-  ->UseManualTime()
-  ->Setup(detail::SetupRingPairSqpoll)
-  ->Teardown(detail::TeardownRingPair)
-  ->Arg(1);
+  ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgPeek)
   ->UseManualTime()
   ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
-  ->Range(1, 1 << 12);
+  ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgTimeoutWait)
   ->UseManualTime()
   ->Setup(detail::SetupRingPair<false>)
   ->Teardown(detail::TeardownRingPair)
   ->RangeMultiplier(4)
-  ->Range(1, 1 << 12);
+  ->Range(0, 1 << 12);
+
+BENCHMARK(BenchRingMsgWaitCqes)
+  ->UseManualTime()
+  ->Setup(detail::SetupRingPair<false>)
+  ->Teardown(detail::TeardownRingPair)
+  ->RangeMultiplier(4)
+  ->Range(0, 1 << 12);
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
