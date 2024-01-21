@@ -4,6 +4,7 @@
 #include "client_manager.h"
 #include "io/listener.h"
 #include "runtime/ring_executor.h"
+#include "runtime/util.h"
 #include "service/command_registry.h"
 #include "service/data_structure_service.h"
 #include "sys/util.h"
@@ -16,8 +17,8 @@ namespace rdss {
 Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
-  , dss_executor_(std::make_unique<RingExecutor>(
-      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
+  // , dss_executor_(std::make_unique<RingExecutor>(
+  //     "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
@@ -35,9 +36,7 @@ Server::Server(Config config)
     RegisterCommands(service_.get());
 }
 
-Task<void> Server::AcceptLoop(RingExecutor* executor) {
-    co_await ResumeOn(executor);
-
+Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
     size_t ce_index{0};
     while (active_) {
         auto conn = co_await listener_->Accept(client_executors_[ce_index].get());
@@ -50,7 +49,8 @@ Task<void> Server::AcceptLoop(RingExecutor* executor) {
         }
         ce_index = (ce_index + 1) % client_executors_.size();
         auto* client = client_manager_->AddClient(conn, service_.get());
-        client->Process(executor, dss_executor_.get());
+        // client->Process(this_exr, dss_executor_.get());
+        client->Echo(this_exr);
     }
 }
 
@@ -58,8 +58,6 @@ Server::~Server() = default;
 
 // TODO: Adaptive hz
 Task<void> Server::Cron() {
-    co_await ResumeOn(dss_executor_.get());
-
     const auto interval_in_millisecond = 1000 / config_.hz;
     while (active_) {
         co_await dss_executor_->Timeout(std::chrono::milliseconds(interval_in_millisecond));
@@ -71,9 +69,18 @@ void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
     stats_.start_time = clock_->Now();
 
-    Cron();
+    io_uring src_ring;
+    auto ret = io_uring_queue_init(16, &src_ring, 0);
+    if (ret) {
+        LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
+    }
 
-    AcceptLoop(client_executors_[0].get());
+    // ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
+    ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
+        this->AcceptLoop(exr);
+    });
+
+    io_uring_queue_exit(&src_ring);
 
     shutdown_future_.wait();
     LOG(INFO) << "Shutting down the server";
