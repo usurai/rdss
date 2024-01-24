@@ -18,6 +18,7 @@ template<bool SingIssuer = false, bool SqPoll = false>
 void SetupRing(io_uring* ring) {
     io_uring_params params{};
     params.cq_entries = kCqEntries;
+    params.flags |= IORING_SETUP_CQSIZE;
     if constexpr (SingIssuer) {
         params.flags |= IORING_SETUP_SINGLE_ISSUER;
     }
@@ -29,6 +30,9 @@ void SetupRing(io_uring* ring) {
     if ((ret = io_uring_queue_init_params(kSqEntries, ring, &params)) != 0) {
         LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
     }
+
+    LOG(INFO) << "sq size: " << ring->sq.ring_entries;
+    LOG(INFO) << "cq size: " << ring->cq.ring_entries;
 }
 
 void SetupRingSqpoll(io_uring* ring);
