@@ -13,7 +13,7 @@ struct Awaitable
     void await_suspend(std::coroutine_handle<> h) {
         handle = std::move(h);
         io_uring_sqe* sqe;
-        while ((sqe = io_uring_get_sqe(&src_ring)) == nullptr) {
+        while ((sqe = io_uring_get_sqe(ring)) == nullptr) {
         }
         io_uring_prep_msg_ring(
           sqe, to->Ring()->enter_ring_fd, 0, reinterpret_cast<uint64_t>(this), 0);
