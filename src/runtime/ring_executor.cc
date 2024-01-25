@@ -1,42 +1,49 @@
 #include "ring_executor.h"
 
+#include <future>
+
 namespace rdss {
 
 RingExecutor::RingExecutor(std::string name, RingConfig config)
   : name_(std::move(name))
   , config_(std::move(config)) {
-    io_uring_params params = {};
-    params.cq_entries = config_.cq_entries;
-    if (config_.sqpoll) {
-        params.flags |= IORING_SETUP_SQPOLL;
-    }
-    // TODO: This caused EEXIST when submitting.
-    // params.flags |= IORING_SETUP_SINGLE_ISSUER;
+    std::promise<void> promise;
+    auto future = promise.get_future();
 
-    int ret;
-    if ((ret = io_uring_queue_init_params(config_.sq_entries, &ring_, &params)) != 0) {
-        LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
-    }
-    if (!(params.features & IORING_FEAT_NODROP)) {
-        LOG(WARNING) << "io_uring: No IORING_FEAT_NODROP";
-    }
-
-    if (config_.async_sqe) {
-        unsigned int max_workers[2] = {0, config_.max_unbound_workers};
-        ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
-        if (ret != 0) {
-            LOG(ERROR) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
-        }
-    }
-
-    thread_ = std::thread([this]() {
+    thread_ = std::thread([this, &promise]() {
         LOG(INFO) << "Executor " << name_ << " starting at thread " << gettid();
-        if (this->config_.sqpoll) {
-            this->Loop();
+
+        io_uring_params params = {};
+        params.cq_entries = config_.cq_entries;
+        params.flags |= IORING_SETUP_CQSIZE;
+        params.flags |= IORING_SETUP_SINGLE_ISSUER;
+        if (config_.sqpoll) {
+            params.flags |= IORING_SETUP_SQPOLL;
         } else {
-            this->LoopTimeoutWait();
+            params.flags |= IORING_SETUP_COOP_TASKRUN;
         }
+
+        int ret;
+        if ((ret = io_uring_queue_init_params(config_.sq_entries, &ring_, &params)) != 0) {
+            LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
+        }
+        if (!(params.features & IORING_FEAT_NODROP)) {
+            LOG(WARNING) << "io_uring: No IORING_FEAT_NODROP";
+        }
+
+        if (config_.async_sqe) {
+            unsigned int max_workers[2] = {0, config_.max_unbound_workers};
+            ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
+            if (ret != 0) {
+                LOG(ERROR) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
+            }
+        }
+
+        promise.set_value();
+        this->LoopNew();
     });
+
+    future.wait();
 }
 
 RingExecutor::~RingExecutor() {
@@ -75,6 +82,40 @@ void RingExecutor::Deactivate(io_uring* ring) {
     if (local_ring) {
         io_uring_queue_exit(ring);
         delete ring;
+    }
+}
+
+void RingExecutor::LoopNew() {
+    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
+    const auto wait_batch = std::max(1UL, config_.wait_batch_size);
+
+    io_uring_cqe* cqe;
+    while (active_.load(std::memory_order_relaxed)) {
+        // TODO: batch size
+        auto ret = io_uring_submit_and_wait_timeout(Ring(), &cqe, wait_batch, &ts, nullptr);
+        if (io_uring_cq_has_overflow(Ring())) {
+            LOG(WARNING) << name_ << " CQ has overflow.";
+        }
+        if (ret == -ETIME) {
+            continue;
+        }
+        if (ret < 0) {
+            LOG(FATAL) << "io_uring_wait_cqes:" << strerror(-ret);
+        }
+        unsigned head;
+        size_t processed{0};
+        io_uring_for_each_cqe(Ring(), head, cqe) {
+            ++processed;
+            if (cqe->user_data == 0) {
+                break;
+            }
+            auto awaitable = reinterpret_cast<Continuation*>(cqe->user_data);
+            awaitable->result = cqe->res;
+            awaitable->handle();
+        }
+        if (processed) {
+            io_uring_cq_advance(Ring(), processed);
+        }
     }
 }
 
@@ -143,16 +184,6 @@ void RingExecutor::LoopTimeoutWait() {
         } while (!io_uring_peek_cqe(&ring_, &cqe));
     }
     LOG(INFO) << "Terminating thread " << gettid();
-}
-
-void RingExecutor::MaybeSubmit() {
-    if (!config_.sqpoll && io_uring_sq_ready(Ring()) < config_.submit_batch_size) {
-        return;
-    }
-    auto ret = io_uring_submit(Ring());
-    if (ret < 0) {
-        LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
-    }
 }
 
 } // namespace rdss

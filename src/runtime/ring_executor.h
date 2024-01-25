@@ -66,7 +66,7 @@ struct RingConfig {
     bool sqpoll = false;
     bool async_sqe = false;
     uint32_t max_unbound_workers = 5;
-    size_t submit_batch_size = 10;
+    size_t wait_batch_size = 1;
 };
 
 class RingExecutor {
@@ -101,10 +101,9 @@ public:
     bool AsyncSqe() const { return config_.async_sqe; }
 
 private:
+    void LoopNew();
     void Loop();
     void LoopTimeoutWait();
-
-    void MaybeSubmit();
 
     const std::string name_;
     const RingConfig config_;
@@ -117,13 +116,20 @@ template<typename Operation>
 void RingExecutor::Initiate(Operation* operation) {
     io_uring_sqe* sqe{nullptr};
     while ((sqe = io_uring_get_sqe(Ring())) == nullptr) {
+        if (config_.sqpoll) {
+            auto ret = io_uring_sqring_wait(Ring());
+            if (ret < 0) {
+                LOG(FATAL) << "io_uring_sqring_wait:" << strerror(-ret);
+            }
+        } else {
+            io_uring_submit(Ring());
+        }
     }
     operation->Prepare(sqe);
     if (AsyncSqe() && operation->IsIoOperation()) {
         io_uring_sqe_set_flags(sqe, IOSQE_ASYNC);
     }
     io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(operation));
-    MaybeSubmit();
 }
 
 template<typename Implementation>
