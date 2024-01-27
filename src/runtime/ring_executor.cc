@@ -96,10 +96,7 @@ void RingExecutor::LoopNew() {
         if (io_uring_cq_has_overflow(Ring())) {
             LOG(WARNING) << name_ << " CQ has overflow.";
         }
-        if (ret == -ETIME) {
-            continue;
-        }
-        if (ret < 0) {
+        if (ret < 0 && ret != -ETIME) {
             LOG(FATAL) << "io_uring_wait_cqes:" << strerror(-ret);
         }
         unsigned head;
@@ -115,6 +112,7 @@ void RingExecutor::LoopNew() {
         }
         if (processed) {
             io_uring_cq_advance(Ring(), processed);
+            VLOG(1) << "Processed " << processed << " events.";
         }
     }
 }
