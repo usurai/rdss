@@ -82,17 +82,15 @@ Task<void> ShardTask(
 template<typename TaskType>
 static void BenchSharded(benchmark::State& s) {
     for (auto _ : s) {
-        const auto total_tasks = s.range(0);
-        const size_t repeat = s.range(1);
-        const auto batch_size = s.range(2);
-        const auto num_client_executors = s.range(3);
+        const auto batch_size = s.range(0);
+        const auto num_client_executors = s.range(1);
+        const auto total_tasks = s.range(2);
+        const size_t repeat = s.range(3);
+        const bool sqpoll = s.range(4);
 
         RingConfig config{};
-        if (batch_size == 0) {
-            config.sqpoll = true;
-        } else {
-            config.submit_batch_size = batch_size;
-        }
+        config.sqpoll = sqpoll;
+        config.wait_batch_size = batch_size;
 
         RingExecutor main("", config);
         RingExecutor service_executor("service", config);

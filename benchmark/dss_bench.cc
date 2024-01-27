@@ -17,8 +17,8 @@ static void SetBenchSetup(const benchmark::State& s) {
         GenerateRandomKeys(keys, kKeys, key_prefix, std::to_string(kKeys).size());
     }
     value = std::string(s.range(4), 'x');
-    if (commands.size() < s.range(3)) {
-        commands.resize(s.range(3), std::vector<std::string_view>{set_str, set_str, value});
+    if (commands.size() < s.range(1)) {
+        commands.resize(s.range(1), std::vector<std::string_view>{set_str, set_str, value});
     }
 
     service = std::make_unique<DataStructureService>(
@@ -50,13 +50,14 @@ BENCHMARK(BenchSharded<SetTask>)
   ->Setup(SetBenchSetup)
   ->Teardown(SetBenchTeardown)
   ->ArgsProduct({
-    {1'000, 4'000, 8'000}, // num of connection
-    {1'000},               // num of op per connection
-    {0, 16, 64, 1024},     // submission batch size
-    {2, 4},                // num of client executor
-    {128, 2048}            // value size
+    {1 << 4, 1 << 6}, // wait batch
+    {2},              // num of client executor
+    {1'000, 4'000},   // num of connection
+    {4'000},          // num of op per connection
+    {128},            // value size
+    {0, 1},           // sqpoll
   })
-  ->ArgNames({"conns", "op_per_conn", "sub_batch:", "cli_exrs", "val_size"});
+  ->ArgNames({"wait_batch:", "cli_exrs", "conns", "op_per_conn", "val_size", "sqpoll"});
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
