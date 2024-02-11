@@ -17,8 +17,8 @@ namespace rdss {
 Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
-  // , dss_executor_(std::make_unique<RingExecutor>(
-  //     "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
+  , dss_executor_(std::make_unique<RingExecutor>(
+      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
@@ -49,8 +49,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         }
         ce_index = (ce_index + 1) % client_executors_.size();
         auto* client = client_manager_->AddClient(conn, service_.get());
-        // client->Process(this_exr, dss_executor_.get());
-        client->Echo(this_exr);
+        client->Process(this_exr, dss_executor_.get());
     }
 }
 
@@ -75,7 +74,7 @@ void Server::Run() {
         LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
     }
 
-    // ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
+    ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
     ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
         this->AcceptLoop(exr);
     });
