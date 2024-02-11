@@ -17,6 +17,7 @@ RingExecutor::RingExecutor(std::string name, RingConfig config)
         params.cq_entries = config_.cq_entries;
         params.flags |= IORING_SETUP_CQSIZE;
         params.flags |= IORING_SETUP_SINGLE_ISSUER;
+        // params.flags |= IORING_SETUP_DEFER_TASKRUN;
         if (config_.sqpoll) {
             params.flags |= IORING_SETUP_SQPOLL;
         } else {
@@ -29,6 +30,9 @@ RingExecutor::RingExecutor(std::string name, RingConfig config)
         }
         if (!(params.features & IORING_FEAT_NODROP)) {
             LOG(WARNING) << "io_uring: No IORING_FEAT_NODROP";
+        }
+        if (!(params.features & IORING_FEAT_FAST_POLL)) {
+            LOG(WARNING) << "io_uring: No IORING_FEAT_FAST_POLL";
         }
 
         if (config_.async_sqe) {
