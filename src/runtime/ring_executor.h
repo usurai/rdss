@@ -71,7 +71,7 @@ struct RingConfig {
 
 class RingExecutor {
 public:
-    RingExecutor(std::string name = "", RingConfig config = RingConfig{});
+    RingExecutor(std::string name = "", RingConfig config = RingConfig{}, size_t cpu = 0);
 
     RingExecutor(const RingExecutor&) = delete;
     RingExecutor(RingExecutor&&) = delete;

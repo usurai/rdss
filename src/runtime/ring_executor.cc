@@ -1,16 +1,27 @@
 #include "ring_executor.h"
 
 #include <future>
+#include <thread>
 
 namespace rdss {
 
-RingExecutor::RingExecutor(std::string name, RingConfig config)
+RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
   : name_(std::move(name))
   , config_(std::move(config)) {
     std::promise<void> promise;
     auto future = promise.get_future();
 
-    thread_ = std::thread([this, &promise]() {
+    thread_ = std::thread([this, &promise, cpu]() {
+        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
+        // only CPU i as set.
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(cpu, &cpuset);
+        int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+        if (rc != 0) {
+            LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
+        }
+
         LOG(INFO) << "Executor " << name_ << " starting at thread " << gettid();
 
         io_uring_params params = {};

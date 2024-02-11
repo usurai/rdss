@@ -18,13 +18,13 @@ Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
   , dss_executor_(std::make_unique<RingExecutor>(
-      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}))
+      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}, config_.client_executors))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
     for (size_t i = 0; i < config_.client_executors; ++i) {
         client_executors_.emplace_back(std::make_unique<RingExecutor>(
-          "client_executor_" + std::to_string(i), RingConfig{.sqpoll = config_.sqpoll}));
+          "client_executor_" + std::to_string(i), RingConfig{.sqpoll = config_.sqpoll}, i));
     }
 
     listener_ = Listener::Create(config_.port, client_executors_[0].get());
@@ -50,6 +50,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         ce_index = (ce_index + 1) % client_executors_.size();
         auto* client = client_manager_->AddClient(conn, service_.get());
         client->Process(this_exr, dss_executor_.get());
+        // client->Echo(this_exr);
     }
 }
 
