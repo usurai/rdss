@@ -34,7 +34,7 @@ bool SetNofileLimit(uint32_t limit) {
 
 int CreateListeningSocket(uint16_t port) {
     // socket
-    auto sock = socket(AF_INET, SOCK_STREAM, 0);
+    auto sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (sock == -1) {
         LOG(ERROR) << "socket: " << strerror(errno);
         return 0;
