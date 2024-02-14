@@ -54,6 +54,17 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
             }
         }
 
+        if (config_.max_direct_descriptors) {
+            ret = io_uring_register_files_sparse(&ring_, config_.max_direct_descriptors);
+            if (ret) {
+                LOG(FATAL) << "io_uring_register_files_sparse:" << strerror(-ret);
+            }
+            fd_slot_indices_.reserve(config_.max_direct_descriptors);
+            for (size_t i = 0; i < config_.max_direct_descriptors; ++i) {
+                fd_slot_indices_.push_back(i);
+            }
+        }
+
         promise.set_value();
         this->LoopNew();
     });
@@ -198,5 +209,20 @@ void RingExecutor::LoopTimeoutWait() {
     }
     LOG(INFO) << "Terminating thread " << gettid();
 }
+
+int RingExecutor::RegisterFd(int fd) {
+    if (fd_slot_indices_.empty()) {
+        return -1;
+    }
+    const auto index = fd_slot_indices_.back();
+    fd_slot_indices_.pop_back();
+    auto ret = io_uring_register_files_update(Ring(), index, &fd, 1);
+    if (ret != 1) {
+        LOG(FATAL) << "io_uring_register_files_update:" << strerror(-ret);
+    }
+    return index;
+}
+
+void RingExecutor::UnregisterFd(int fd_slot_index) { fd_slot_indices_.push_back(fd_slot_index); }
 
 } // namespace rdss

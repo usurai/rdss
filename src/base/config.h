@@ -26,7 +26,7 @@ struct Config {
     // TODO: Limit this according to CPU number.
     size_t io_uring_wq_max_unbound_workers = 16;
     size_t client_executors = 2;
-    bool sqpoll = true;
+    size_t max_direct_fds_per_exr = 4096;
 
     void ReadFromFile(const std::string& file_name);
 

@@ -66,7 +66,7 @@ void Config::ReadFromFile(const std::string& file_name) {
 
     io_uring_wq_max_unbound_workers = global_section["io_uring_wq_max_unbound_workers"] | 16;
     client_executors = global_section["client_executors"] | 2;
-    sqpoll = global_section["sqpoll"] | true;
+    max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096;
 }
 
 void Config::SanityCheck() {

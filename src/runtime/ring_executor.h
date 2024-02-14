@@ -22,14 +22,20 @@ template<typename Implementation>
 struct RingOperation
   : public Continuation
   , public std::suspend_always {
-    explicit RingOperation(RingExecutor* executor)
-      : executor_(executor) {}
+    explicit RingOperation(RingExecutor* executor, bool use_direct_fd = false)
+      : executor_(executor)
+      , use_direct_fd_(use_direct_fd) {}
 
     void await_suspend(std::coroutine_handle<> h);
 
     auto await_resume() { return result; }
 
-    void Prepare(io_uring_sqe* sqe) { Impl()->Prepare(sqe); }
+    void Prepare(io_uring_sqe* sqe) {
+        Impl()->Prepare(sqe);
+        if (use_direct_fd_) {
+            io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+        }
+    }
 
     bool IsIoOperation() const { return Impl()->IsIoOperation(); }
 
@@ -39,6 +45,7 @@ private:
     const Implementation* Impl() const { return static_cast<const Implementation*>(this); }
 
     RingExecutor* executor_;
+    bool use_direct_fd_;
 };
 
 struct RingTimeout : public RingOperation<RingTimeout> {
@@ -67,6 +74,7 @@ struct RingConfig {
     bool async_sqe = false;
     uint32_t max_unbound_workers = 5;
     size_t wait_batch_size = 1;
+    size_t max_direct_descriptors = 4096;
 };
 
 class RingExecutor {
@@ -100,6 +108,12 @@ public:
 
     bool AsyncSqe() const { return config_.async_sqe; }
 
+    // Registers 'fd' into the executor. Returns the index into the registered fd if successful,
+    // returns -1 otherwise.
+    int RegisterFd(int fd);
+
+    void UnregisterFd(int fd_slot_index);
+
 private:
     void LoopNew();
     void Loop();
@@ -110,6 +124,7 @@ private:
     std::atomic<bool> active_ = true;
     io_uring ring_;
     std::thread thread_;
+    std::vector<int> fd_slot_indices_;
 };
 
 template<typename Operation>

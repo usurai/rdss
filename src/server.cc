@@ -24,7 +24,10 @@ Server::Server(Config config)
     client_executors_.reserve(config_.client_executors);
     for (size_t i = 0; i < config_.client_executors; ++i) {
         client_executors_.emplace_back(std::make_unique<RingExecutor>(
-          "client_executor_" + std::to_string(i), RingConfig{.sqpoll = config_.sqpoll}, i));
+          "client_executor_" + std::to_string(i),
+          RingConfig{
+            .sqpoll = config_.sqpoll, .max_direct_descriptors = config_.max_direct_fds_per_exr},
+          i));
     }
 
     listener_ = Listener::Create(config_.port, client_executors_[0].get());
