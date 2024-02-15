@@ -65,6 +65,14 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
             }
         }
 
+        fd_ = ring_.enter_ring_fd;
+        if (config_.register_ring_fd) {
+        ret = io_uring_register_ring_fd(&ring_);
+        if (ret != 1) {
+            LOG(FATAL) << "io_uring_register_ring_fd:" << strerror(-ret);
+            }
+        }
+
         promise.set_value();
         this->LoopNew();
     });
@@ -99,7 +107,7 @@ void RingExecutor::Deactivate(io_uring* ring) {
     if (sqe == nullptr) {
         LOG(FATAL) << "io_uring_get_sqe";
     }
-    io_uring_prep_msg_ring(sqe, Ring()->enter_ring_fd, 0, 0, 0);
+    io_uring_prep_msg_ring(sqe, RingFD(), 0, 0, 0);
     io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
     auto ret = io_uring_submit(ring);
     if (ret < 0) {

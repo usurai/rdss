@@ -13,8 +13,7 @@ struct Awaitable
         io_uring_sqe* sqe;
         while ((sqe = io_uring_get_sqe(ring)) == nullptr) {
         }
-        io_uring_prep_msg_ring(
-          sqe, to->Ring()->enter_ring_fd, 0, reinterpret_cast<uint64_t>(this), 0);
+        io_uring_prep_msg_ring(sqe, to_fd, 0, reinterpret_cast<uint64_t>(this), 0);
         io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
         if (submit) {
             auto ret = io_uring_submit(ring);
@@ -25,7 +24,7 @@ struct Awaitable
     }
 
     io_uring* ring;
-    RingExecutor* to;
+    int to_fd;
     bool submit;
 };
 
@@ -35,7 +34,7 @@ namespace rdss {
 
 template<typename FuncType>
 Task<void> ScheduleOn(io_uring* src_ring, RingExecutor* dest_exr, FuncType func) {
-    co_await detail::Awaitable{.ring = src_ring, .to = dest_exr, .submit = true};
+    co_await detail::Awaitable{.ring = src_ring, .to_fd = dest_exr->RingFD(), .submit = true};
     func();
 }
 

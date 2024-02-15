@@ -45,7 +45,7 @@ private:
     const Implementation* Impl() const { return static_cast<const Implementation*>(this); }
 
     RingExecutor* executor_;
-    bool use_direct_fd_;
+    const bool use_direct_fd_ = false;
 };
 
 struct RingTimeout : public RingOperation<RingTimeout> {
@@ -75,6 +75,7 @@ struct RingConfig {
     uint32_t max_unbound_workers = 5;
     size_t wait_batch_size = 1;
     size_t max_direct_descriptors = 4096;
+    bool register_ring_fd = true;
 };
 
 class RingExecutor {
@@ -89,6 +90,7 @@ public:
     ~RingExecutor();
 
     io_uring* Ring() { return &ring_; }
+    int RingFD() const { return fd_; }
 
     /// To stop the executor, one needs to first call 'Deactivate()', which sets 'active_' flag of
     /// executor to false and then sends a ring msg with user_data set as 0 to wake the worker
@@ -123,6 +125,7 @@ private:
     const RingConfig config_;
     std::atomic<bool> active_ = true;
     io_uring ring_;
+    int fd_;
     std::thread thread_;
     std::vector<int> fd_slot_indices_;
 };
@@ -163,8 +166,7 @@ inline auto Transfer(RingExecutor* src, RingExecutor* dest) {
           , dest(dest) {}
 
         void Prepare(io_uring_sqe* sqe) {
-            io_uring_prep_msg_ring(
-              sqe, dest->Ring()->enter_ring_fd, 0, reinterpret_cast<uint64_t>(this), 0);
+            io_uring_prep_msg_ring(sqe, dest->RingFD(), 0, reinterpret_cast<uint64_t>(this), 0);
             io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
         }
 
