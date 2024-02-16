@@ -31,14 +31,21 @@ class Connection {
 public:
     Connection(int fd, RingExecutor* executor)
       : fd_(fd)
-      , executor_(executor)
-      , descripor_index_(executor_->RegisterFd(fd_)) {}
+      , executor_(executor) {}
 
     ~Connection() {
         Close();
         if (descripor_index_ >= 0) {
             executor_->UnregisterFd(descripor_index_);
         }
+    }
+
+    bool UsingDirectDescriptor() const { return descripor_index_ >= 0; }
+
+    // Registration should be executed in the executor's thread.
+    void TryRegisterFD() {
+        assert(!UsingDirectDescriptor());
+        descripor_index_ = executor_->RegisterFd(fd_);
     }
 
     auto Recv(Buffer::SinkType buffer) {
@@ -121,7 +128,7 @@ private:
     int fd_;
     RingExecutor* executor_;
     // Index into 'executor_'s registered fds. Equals -1 if unregistered.
-    const int descripor_index_;
+    int descripor_index_ = -1;
 };
 
 } // namespace rdss

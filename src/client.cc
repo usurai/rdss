@@ -56,6 +56,10 @@ Task<void> Client::Echo(RingExecutor* from) {
         co_await Transfer(from, conn_->GetExecutor());
     }
 
+    if (!conn_->UsingDirectDescriptor()) {
+        conn_->TryRegisterFD();
+    }
+
     Buffer buffer(1024);
     std::error_code error;
     size_t bytes_read, bytes_written;
@@ -87,6 +91,10 @@ Task<void> Client::Echo(RingExecutor* from) {
 Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
     if (from != conn_->GetExecutor()) {
         co_await Transfer(from, conn_->GetExecutor());
+    }
+
+    if (!conn_->UsingDirectDescriptor()) {
+        conn_->TryRegisterFD();
     }
 
     // Might expand before each call to recv() to ensure at least 'kIOGenericBufferSize'(16KB)
