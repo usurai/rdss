@@ -14,8 +14,6 @@ class Client {
 public:
     explicit Client(Connection* conn, ClientManager* manager, DataStructureService* service);
 
-    Task<void> Echo(RingExecutor* from);
-
     Task<void> Process(RingExecutor* from, RingExecutor* dss_executor);
 
     void Close();

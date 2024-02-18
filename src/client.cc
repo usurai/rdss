@@ -51,43 +51,6 @@ Client::Client(Connection* conn, ClientManager* manager, DataStructureService* s
   , manager_(manager)
   , service_(service) {}
 
-Task<void> Client::Echo(RingExecutor* from) {
-    if (from != conn_->GetExecutor()) {
-        co_await Transfer(from, conn_->GetExecutor());
-    }
-
-    if (!conn_->UsingDirectDescriptor()) {
-        conn_->TryRegisterFD();
-    }
-
-    Buffer buffer(1024);
-    std::error_code error;
-    size_t bytes_read, bytes_written;
-    while (true) {
-        std::tie(error, bytes_read) = co_await conn_->Recv(buffer.Sink());
-        if (error) {
-            LOG(ERROR) << "recv: " << error.message();
-            break;
-        }
-        if (bytes_read == 0) {
-            break;
-        }
-        buffer.Produce(bytes_read);
-
-        std::tie(error, bytes_written) = co_await conn_->Send(buffer.Source());
-        if (error) {
-            LOG(ERROR) << "send: " << error.message();
-            break;
-        }
-        if (bytes_written == 0) {
-            break;
-        }
-        buffer.Consume(bytes_written);
-        buffer.Reset();
-    }
-    Close();
-}
-
 Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
     if (from != conn_->GetExecutor()) {
         co_await Transfer(from, conn_->GetExecutor());

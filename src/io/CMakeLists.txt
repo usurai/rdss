@@ -19,3 +19,5 @@ target_link_libraries(
           sys
           io
           glog::glog)
+
+add_subdirectory(example)
