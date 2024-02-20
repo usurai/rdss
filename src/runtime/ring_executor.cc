@@ -142,6 +142,7 @@ void RingExecutor::LoopNew() {
             }
             auto awaitable = reinterpret_cast<Continuation*>(cqe->user_data);
             awaitable->result = cqe->res;
+            awaitable->flags = cqe->flags;
             awaitable->handle();
         }
         if (processed) {
