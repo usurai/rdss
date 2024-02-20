@@ -34,7 +34,7 @@ struct RingOperation
     void Prepare(io_uring_sqe* sqe) {
         Impl()->Prepare(sqe);
         if (use_direct_fd_) {
-            io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+            sqe->flags |= IOSQE_FIXED_FILE;
         }
     }
 
