@@ -38,4 +38,6 @@ Task<void> ScheduleOn(io_uring* src_ring, RingExecutor* dest_exr, FuncType func)
     func();
 }
 
+void SetupInitBufRing(io_uring* src_ring, std::vector<std::unique_ptr<RingExecutor>>& exrs);
+
 } // namespace rdss
