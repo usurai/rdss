@@ -1,5 +1,8 @@
 #include "ring_executor.h"
 
+#include "constants.h" // For kIOGenericBufferSize
+
+#include <cassert>
 #include <future>
 #include <thread>
 
@@ -81,6 +84,10 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
 }
 
 RingExecutor::~RingExecutor() {
+    if (buf_ring_ != nullptr) {
+        io_uring_free_buf_ring(Ring(), buf_ring_, buf_entries_, 0 /* group id */);
+        free(buf_);
+    }
     io_uring_queue_exit(Ring());
     LOG(INFO) << "Executor " << name_ << " exiting.";
 }
@@ -233,5 +240,93 @@ int RingExecutor::RegisterFd(int fd) {
 }
 
 void RingExecutor::UnregisterFd(int fd_slot_index) { fd_slot_indices_.push_back(fd_slot_index); }
+
+void RingExecutor::InitBufRing() {
+    // All exr use 0 as group id.
+    const auto buf_group_id = 0;
+    const size_t buf_size = ((config_.max_direct_descriptors == 0) ? 1024
+                                                                   : config_.max_direct_descriptors)
+                            * kIOGenericBufferSize;
+
+    assert(buf_size % buf_entry_size == 0);
+    buf_entries_ = buf_size / buf_entry_size;
+    assert(buf_entries_ <= (1 << 15));
+
+    // TODO: 1.alignment 2.mem tracking.
+    const auto page_size = sysconf(_SC_PAGESIZE);
+    if (page_size < 0) {
+        LOG(FATAL) << "sysconf(_SC_PAGESIZE)";
+    }
+    if (posix_memalign(reinterpret_cast<void**>(&buf_), page_size, buf_size)) {
+        LOG(FATAL) << "posix_memalign";
+    }
+
+    int ret;
+    buf_ring_ = io_uring_setup_buf_ring(Ring(), buf_entries_, buf_group_id, 0, &ret);
+    if (buf_ring_ == nullptr) {
+        LOG(FATAL) << "io_uring_setup_buf_ring:" << strerror(-ret);
+    }
+
+    char* ptr = buf_;
+    for (size_t i = 0; i < buf_entries_; ++i) {
+        io_uring_buf_ring_add(buf_ring_, ptr, buf_entry_size, i, buf_entries_ - 1, i);
+        ptr += buf_entry_size;
+    }
+    io_uring_buf_ring_advance(buf_ring_, buf_entries_);
+    LOG(INFO) << name_ << " setups buffer ring of size " << buf_size << " with " << buf_entries_
+              << " entries, each has size " << buf_entry_size;
+}
+
+RingExecutor::BufferView RingExecutor::GetBufferView(uint32_t entry_id, size_t length) {
+    assert(entry_id < buf_entries_);
+    const auto num_entries = length / buf_entry_size + ((length % buf_entry_size == 0) ? 0 : 1);
+    if (num_entries + entry_id <= buf_entries_) {
+        return RingExecutor::BufferView{
+          .view = std::string_view{buf_ + entry_id * buf_entry_size, length},
+          .separated_entry_id = std::nullopt};
+    }
+
+    // TODO: We assume only one separated result at the same time.
+    assert(concat_str_.empty());
+
+    const auto first_part_length = (buf_entries_ - entry_id) * buf_entry_size;
+    assert(first_part_length < length);
+    concat_str_.resize(length);
+    std::memcpy(concat_str_.data(), buf_ + entry_id * buf_entry_size, first_part_length);
+    std::memcpy(concat_str_.data() + first_part_length, buf_, length - first_part_length);
+    return RingExecutor::BufferView{.view = concat_str_, .separated_entry_id = entry_id};
+}
+
+void RingExecutor::PutBufferView(RingExecutor::BufferView&& buffer_view) {
+    uint32_t start_entry_id;
+    if (buffer_view.separated_entry_id.has_value()) {
+        start_entry_id = buffer_view.separated_entry_id.value();
+    } else {
+        assert((buffer_view.view.data() - buf_) % buf_entry_size == 0);
+        start_entry_id = (buffer_view.view.data() - buf_) / buf_entry_size;
+    }
+
+    auto remaining_length = buffer_view.view.length();
+    auto entry_id = start_entry_id;
+    size_t offset{0};
+    auto mask = io_uring_buf_ring_mask(buf_entries_);
+    while (remaining_length) {
+        io_uring_buf_ring_add(
+          buf_ring_,
+          buf_ + entry_id * buf_entry_size,
+          buf_entry_size,
+          entry_id,
+          buf_entries_ - 1,
+          offset);
+        remaining_length -= (remaining_length < buf_entry_size) ? remaining_length : buf_entry_size;
+        entry_id = (entry_id + 1) & (buf_entries_ - 1);
+        ++offset;
+    }
+    io_uring_buf_ring_advance(buf_ring_, offset);
+
+    if (buffer_view.separated_entry_id.has_value()) {
+        concat_str_.clear();
+    }
+}
 
 } // namespace rdss

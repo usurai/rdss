@@ -7,6 +7,7 @@
 #include <coroutine>
 #include <cstring>
 #include <liburing.h>
+#include <optional>
 #include <thread>
 
 namespace rdss {
@@ -39,6 +40,8 @@ struct RingOperation
     }
 
     bool IsIoOperation() const { return Impl()->IsIoOperation(); }
+
+    RingExecutor* GetExecutor() { return executor_; }
 
 private:
     Implementation* Impl() { return static_cast<Implementation*>(this); }
@@ -117,6 +120,25 @@ public:
 
     void UnregisterFd(int fd_slot_index);
 
+    void InitBufRing();
+
+    // BufferView is the view of the recv result stored in the ring buffer. If the referenced buffer
+    // is consecutive, 'view' is simply the string_view over that buffer. If the referenced buffer
+    // is non-consecutive, 'RingExecutor' creates a temporary string to and copies the two parts
+    // into the string, then 'view' is string_view over the temporary string.
+    struct BufferView {
+        std::string_view view;
+
+        // If the referenced buffer are non-adjacent, i.e. one at the last and one at the first,
+        // then 'separated_entry_id' is the first entry id of the entry at the last part of the
+        // buffer. nullopt otherwise.:w
+        std::optional<uint32_t> separated_entry_id = std::nullopt;
+    };
+
+    BufferView GetBufferView(uint32_t entry_id, size_t length);
+
+    void PutBufferView(BufferView&& buffer_view);
+
 private:
     void LoopNew();
     void Loop();
@@ -129,6 +151,13 @@ private:
     int fd_;
     std::thread thread_;
     std::vector<int> fd_slot_indices_;
+
+    io_uring_buf_ring* buf_ring_{nullptr};
+    char* buf_{nullptr};
+    // TODO: 1. move somewhere 2. rename to kXXX
+    static constexpr size_t buf_entry_size = 2048 * 2;
+    size_t buf_entries_{0};
+    std::string concat_str_;
 };
 
 template<typename Operation>

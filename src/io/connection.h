@@ -68,6 +68,41 @@ public:
                                   : RingRecv(executor_, false, fd_, buffer));
     }
 
+    auto BufRecv(int buf_group_id) {
+        struct RingBufferRecv : public detail::RingIO<RingBufferRecv> {
+            RingBufferRecv(RingExecutor* executor, bool direct_fd, int fd, int buf_group_id)
+              : RingIO<RingBufferRecv>(executor, direct_fd)
+              , fd(fd)
+              , buf_group_id(buf_group_id) {}
+
+            void Prepare(io_uring_sqe* sqe) {
+                io_uring_prep_recv(sqe, fd, nullptr, 0, 0);
+                sqe->buf_group = buf_group_id;
+                io_uring_sqe_set_flags(sqe, IOSQE_BUFFER_SELECT);
+            }
+
+            RingExecutor::BufferView await_resume() {
+                if (!(flags & IORING_CQE_F_BUFFER)) {
+                    // TODO: Replenish if out of buffer.
+                    if (result != 0) {
+                        LOG(INFO) << "No buffer selected:" << strerror(-result);
+                    }
+                    return {};
+                }
+
+                const uint32_t entry_id = flags >> IORING_CQE_BUFFER_SHIFT;
+                return GetExecutor()->GetBufferView(entry_id, static_cast<size_t>(result));
+            }
+
+            int fd;
+            int buf_group_id;
+        };
+
+        return (
+          (descripor_index_ >= 0) ? RingBufferRecv(executor_, true, descripor_index_, buf_group_id)
+                                  : RingBufferRecv(executor_, false, fd_, buf_group_id));
+    };
+
     auto Send(std::string_view data) {
         struct RingSend : public detail::RingIO<RingSend> {
             RingSend(RingExecutor* executor, bool direct_fd, int fd, std::string_view data)
