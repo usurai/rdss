@@ -39,7 +39,11 @@ public:
 
     explicit Buffer(size_t capacity)
       : data_(capacity) {
-        MemoryTracker::GetInstance().Allocate<MemCategory>(data_.capacity());
+        if (capacity == 0) {
+            virtual_view_ = true;
+        } else {
+            MemoryTracker::GetInstance().Allocate<MemCategory>(data_.capacity());
+        }
     }
 
     Buffer(const Buffer&) = default;
@@ -59,11 +63,22 @@ public:
 
     size_t Available() const { return data_.size() - write_index_; }
 
-    std::span<char> Sink() { return std::span(data_.data() + write_index_, Available()); }
+    std::span<char> Sink() {
+        assert(!virtual_view_);
+        return std::span(data_.data() + write_index_, Available());
+    }
 
     void Produce(size_t n) {
+        assert(!virtual_view_);
         assert(data_.size() >= write_index_ + n);
         write_index_ += n;
+    }
+
+    void Produce(std::string_view view) {
+        assert(virtual_view_);
+        assert(view_.empty());
+        view_ = view;
+        write_index_ = view_.size();
     }
 
     size_t NumWritten() const { return write_index_ - read_index_; }
@@ -75,12 +90,18 @@ public:
     void Reset() {
         read_index_ = 0;
         write_index_ = 0;
+        if (virtual_view_) {
+            view_ = {};
+        }
     }
 
 private:
+    bool virtual_view_{false};
     std::vector<char> data_;
     size_t read_index_{0};
     size_t write_index_{0};
+
+    std::string_view view_;
 };
 
 } // namespace rdss

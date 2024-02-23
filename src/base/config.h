@@ -28,6 +28,7 @@ struct Config {
     size_t client_executors = 2;
     bool sqpoll = false;
     size_t max_direct_fds_per_exr = 4096;
+    bool use_ring_buffer = true;
 
     void ReadFromFile(const std::string& file_name);
 

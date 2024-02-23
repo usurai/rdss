@@ -68,6 +68,8 @@ void Config::ReadFromFile(const std::string& file_name) {
     client_executors = global_section["client_executors"] | 2;
     sqpoll = global_section["sqpoll"] | false;
     max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096;
+
+    use_ring_buffer = global_section["use_ring_buffer"] | true;
 }
 
 void Config::SanityCheck() {

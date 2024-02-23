@@ -18,7 +18,9 @@ Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
   , dss_executor_(std::make_unique<RingExecutor>(
-      "dss_executor", RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false}, config_.client_executors))
+      "dss_executor",
+      RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false},
+      config_.client_executors))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
@@ -46,14 +48,14 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         stats_.connections_received.fetch_add(1, std::memory_order_relaxed);
         if (client_manager_->ActiveClients() == config_.maxclients) {
             stats_.rejected_connections.fetch_add(1, std::memory_order_relaxed);
+            // TODO: dtor will close
             conn->Close();
             delete conn;
             continue;
         }
         ce_index = (ce_index + 1) % client_executors_.size();
         auto* client = client_manager_->AddClient(conn, service_.get());
-        client->Process(this_exr, dss_executor_.get());
-        // client->Echo(this_exr);
+        client->Process(this_exr, dss_executor_.get(), config_.use_ring_buffer);
     }
 }
 
@@ -76,6 +78,10 @@ void Server::Run() {
     auto ret = io_uring_queue_init(16, &src_ring, 0);
     if (ret) {
         LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
+    }
+
+    if (config_.use_ring_buffer) {
+        SetupInitBufRing(&src_ring, client_executors_);
     }
 
     ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });

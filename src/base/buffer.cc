@@ -43,7 +43,10 @@ Buffer::View Buffer::Source() const {
     if (write_index_ == read_index_) {
         return {};
     }
-    return View(data_.data() + read_index_, write_index_ - read_index_);
+    if (!virtual_view_) {
+        return View(data_.data() + read_index_, write_index_ - read_index_);
+    }
+    return std::string_view{view_.data() + read_index_, view_.size() - read_index_};
 }
 
 void Buffer::Consume(size_t n) {

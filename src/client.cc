@@ -51,7 +51,7 @@ Client::Client(Connection* conn, ClientManager* manager, DataStructureService* s
   , manager_(manager)
   , service_(service) {}
 
-Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
+Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor, bool use_ring_buf) {
     if (from != conn_->GetExecutor()) {
         co_await Transfer(from, conn_->GetExecutor());
     }
@@ -62,7 +62,8 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
 
     // Might expand before each call to recv() to ensure at least 'kIOGenericBufferSize'(16KB)
     // available. Should be reset after each round of serving to reclaim buffer space.
-    Buffer query_buffer(kIOGenericBufferSize);
+    Buffer query_buffer(use_ring_buf ? 0 : kIOGenericBufferSize);
+    RingExecutor::BufferView buf_view;
     // Lazily created multi-bulk parser. If it's in error/done state, it will automatically reset
     // upon new call to Parse().
     std::unique_ptr<MultiBulkParser> mbulk_parser{nullptr};
@@ -83,28 +84,35 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
     size_t bytes_read, bytes_written;
     // size_t bytes_written;
     while (true) {
-        // If 'query_buffer' gets expanded, it's current data is moved to new memory location. If
-        // parser holds partial result view over the original memory of 'query_buffer', it should be
-        // updated.
-        const auto data_start = query_buffer.EnsureAvailable(
-          kIOGenericBufferSize, query_buffer.Capacity() < kIOGenericBufferSize);
-        if (data_start != nullptr && mbulk_parser != nullptr && mbulk_parser->InProgress()) {
-            mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
-        }
-        manager_->Stats().UpdateInputBufferSize(query_buffer.Capacity());
+        if (!use_ring_buf) {
+            // If 'query_buffer' gets expanded, it's current data is moved to new memory location.
+            // If parser holds partial result view over the original memory of 'query_buffer', it
+            // should be updated.
+            const auto data_start = query_buffer.EnsureAvailable(
+              kIOGenericBufferSize, query_buffer.Capacity() < kIOGenericBufferSize);
+            if (data_start != nullptr && mbulk_parser != nullptr && mbulk_parser->InProgress()) {
+                mbulk_parser->BufferUpdate(data_start, query_buffer.Start(), arguments);
+            }
+            manager_->Stats().UpdateInputBufferSize(query_buffer.Capacity());
 
-        // Normal recv
-        // TODO: Optionally enable cancellable recv
-        std::tie(error, bytes_read) = co_await conn_->Recv(query_buffer.Sink());
-        if (error) {
-            LOG(ERROR) << "recv: " << error.message();
-            break;
+            // Normal recv
+            std::tie(error, bytes_read) = co_await conn_->Recv(query_buffer.Sink());
+            if (error) {
+                LOG(ERROR) << "recv: " << error.message();
+                break;
+            }
+            if (bytes_read == 0) {
+                break;
+            }
+            manager_->Stats().net_input_bytes.fetch_add(bytes_read, std::memory_order_relaxed);
+            query_buffer.Produce(bytes_read);
+        } else {
+            buf_view = co_await conn_->BufRecv(0 /* buf_group_id */);
+            if (buf_view.view.empty()) {
+                break;
+            }
+            query_buffer.Produce(buf_view.view);
         }
-        if (bytes_read == 0) {
-            break;
-        }
-        manager_->Stats().net_input_bytes.fetch_add(bytes_read, std::memory_order_relaxed);
-        query_buffer.Produce(bytes_read);
 
         size_t num_strings;
         const auto parse_result = detail::Parse(query_buffer, mbulk_parser, arguments, num_strings);
@@ -123,7 +131,10 @@ Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
             break;
         }
 
-        // TODO: 1.Cancellable send. 2.Handle short write.
+        if (use_ring_buf) {
+            conn_->GetExecutor()->PutBufferView(std::move(buf_view));
+        }
+
         // TODO: it's gather
         if (NeedsScatter(query_result)) {
             ResultToIovecs(query_result, output_buffer, iovecs);
