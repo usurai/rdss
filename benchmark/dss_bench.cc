@@ -41,23 +41,59 @@ struct SetTask {
     }
 };
 
+struct EmptyTask {
+    static void Nop(size_t, size_t, size_t) {}
+
+    template<typename... Args>
+    Task<void> operator()(Args&&... args) {
+        return ShardTask(Nop, std::forward<Args>(args)...);
+    }
+};
+
 static void SetBenchTeardown(const benchmark::State& state) {
     assert(service->Stats().commands_processed >= state.range(0) * state.range(1));
 }
+
+BENCHMARK(BenchSharded<EmptyTask>)
+  ->UseManualTime()
+  ->ArgsProduct({
+    {1},                       // wait batch
+    {2, 4, 8, 10, 12, 16, 24}, // num of client executor
+    {20, 100},                 // connections per client
+    {4'000'000},               // num of op per connection
+    {8},                       // value size
+    {0},                       // sqpoll
+  })
+  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
+
+BENCHMARK(BenchSharded<SetTask>)
+  ->Name("specific")
+  ->UseManualTime()
+  ->Setup(SetBenchSetup)
+  ->Teardown(SetBenchTeardown)
+  ->ArgsProduct({
+    {1},       // wait batch
+    {8},       // num of client executor
+    {20},      // connections per client
+    {400'000}, // num of op per connection
+    {8},       // value size
+    {0},       // sqpoll
+  })
+  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
 
 BENCHMARK(BenchSharded<SetTask>)
   ->UseManualTime()
   ->Setup(SetBenchSetup)
   ->Teardown(SetBenchTeardown)
   ->ArgsProduct({
-    {1 << 4, 1 << 6}, // wait batch
-    {2},              // num of client executor
-    {1'000, 4'000},   // num of connection
-    {4'000},          // num of op per connection
-    {128},            // value size
-    {0, 1},           // sqpoll
+    {1},                       // wait batch
+    {2, 4, 8, 10, 12, 16, 24}, // num of client executor
+    {20, 100},                 // connections per client
+    {4'000'000},               // num of op per connection
+    {8},                       // value size
+    {0},                       // sqpoll
   })
-  ->ArgNames({"wait_batch:", "cli_exrs", "conns", "op_per_conn", "val_size", "sqpoll"});
+  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);

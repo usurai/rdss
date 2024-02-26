@@ -97,7 +97,7 @@ BENCHMARK(BenchSharded<PingPong>)
   ->ArgsProduct({
     {1, 1 << 4, 1 << 6, 1 << 8, 1 << 10}, // wait batch
     {1, 2, 4},                            // shard number
-    {1'000, 4'000},                       // total tasks
+    {20, 100},                            // tasks per shard
     {4'000},                              // repeats within each task
     {0, 1},                               // sqpoll
   })

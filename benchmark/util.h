@@ -84,21 +84,22 @@ static void BenchSharded(benchmark::State& s) {
     for (auto _ : s) {
         const auto batch_size = s.range(0);
         const auto num_client_executors = s.range(1);
-        const auto total_tasks = s.range(2);
+        const auto tasks_per_client = s.range(2);
         const size_t repeat = s.range(3);
-        const bool sqpoll = s.range(4);
+        const bool sqpoll = s.range(5);
 
         RingConfig config{};
         config.sqpoll = sqpoll;
         config.wait_batch_size = batch_size;
 
         RingExecutor main("", config);
-        RingExecutor service_executor("service", config);
+        RingExecutor service_executor("bench-service", config, num_client_executors);
         std::vector<std::unique_ptr<RingExecutor>> client_executors;
         client_executors.reserve(num_client_executors);
         std::vector<size_t> remaining_tasks(num_client_executors, 0);
+        const auto total_tasks = num_client_executors * tasks_per_client;
         for (size_t i = 0; i < num_client_executors; ++i) {
-            client_executors.emplace_back(std::make_unique<RingExecutor>("client", config));
+            client_executors.emplace_back(std::make_unique<RingExecutor>("bench-client", config, i));
             remaining_tasks[i] = total_tasks / num_client_executors
                                  + (i < (total_tasks % num_client_executors) ? 1 : 0);
         }
