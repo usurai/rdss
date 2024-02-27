@@ -79,6 +79,7 @@ public:
                 io_uring_prep_recv(sqe, fd, nullptr, 0, 0);
                 sqe->buf_group = buf_group_id;
                 io_uring_sqe_set_flags(sqe, IOSQE_BUFFER_SELECT);
+                sqe->ioprio |= IORING_RECVSEND_POLL_FIRST;
             }
 
             RingExecutor::BufferView await_resume() {
@@ -112,8 +113,6 @@ public:
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_send(sqe, fd, data.data(), data.size(), 0);
-                // TODO: remoev this
-                sqe->ioprio |= IORING_RECVSEND_POLL_FIRST;
             }
 
             int fd;
@@ -133,7 +132,6 @@ public:
 
             void Prepare(io_uring_sqe* sqe) {
                 io_uring_prep_writev(sqe, fd, iovecs.data(), iovecs.size(), 0);
-                io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
             }
 
             int fd;
