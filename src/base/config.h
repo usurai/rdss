@@ -29,6 +29,8 @@ struct Config {
     bool sqpoll = false;
     size_t max_direct_fds_per_exr = 4096;
     bool use_ring_buffer = true;
+    size_t submit_batch_size = 32;
+    size_t wait_batch_size = 1;
 
     void ReadFromFile(const std::string& file_name);
 

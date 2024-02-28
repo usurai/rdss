@@ -77,6 +77,7 @@ struct RingConfig {
     bool sqpoll = false;
     bool async_sqe = false;
     uint32_t max_unbound_workers = 5;
+    size_t submit_batch_size = 32;
     size_t wait_batch_size = 1;
     size_t max_direct_descriptors = 4096;
     bool register_ring_fd = true;

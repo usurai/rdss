@@ -25,20 +25,34 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
             LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
         }
 
+        // auto ret = pthread_setname_np(pthread_self(), name_.c_str());
+        auto ret = pthread_setname_np(pthread_self(), name_.c_str());
+        if (ret) {
+            LOG(FATAL) << "pthread_setname_np:" << strerror(ret);
+        }
+
         LOG(INFO) << "Executor " << name_ << " starting at thread " << gettid();
 
         io_uring_params params = {};
         params.cq_entries = config_.cq_entries;
         params.flags |= IORING_SETUP_CQSIZE;
         params.flags |= IORING_SETUP_SINGLE_ISSUER;
-        // params.flags |= IORING_SETUP_DEFER_TASKRUN;
         if (config_.sqpoll) {
             params.flags |= IORING_SETUP_SQPOLL;
         } else {
-            params.flags |= IORING_SETUP_COOP_TASKRUN;
+            if (name_.starts_with("dss")) {
+                // params.flags |= IORING_SETUP_TASKRUN_FLAG;
+                // params.flags |= IORING_SETUP_COOP_TASKRUN;
+            } else {
+                params.flags |= IORING_SETUP_TASKRUN_FLAG;
+                // params.flags |= IORING_SETUP_DEFER_TASKRUN;
+                params.flags |= IORING_SETUP_COOP_TASKRUN;
+            }
+            // params.flags |= IORING_SETUP_TASKRUN_FLAG;
+            // params.flags |= IORING_SETUP_COOP_TASKRUN;
+            // params.flags |= IORING_SETUP_DEFER_TASKRUN;
         }
 
-        int ret;
         if ((ret = io_uring_queue_init_params(config_.sq_entries, &ring_, &params)) != 0) {
             LOG(FATAL) << "io_uring_queue_init_params:" << strerror(-ret);
         }
@@ -70,9 +84,9 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
 
         fd_ = ring_.enter_ring_fd;
         if (config_.register_ring_fd) {
-        ret = io_uring_register_ring_fd(&ring_);
-        if (ret != 1) {
-            LOG(FATAL) << "io_uring_register_ring_fd:" << strerror(-ret);
+            ret = io_uring_register_ring_fd(&ring_);
+            if (ret != 1) {
+                LOG(FATAL) << "io_uring_register_ring_fd:" << strerror(-ret);
             }
         }
 
@@ -129,17 +143,24 @@ void RingExecutor::Deactivate(io_uring* ring) {
 void RingExecutor::LoopNew() {
     __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
     const auto wait_batch = std::max(1UL, config_.wait_batch_size);
+    const auto submit_batch = std::max(1UL, config_.submit_batch_size);
+    LOG(INFO) << name_ << " submit_batch: " << submit_batch << " wait_batch: " << wait_batch;
 
     io_uring_cqe* cqe;
     while (active_.load(std::memory_order_relaxed)) {
-        // TODO: batch size
         auto ret = io_uring_submit_and_wait_timeout(Ring(), &cqe, wait_batch, &ts, nullptr);
+
         if (io_uring_cq_has_overflow(Ring())) {
             LOG(WARNING) << name_ << " CQ has overflow.";
         }
-        if (ret < 0 && ret != -ETIME) {
-            LOG(FATAL) << "io_uring_wait_cqes:" << strerror(-ret);
+        if (*Ring()->sq.kflags & IORING_SQ_CQ_OVERFLOW) {
+            LOG(WARNING) << name_ << " saw overflow.";
         }
+
+        if (ret < 0 && ret != -ETIME) {
+            LOG(FATAL) << "io_uring_submit_and_wait_timeout:" << strerror(-ret);
+        }
+
         unsigned head;
         size_t processed{0};
         io_uring_for_each_cqe(Ring(), head, cqe) {
@@ -151,11 +172,16 @@ void RingExecutor::LoopNew() {
             awaitable->result = cqe->res;
             awaitable->flags = cqe->flags;
             awaitable->handle();
+
+            if (processed % submit_batch == 0) {
+                io_uring_submit(Ring());
+                io_uring_cq_advance(Ring(), submit_batch);
+            }
         }
-        if (processed) {
-            io_uring_cq_advance(Ring(), processed);
-            VLOG(1) << "Processed " << processed << " events.";
+        if (processed % submit_batch) {
+            io_uring_cq_advance(Ring(), processed % submit_batch);
         }
+        VLOG(1) << "Processed " << processed << " events.";
     }
 }
 

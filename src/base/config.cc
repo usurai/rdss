@@ -70,6 +70,10 @@ void Config::ReadFromFile(const std::string& file_name) {
     max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096;
 
     use_ring_buffer = global_section["use_ring_buffer"] | true;
+
+    wait_batch_size = global_section["wait_batch_size"] | 1;
+
+    submit_batch_size = global_section["submit_batch_size"] | 32;
 }
 
 void Config::SanityCheck() {
@@ -97,7 +101,9 @@ std::string Config::ToString() const {
     stream << "active_expire_keys_per_loop:" << active_expire_keys_per_loop << ",";
     stream << "io_uring_wq_max_unbound_workers:" << io_uring_wq_max_unbound_workers << ", ";
     stream << "client_executors:" << client_executors << ", ";
-    stream << "sqpoll:" << sqpoll;
+    stream << "sqpoll:" << sqpoll << ", ";
+    stream << "submit_batch_size:" << submit_batch_size << ", ";
+    stream << "wait_batch_size:" << wait_batch_size;
 
     stream << "].";
     return stream.str();

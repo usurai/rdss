@@ -18,17 +18,24 @@ Server::Server(Config config)
   : config_(std::move(config))
   , clock_(std::make_unique<Clock>(true))
   , dss_executor_(std::make_unique<RingExecutor>(
-      "dss_executor",
-      RingConfig{.sqpoll = config_.sqpoll, .async_sqe = false},
+      "dss_exr",
+      RingConfig{
+        .sqpoll = config_.sqpoll,
+        .async_sqe = false,
+        .submit_batch_size = config_.submit_batch_size,
+        .wait_batch_size = config_.wait_batch_size},
       config_.client_executors))
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
     for (size_t i = 0; i < config_.client_executors; ++i) {
         client_executors_.emplace_back(std::make_unique<RingExecutor>(
-          "client_executor_" + std::to_string(i),
+          "cli_exr_" + std::to_string(i),
           RingConfig{
-            .sqpoll = config_.sqpoll, .max_direct_descriptors = config_.max_direct_fds_per_exr},
+            .sqpoll = config_.sqpoll,
+            .submit_batch_size = config_.submit_batch_size,
+            .wait_batch_size = config_.wait_batch_size,
+            .max_direct_descriptors = config_.max_direct_fds_per_exr},
           i));
     }
 
