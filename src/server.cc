@@ -77,6 +77,13 @@ Task<void> Server::Cron() {
     }
 }
 
+Task<void> Server::UpdateTime() {
+    while (active_) {
+        co_await dss_executor_->Timeout(std::chrono::milliseconds(1));
+        service_->UpdateCommandTime();
+    }
+}
+
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
     stats_.start_time = clock_->Now();
@@ -92,6 +99,7 @@ void Server::Run() {
     }
 
     ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
+    ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->UpdateTime(); });
     ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
         this->AcceptLoop(exr);
     });

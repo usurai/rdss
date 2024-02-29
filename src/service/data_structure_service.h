@@ -42,6 +42,8 @@ public:
 
     TimePoint GetCommandTimeSnapshot() const { return command_time_snapshot_; }
 
+    void UpdateCommandTime() { command_time_snapshot_ = clock_->Now(); }
+
     MTSHashTable* DataTable() { return data_ht_.get(); }
 
     ExpireHashTable* ExpireTable() { return expire_ht_.get(); }

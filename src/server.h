@@ -44,6 +44,7 @@ public:
 
 private:
     Task<void> Cron();
+    Task<void> UpdateTime();
 
     // Operates an accept loop on the 'executor', which should be chosen from the set of
     // 'client_executors_'. Upon the arrival of a new connection, evaluates whether the current
