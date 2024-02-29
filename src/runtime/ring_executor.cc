@@ -40,17 +40,8 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
         if (config_.sqpoll) {
             params.flags |= IORING_SETUP_SQPOLL;
         } else {
-            if (name_.starts_with("dss")) {
-                // params.flags |= IORING_SETUP_TASKRUN_FLAG;
-                // params.flags |= IORING_SETUP_COOP_TASKRUN;
-            } else {
-                params.flags |= IORING_SETUP_TASKRUN_FLAG;
-                // params.flags |= IORING_SETUP_DEFER_TASKRUN;
-                params.flags |= IORING_SETUP_COOP_TASKRUN;
-            }
-            // params.flags |= IORING_SETUP_TASKRUN_FLAG;
-            // params.flags |= IORING_SETUP_COOP_TASKRUN;
-            // params.flags |= IORING_SETUP_DEFER_TASKRUN;
+            params.flags |= IORING_SETUP_TASKRUN_FLAG;
+            params.flags |= IORING_SETUP_COOP_TASKRUN;
         }
 
         if ((ret = io_uring_queue_init_params(config_.sq_entries, &ring_, &params)) != 0) {
