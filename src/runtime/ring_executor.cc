@@ -82,7 +82,7 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
         }
 
         promise.set_value();
-        this->LoopNew();
+        this->EventLoop();
     });
 
     future.wait();
@@ -131,7 +131,7 @@ void RingExecutor::Deactivate(io_uring* ring) {
     }
 }
 
-void RingExecutor::LoopNew() {
+void RingExecutor::EventLoop() {
     __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
     const auto wait_batch = std::max(1UL, config_.wait_batch_size);
     const auto submit_batch = std::max(1UL, config_.submit_batch_size);
@@ -174,73 +174,6 @@ void RingExecutor::LoopNew() {
         }
         VLOG(1) << "Processed " << processed << " events.";
     }
-}
-
-// For SQPOLL enabled ring.
-void RingExecutor::Loop() {
-    io_uring_cqe* cqe;
-    int ret;
-    while (active_.load(std::memory_order_relaxed)) {
-        ret = io_uring_wait_cqe(&ring_, &cqe);
-        // TODO: Try io_uring_cq_advance.
-        do {
-            if (ret != 0) {
-                LOG(FATAL) << "io_uring_wait_cqe:" << strerror(-ret);
-            }
-
-            const auto data = cqe->user_data;
-            const auto res = cqe->res;
-            io_uring_cqe_seen(&ring_, cqe);
-
-            if (data == 0) {
-                continue;
-            }
-            auto awaitable = reinterpret_cast<Continuation*>(data);
-            awaitable->result = res;
-            awaitable->handle();
-        } while (!io_uring_peek_cqe(&ring_, &cqe));
-    }
-    LOG(INFO) << "Terminating thread " << gettid();
-}
-
-void RingExecutor::LoopTimeoutWait() {
-    // TODO: move out.
-    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{500'000}.count()};
-
-    io_uring_cqe* cqe;
-    int ret;
-    while (active_.load(std::memory_order_relaxed)) {
-        ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
-        // TODO: Try io_uring_cq_advance.
-        do {
-            if (ret == -ETIME) {
-                if (io_uring_sq_ready(&ring_)) {
-                    // TOOD: submit_and_wait
-                    ret = io_uring_submit(&ring_);
-                    if (ret < 0) {
-                        LOG(FATAL) << name_ << ": io_uring_submit " << strerror(-ret);
-                    }
-                    VLOG(1) << name_ << " submitted " << ret << " SQEs at wait side.";
-                }
-                break;
-            }
-            if (ret) {
-                LOG(FATAL) << "io_uring_wait_cqe_timeout:" << strerror(ret);
-            }
-
-            const auto data = cqe->user_data;
-            const auto res = cqe->res;
-            io_uring_cqe_seen(&ring_, cqe);
-
-            if (data == 0) {
-                continue;
-            }
-            auto awaitable = reinterpret_cast<Continuation*>(data);
-            awaitable->result = res;
-            awaitable->handle();
-        } while (!io_uring_peek_cqe(&ring_, &cqe));
-    }
-    LOG(INFO) << "Terminating thread " << gettid();
 }
 
 int RingExecutor::RegisterFd(int fd) {

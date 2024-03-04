@@ -141,9 +141,7 @@ public:
     void PutBufferView(BufferView&& buffer_view);
 
 private:
-    void LoopNew();
-    void Loop();
-    void LoopTimeoutWait();
+    void EventLoop();
 
     const std::string name_;
     const RingConfig config_;

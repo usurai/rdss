@@ -98,6 +98,9 @@ void Server::Run() {
         SetupInitBufRing(&src_ring, client_executors_);
     }
 
+    // TODO: Change to something like
+    // 1. target_exr.Schedule(&src_ring, func)
+    // 2. target_exr.ScheduleRepeat(&src_ring, interval, func);
     ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
     ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->UpdateTime(); });
     ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
