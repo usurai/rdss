@@ -12,8 +12,8 @@ int main(int argc, char* argv[]) {
     rdss::Config server_config;
     if (argv[non_flag_index] != nullptr) {
         server_config.ReadFromFile(argv[non_flag_index]);
-        LOG(INFO) << server_config.ToString();
     }
+    LOG(INFO) << server_config.ToString();
 
     rdss::Server s(std::move(server_config));
     s.Run();
