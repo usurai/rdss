@@ -20,7 +20,8 @@ bool SetNofileLimit(uint32_t limit) {
     rlim.rlim_cur = limit;
     rlim.rlim_max = std::max<uint32_t>(rlim.rlim_max, limit);
     if ((ret = setrlimit(RLIMIT_NOFILE, &rlim)) != 0) {
-        LOG(FATAL) << "setrlimit: " << strerror(errno);
+        LOG(ERROR) << "setrlimit: " << strerror(errno);
+        return false;
     }
 
     if ((ret = getrlimit(RLIMIT_NOFILE, &rlim)) != 0) {
