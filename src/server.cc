@@ -16,7 +16,6 @@ namespace rdss {
 
 Server::Server(Config config)
   : config_(std::move(config))
-  , clock_(std::make_unique<Clock>(true))
   , dss_executor_(std::make_unique<RingExecutor>(
       "dss_exr",
       RingConfig{
@@ -44,7 +43,7 @@ Server::Server(Config config)
     std::promise<void> shutdown_promise;
     shutdown_future_ = shutdown_promise.get_future();
     service_ = std::make_unique<DataStructureService>(
-      &config_, this, clock_.get(), std::move(shutdown_promise));
+      &config_, this, nullptr, std::move(shutdown_promise));
     RegisterCommands(service_.get());
 }
 
@@ -86,7 +85,7 @@ Task<void> Server::UpdateTime() {
 
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
-    stats_.start_time = clock_->Now();
+    stats_.start_time = Clock(true).Now();
 
     io_uring src_ring;
     auto ret = io_uring_queue_init(16, &src_ring, 0);

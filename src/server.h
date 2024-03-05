@@ -57,8 +57,6 @@ private:
     Config config_;
 
     std::atomic<bool> active_ = true;
-    // TODO: Move into dss
-    std::unique_ptr<Clock> clock_;
     std::unique_ptr<RingExecutor> dss_executor_;
     // TODO: Make this config or something
     std::vector<std::unique_ptr<RingExecutor>> client_executors_;

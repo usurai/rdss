@@ -13,12 +13,19 @@ DataStructureService::DataStructureService(
   Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise)
   : config_(config)
   , server_(server)
-  , clock_(clock)
+  , using_external_clock_(clock != nullptr)
+  , clock_(using_external_clock_ ? clock : new Clock(true))
   , shutdown_promise_(std::move(shutdown_promise))
   , data_ht_(new MTSHashTable())
   , expire_ht_(new ExpireHashTable())
   , evictor_(this)
   , expirer_(this) {}
+
+DataStructureService::~DataStructureService() {
+    if (!using_external_clock_) {
+        delete clock_;
+    }
+}
 
 void DataStructureService::Cron() {
     GetEvictor().RefreshLRUClock();

@@ -30,6 +30,8 @@ public:
     explicit DataStructureService(
       Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise);
 
+    ~DataStructureService();
+
     void Cron();
 
     Server* GetServer() { return server_; }
@@ -89,6 +91,7 @@ private:
 
     Config* config_;
     Server* server_;
+    bool using_external_clock_;
     Clock* clock_;
     std::promise<void> shutdown_promise_;
     CommandDictionary commands_;
