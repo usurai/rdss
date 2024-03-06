@@ -14,13 +14,14 @@ class CommandsTestBase : public testing::Test {
 protected:
     CommandsTestBase()
       : clock_(false)
-      , service_(&config_, nullptr, &clock_, std::promise<void>{})
+      , service_(&config_, nullptr, &clock_)
       , buffer_(1024 * 16) {}
 
     void SetUp() override {
         std::srand(static_cast<unsigned int>(time(nullptr)));
         clock_.SetTime(std::chrono::time_point_cast<Clock::TimePoint::duration>(
           std::chrono::system_clock::now()));
+        service_.UpdateCommandTime();
     }
 
     Result Invoke(std::string query) {
@@ -39,35 +40,56 @@ protected:
         return result;
     }
 
-    void ExpectKeyValue(std::string_view key, std::string_view value) {
+    bool ExpectKeyValue(std::string_view key, std::string_view value) {
         auto entry = service_.DataTable()->Find(key);
-        ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(*entry->value, value);
+        if (entry == nullptr) {
+            return false;
+        }
+        return !value.compare(*entry->value);
     }
 
-    void ExpectNoKey(std::string_view key) {
+    bool ExpectNoKey(std::string_view key) {
         auto data_entry = service_.DataTable()->Find(key);
         if (data_entry != nullptr) {
             auto expire_entry = service_.ExpireTable()->Find(key);
             if (expire_entry) {
-                EXPECT_LE(expire_entry->value, clock_.Now());
+                return (expire_entry->value <= clock_.Now());
             }
+            return false;
         }
+        return true;
     }
 
-    void ExpectTTL(std::string_view key, std::chrono::milliseconds ttl) {
+    bool ExpectTTL(std::string_view key, std::chrono::milliseconds ttl) {
         auto data_entry = service_.DataTable()->Find(key);
-        ASSERT_NE(data_entry, nullptr);
+        if (data_entry == nullptr) {
+            return false;
+        }
         auto expire_entry = service_.ExpireTable()->Find(key);
-        ASSERT_NE(expire_entry, nullptr);
-        EXPECT_EQ(expire_entry->value - clock_.Now(), ttl);
+        if (expire_entry == nullptr) {
+            return false;
+        }
+        return (expire_entry->value - clock_.Now() == ttl);
     }
 
-    void ExpectNoTTL(std::string_view key) {
+    std::chrono::milliseconds GetTTL(std::string_view key) {
+        auto data_entry = service_.DataTable()->Find(key);
+        if (data_entry == nullptr) {
+            return {};
+        }
+        auto expire_entry = service_.ExpireTable()->Find(key);
+        if (expire_entry == nullptr) {
+            return {};
+        }
+        return expire_entry->value - clock_.Now();
+    }
+
+    bool ExpectNoTTL(std::string_view key) {
         auto entry = service_.ExpireTable()->Find(key);
         if (entry != nullptr) {
-            EXPECT_LE(entry->value, clock_.Now());
+            return (entry->value <= clock_.Now());
         }
+        return false;
     }
 
     void ExpectOk(Result result) { EXPECT_EQ(result.type, Result::Type::kOk); }
@@ -102,6 +124,12 @@ protected:
 
     void AdvanceTime(Clock::TimePoint::duration duration) {
         clock_.SetTime(clock_.Now() + duration);
+        service_.UpdateCommandTime();
+    }
+
+    void SetTime(Clock::TimePoint tp) {
+        clock_.SetTime(tp);
+        service_.UpdateCommandTime();
     }
 
     Config config_;

@@ -16,83 +16,84 @@ protected:
 TEST_F(StringCommandsTest, SetTest) {
     // Insert, then update.
     Invoke("SET k0 v0");
-    ExpectKeyValue("k0", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
     Invoke("SET k0 v1");
-    ExpectKeyValue("k0", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
 
     // NX not exists -> insert.
     Invoke("SET k0 v2 NX");
-    ExpectKeyValue("k0", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
     // NX exists -> noop.
     Invoke("SET k1 v0 NX");
-    ExpectKeyValue("k1", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k1", "v0"));
 
     // XX not exists -> insert.
     Invoke("SET k2 v0 XX");
-    ExpectNoKey("k2");
+    EXPECT_TRUE(ExpectNoKey("k2"));
     // XX exists -> update.
     Invoke("SET k1 v1 XX");
-    ExpectKeyValue("k1", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k1", "v1"));
 
     // PX no exists.
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
     Invoke("SET k0 v0 PX 100");
-    ExpectTTL("k0", 100ms);
+    // EXPECT_TRUE(ExpectTTL("k0", 100ms));
+    EXPECT_EQ(GetTTL("k0"), 100ms);
     // PX update expire time.
     Invoke("SET k0 v0 PX 2000");
-    ExpectTTL("k0", 2s);
+    EXPECT_TRUE(ExpectTTL("k0", 2s));
     // SET invalidates previous expire.
     Invoke("SET k0 v0");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
     auto pxat = clock_.Now() + 1000ms;
     // PXAT
     Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "");
-    ExpectTTL("k0", 1s);
+    EXPECT_TRUE(ExpectTTL("k0", 1s));
     pxat = clock_.Now() - 1000ms;
     // PXAT now -> noop.
     Invoke("SET k0 v0 PXAT " + std::to_string(pxat.time_since_epoch().count()) + "");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 
     // Zero-out milliseconds to make EXAT do not lose precision.
-    clock_.SetTime(Clock::TimePoint{2000s});
-    ExpectNoTTL("k1");
+    SetTime(Clock::TimePoint{2000s});
+    EXPECT_TRUE(ExpectNoTTL("k1"));
     // EX.
     Invoke("SET k1 v0 EX 100");
-    ExpectTTL("k1", 100s);
+    EXPECT_TRUE(ExpectTTL("k1", 100s));
     // EX update expire time.
     Invoke("SET k1 v0 EX 2000");
-    ExpectTTL("k1", 2000s);
+    EXPECT_TRUE(ExpectTTL("k1", 2000s));
     // SET invalidates previous expire.
     Invoke("SET k1 v0");
-    ExpectNoTTL("k1");
+    EXPECT_TRUE(ExpectNoTTL("k1"));
     // EXAT.
     auto exat = clock_.Now() + 1000s;
     Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "");
-    ExpectTTL("k1", 1000s);
+    EXPECT_TRUE(ExpectTTL("k1", 1000s));
     // EXAT now -> noop.
     exat = clock_.Now() - 1000s;
     Invoke("SET k1 v0 EXAT " + std::to_string(exat.time_since_epoch().count() / 1000) + "");
-    ExpectNoTTL("k1");
+    EXPECT_TRUE(ExpectNoTTL("k1"));
 
     // TTL reduces as time goes by.
-    clock_.SetTime(Clock::TimePoint{2000s});
+    SetTime(Clock::TimePoint{2000s});
     Invoke("SET k0 v0 PX 100");
-    ExpectTTL("k0", 100ms);
+    EXPECT_TRUE(ExpectTTL("k0", 100ms));
     AdvanceTime(50ms);
-    ExpectTTL("k0", 50ms);
+    EXPECT_TRUE(ExpectTTL("k0", 50ms));
     AdvanceTime(49ms);
-    ExpectTTL("k0", 1ms);
+    EXPECT_TRUE(ExpectTTL("k0", 1ms));
     AdvanceTime(1ms);
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 
     Invoke("SET k0 v0");
     // KEEPTTL on normal key does nothing.
     Invoke("SET k0 v0 KEEPTTL");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
     Invoke("SET k0 v0 EX 100");
-    ExpectTTL("k0", 100s);
+    EXPECT_TRUE(ExpectTTL("k0", 100s));
     Invoke("SET k0 v1 KEEPTTL");
-    ExpectTTL("k0", 100s);
+    EXPECT_TRUE(ExpectTTL("k0", 100s));
 
     // GET
     Invoke("SET k0 v0");
@@ -109,83 +110,83 @@ TEST_F(StringCommandsTest, SetTest) {
     // SET NX on expired key should success.
     Invoke("SET k0 v0 EX 1");
     Invoke("SET k0 v1 NX");
-    ExpectKeyValue("k0", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
     AdvanceTime(1s);
     Invoke("SET k0 v1 NX");
-    ExpectKeyValue("k0", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
 
     // SET XX on expired key should fail.
     Invoke("SET k0 v0 EX 1");
     AdvanceTime(1s);
     res = Invoke("SET k0 v1 XX");
     ExpectNull(res);
-    ExpectNoKey("k0");
+    EXPECT_TRUE(ExpectNoKey("k0"));
 }
 
 TEST_F(StringCommandsTest, SetEXTest) {
     Invoke("SETEX k0 10 v0");
-    ExpectKeyValue("k0", "v0");
-    ExpectTTL("k0", 10s);
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
+    EXPECT_TRUE(ExpectTTL("k0", 10s));
     Invoke("SETEX k0 1000 v0");
-    ExpectTTL("k0", 1000s);
+    EXPECT_TRUE(ExpectTTL("k0", 1000s));
 
     Invoke("SETEX k1 0 v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
     Invoke("SETEX k1 invalid v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
     Invoke("SETEX k1 v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
 
     Invoke("PSETEX k0 10 v0");
-    ExpectKeyValue("k0", "v0");
-    ExpectTTL("k0", 10ms);
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
+    EXPECT_TRUE(ExpectTTL("k0", 10ms));
     Invoke("PSETEX k0 1000 v0");
-    ExpectTTL("k0", 1000ms);
+    EXPECT_TRUE(ExpectTTL("k0", 1000ms));
 
     Invoke("PSETEX k1 0 v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
     Invoke("PSETEX k1 invalid v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
     Invoke("PSETEX k1 v0");
-    ExpectNoKey("k1");
+    EXPECT_TRUE(ExpectNoKey("k1"));
 }
 
 TEST_F(StringCommandsTest, SetNXTest) {
     // SETNX on no existing -> insert
     auto res = Invoke("SETNX k0 v0");
     ExpectInt(res, 1);
-    ExpectKeyValue("k0", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
 
     // SETNX on existing -> noop
     res = Invoke("SETNX k0 v1");
     ExpectInt(res, 0);
-    ExpectKeyValue("k0", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
 
     // SETNX on expired -> insert
     Invoke("SET k0 v0 EX 1");
     AdvanceTime(1s);
     res = Invoke("SETNX k0 v1");
     ExpectInt(res, 1);
-    ExpectKeyValue("k0", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
 }
 
 TEST_F(StringCommandsTest, SetRangeTest) {
     // SETRANGE on non-existing key creates it
     ExpectInt(Invoke("SETRANGE k 0 foobar"), 6);
-    ExpectKeyValue("k", "foobar");
+    EXPECT_TRUE(ExpectKeyValue("k", "foobar"));
 
     // SETRANGE at the end appends
     ExpectInt(Invoke("SETRANGE k 6 foobar"), 12);
-    ExpectKeyValue("k", "foobarfoobar");
+    EXPECT_TRUE(ExpectKeyValue("k", "foobarfoobar"));
 
     // SETRANGE at the middle replaces
     ExpectInt(Invoke("SETRANGE k 3 foobar"), 9);
-    ExpectKeyValue("k", "foofoobar");
+    EXPECT_TRUE(ExpectKeyValue("k", "foofoobar"));
 
     // zero-padding
     ExpectInt(Invoke("SETRANGE k 12 foobar"), 18);
     std::string expected{std::string{"foofoobar"} + std::string(3, 0) + std::string{"foobar"}};
-    ExpectKeyValue("k", expected);
+    EXPECT_TRUE(ExpectKeyValue("k", expected));
 }
 
 TEST_F(StringCommandsTest, MSetTest) {
@@ -193,31 +194,31 @@ TEST_F(StringCommandsTest, MSetTest) {
     Invoke("SET k1 v0");
     Invoke("SET k2 v0 EX 1000");
     ExpectOk(Invoke("MSET k0 v1 k1 v1 k2 v1"));
-    ExpectKeyValue("k0", "v1");
-    ExpectKeyValue("k1", "v1");
-    ExpectKeyValue("k2", "v1");
-    ExpectNoTTL("k2");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
+    EXPECT_TRUE(ExpectKeyValue("k1", "v1"));
+    EXPECT_TRUE(ExpectKeyValue("k2", "v1"));
+    EXPECT_TRUE(ExpectNoTTL("k2"));
 }
 
 TEST_F(StringCommandsTest, MSetNXTest) {
     ExpectInt(Invoke("MSETNX k0 v0 k1 v1 k2 v2"), 1);
-    ExpectKeyValue("k0", "v0");
-    ExpectKeyValue("k1", "v1");
-    ExpectKeyValue("k2", "v2");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
+    EXPECT_TRUE(ExpectKeyValue("k1", "v1"));
+    EXPECT_TRUE(ExpectKeyValue("k2", "v2"));
 
     ExpectInt(Invoke("MSETNX k0 v1 k1 v2 k2 v3"), 0);
-    ExpectKeyValue("k0", "v0");
-    ExpectKeyValue("k1", "v1");
-    ExpectKeyValue("k2", "v2");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
+    EXPECT_TRUE(ExpectKeyValue("k1", "v1"));
+    EXPECT_TRUE(ExpectKeyValue("k2", "v2"));
 
     ExpectInt(Invoke("MSETNX k0 v1 k1 v2 k2 v3 k3 v4"), 1);
-    ExpectKeyValue("k3", "v4");
+    EXPECT_TRUE(ExpectKeyValue("k3", "v4"));
 
     Invoke("SET k4 v4 EX 1");
     AdvanceTime(1s);
     ExpectInt(Invoke("MSETNX k4 v5"), 1);
-    ExpectKeyValue("k4", "v5");
-    ExpectNoTTL("k4");
+    EXPECT_TRUE(ExpectKeyValue("k4", "v5"));
+    EXPECT_TRUE(ExpectNoTTL("k4"));
 }
 
 TEST_F(StringCommandsTest, GetTest) {
@@ -255,12 +256,12 @@ TEST_F(StringCommandsTest, GetDelTest) {
     // GETDEL on valid -> return and delete
     Invoke("SET k0 v0");
     ExpectString(Invoke("GETDEL k0"), "v0");
-    ExpectNoKey("k0");
+    EXPECT_TRUE(ExpectNoKey("k0"));
 
     // GETDEL on volatile valid -> return and delete data / expire
     Invoke("SET k0 v0 EX 1");
     ExpectString(Invoke("GETDEL k0"), "v0");
-    ExpectNoKey("k0");
+    EXPECT_TRUE(ExpectNoKey("k0"));
 }
 
 TEST_F(StringCommandsTest, GetEXTest) {
@@ -277,11 +278,11 @@ TEST_F(StringCommandsTest, GetEXTest) {
     // Clean GETEX is same as GET for valid / expired keys.
     Invoke("SET k0 v0");
     ExpectString(Invoke("GETEX k0"), "v0");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 
     Invoke("SET k0 v1 EX 10");
     ExpectString(Invoke("GETEX k0"), "v1");
-    ExpectTTL("k0", 10s);
+    EXPECT_TRUE(ExpectTTL("k0", 10s));
 
     // For expired keys, returns null.
     AdvanceTime(10s);
@@ -290,47 +291,47 @@ TEST_F(StringCommandsTest, GetEXTest) {
     ExpectNull(Invoke("GETEX k0 PX 10"));
     ExpectNull(Invoke("GETEX k0 EXAT 10"));
     ExpectNull(Invoke("GETEX k0 PXAT 10"));
-    ExpectNoKey("k0");
+    EXPECT_TRUE(ExpectNoKey("k0"));
 
     // GETEX with EX/PX/EXAT/PXAT changes expire time
-    clock_.SetTime(Clock::TimePoint{2000s});
+    SetTime(Clock::TimePoint{2000s});
     Invoke("SET k0 v0");
     ExpectString(Invoke("GETEX k0 EX 10"), "v0");
-    ExpectTTL("k0", 10s);
+    EXPECT_TRUE(ExpectTTL("k0", 10s));
     ExpectString(Invoke("GETEX k0 PX 10"), "v0");
-    ExpectTTL("k0", 10ms);
+    EXPECT_TRUE(ExpectTTL("k0", 10ms));
     ExpectString(Invoke("GETEX k0 EXAT 3000"), "v0");
-    ExpectTTL("k0", 1000s);
+    EXPECT_TRUE(ExpectTTL("k0", 1000s));
     ExpectString(Invoke("GETEX k0 PXAT 2100000"), "v0");
-    ExpectTTL("k0", 100s);
+    EXPECT_TRUE(ExpectTTL("k0", 100s));
 
     // GETEX with PERSIST cleans TTL
     ExpectString(Invoke("GETEX k0 PERSIST"), "v0");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 }
 
 TEST_F(StringCommandsTest, GetSetTest) {
     // GETSET on not existing -> set key, returns null
     ExpectNull(Invoke("GETSET k0 v0"));
-    ExpectKeyValue("k0", "v0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v0"));
 
     // GETSET on existing nonvolatile -> set key, returns old value
     Invoke("SET k0 v0");
     ExpectString(Invoke("GETSET k0 v1"), "v0");
-    ExpectKeyValue("k0", "v1");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
 
     // GETSET on existing and valid -> set key, invalidate expire, returns old value
     Invoke("SET k0 v0 EX 1");
     ExpectString(Invoke("GETSET k0 v1"), "v0");
-    ExpectKeyValue("k0", "v1");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 
     // GETSET on existing and expired -> set key, returns null
     Invoke("SET k0 v0 EX 1");
     AdvanceTime(1s);
     ExpectNull(Invoke("GETSET k0 v1"));
-    ExpectKeyValue("k0", "v1");
-    ExpectNoTTL("k0");
+    EXPECT_TRUE(ExpectKeyValue("k0", "v1"));
+    EXPECT_TRUE(ExpectNoTTL("k0"));
 }
 
 TEST_F(StringCommandsTest, MGetTest) {
@@ -360,16 +361,16 @@ TEST_F(StringCommandsTest, GetRangeTest) {
 TEST_F(StringCommandsTest, AppendTest) {
     // APPEND non-exist key should create
     ExpectInt(Invoke("APPEND k0 foobar"), 6);
-    ExpectKeyValue("k0", "foobar");
+    EXPECT_TRUE(ExpectKeyValue("k0", "foobar"));
 
     // regular APPEND
     ExpectInt(Invoke("APPEND k0 barfoo"), 12);
-    ExpectKeyValue("k0", "foobarbarfoo");
+    EXPECT_TRUE(ExpectKeyValue("k0", "foobarbarfoo"));
 
     // APPEND should not modify TTL
     Invoke("SET k0 v0 EX 1");
     ExpectInt(Invoke("APPEND k0 foobar"), 8);
-    ExpectTTL("k0", 1s);
+    EXPECT_TRUE(ExpectTTL("k0", 1s));
 }
 
 TEST_F(StringCommandsTest, StrlenTest) {
