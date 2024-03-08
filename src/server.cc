@@ -65,22 +65,6 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
 
 Server::~Server() = default;
 
-// TODO: Adaptive hz
-Task<void> Server::Cron() {
-    const auto interval_in_millisecond = 1000 / config_.hz;
-    while (active_) {
-        co_await dss_executor_->Timeout(std::chrono::milliseconds(interval_in_millisecond));
-        service_.Cron();
-    }
-}
-
-Task<void> Server::UpdateTime() {
-    while (active_) {
-        co_await dss_executor_->Timeout(std::chrono::milliseconds(1));
-        service_.UpdateCommandTime();
-    }
-}
-
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
     stats_.start_time = Clock(true).Now();
@@ -98,8 +82,9 @@ void Server::Run() {
     // TODO: Change to something like
     // 1. target_exr.Schedule(&src_ring, func)
     // 2. target_exr.ScheduleRepeat(&src_ring, interval, func);
-    ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->Cron(); });
-    ScheduleOn(&src_ring, dss_executor_.get(), [this]() { this->UpdateTime(); });
+    ScheduleOn(&src_ring, dss_executor_.get(), [dss = &service_, exr = dss_executor_.get()]() {
+        dss->Cron(exr);
+    });
     ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
         this->AcceptLoop(exr);
     });

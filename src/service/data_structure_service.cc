@@ -1,6 +1,7 @@
 #include "data_structure_service.h"
 
 #include "base/config.h"
+#include "runtime/ring_executor.h"
 
 #include <glog/logging.h>
 
@@ -33,10 +34,22 @@ std::future<void> DataStructureService::GetShutdownFuture() {
     return shutdown_promise_.get_future();
 }
 
-void DataStructureService::Cron() {
-    GetEvictor().RefreshLRUClock();
-    GetExpirer().ActiveExpire();
-    IncrementalRehashing(kIncrementalRehashingTimeLimit);
+Task<void> DataStructureService::Cron(RingExecutor* exr) {
+    // TODO: Adaptive hz
+    const auto interval_in_millisecond = 1000 / config_->hz;
+    size_t cnt{0};
+    while (active_.load(std::memory_order_relaxed)) {
+        co_await exr->Timeout(std::chrono::milliseconds(1));
+        UpdateCommandTime();
+        if (++cnt < interval_in_millisecond) {
+            continue;
+        }
+        LOG(INFO) << "cron";
+        cnt = 0;
+        GetEvictor().RefreshLRUClock();
+        GetExpirer().ActiveExpire();
+        IncrementalRehashing(kIncrementalRehashingTimeLimit);
+    }
 }
 
 void DataStructureService::RegisterCommand(CommandName name, Command command) {

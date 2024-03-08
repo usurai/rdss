@@ -6,6 +6,7 @@
 #include "data_structure/tracking_hash_table.h"
 #include "eviction_strategy.h"
 #include "expire_strategy.h"
+#include "io/promise.h"
 
 #include <chrono>
 #include <future>
@@ -15,6 +16,7 @@ namespace rdss {
 
 struct Config;
 class Server;
+class RingExecutor;
 
 struct DSSStats {
     std::atomic<uint64_t> commands_processed;
@@ -33,7 +35,7 @@ public:
 
     std::future<void> GetShutdownFuture();
 
-    void Cron();
+    Task<void> Cron(RingExecutor* exr);
 
     Server* GetServer() { return server_; }
 
@@ -77,7 +79,10 @@ public:
     /// called at cron.
     void IncrementalRehashing(std::chrono::steady_clock::duration time_limit);
 
-    void Shutdown() { shutdown_promise_.set_value(); }
+    void Shutdown() {
+        active_.store(false, std::memory_order_relaxed);
+        shutdown_promise_.set_value();
+    }
 
     Clock* GetClock() { return clock_; }
 
@@ -90,6 +95,7 @@ public:
 private:
     size_t IsOOM() const;
 
+    std::atomic<bool> active_{true};
     Config* config_;
     Server* server_;
     bool using_external_clock_;
