@@ -3,6 +3,7 @@
 #include "base/clock.h"
 #include "base/config.h"
 #include "io/promise.h"
+#include "service/data_structure_service.h"
 
 #include <atomic>
 #include <future>
@@ -18,7 +19,6 @@ struct ServerStats {
 };
 
 class ClientManager;
-class DataStructureService;
 class Listener;
 class RingExecutor;
 
@@ -61,8 +61,8 @@ private:
     // TODO: Make this config or something
     std::vector<std::unique_ptr<RingExecutor>> client_executors_;
     std::unique_ptr<Listener> listener_;
+    DataStructureService service_;
     std::future<void> shutdown_future_;
-    std::unique_ptr<DataStructureService> service_;
     std::unique_ptr<ClientManager> client_manager_;
 
     ServerStats stats_;

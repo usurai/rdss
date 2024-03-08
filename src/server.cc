@@ -24,6 +24,8 @@ Server::Server(Config config)
         .submit_batch_size = config_.submit_batch_size,
         .wait_batch_size = config_.wait_batch_size},
       config_.client_executors))
+  , service_(&config_, this, nullptr)
+  , shutdown_future_(service_.GetShutdownFuture())
   , client_manager_(std::make_unique<ClientManager>()) {
     // TODO: Into init list.
     client_executors_.reserve(config_.client_executors);
@@ -40,11 +42,7 @@ Server::Server(Config config)
 
     listener_ = Listener::Create(config_.port, client_executors_[0].get());
 
-    std::promise<void> shutdown_promise;
-    shutdown_future_ = shutdown_promise.get_future();
-    service_ = std::make_unique<DataStructureService>(
-      &config_, this, nullptr, std::move(shutdown_promise));
-    RegisterCommands(service_.get());
+    RegisterCommands(&service_);
 }
 
 Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
@@ -60,7 +58,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
             continue;
         }
         ce_index = (ce_index + 1) % client_executors_.size();
-        auto* client = client_manager_->AddClient(conn, service_.get());
+        auto* client = client_manager_->AddClient(conn, &service_);
         client->Process(this_exr, dss_executor_.get(), config_.use_ring_buffer);
     }
 }
@@ -72,14 +70,14 @@ Task<void> Server::Cron() {
     const auto interval_in_millisecond = 1000 / config_.hz;
     while (active_) {
         co_await dss_executor_->Timeout(std::chrono::milliseconds(interval_in_millisecond));
-        service_->Cron();
+        service_.Cron();
     }
 }
 
 Task<void> Server::UpdateTime() {
     while (active_) {
         co_await dss_executor_->Timeout(std::chrono::milliseconds(1));
-        service_->UpdateCommandTime();
+        service_.UpdateCommandTime();
     }
 }
 

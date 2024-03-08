@@ -21,8 +21,7 @@ static void SetBenchSetup(const benchmark::State& s) {
         commands.resize(s.range(1), std::vector<std::string_view>{set_str, set_str, value});
     }
 
-    service = std::make_unique<DataStructureService>(
-      &config, nullptr, &sys_clock, std::promise<void>{});
+    service = std::make_unique<DataStructureService>(&config, nullptr, &sys_clock);
     RegisterStringCommands(service.get());
 }
 

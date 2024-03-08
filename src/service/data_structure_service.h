@@ -27,10 +27,11 @@ public:
     static constexpr auto kIncrementalRehashingTimeLimit = std::chrono::milliseconds{1};
 
 public:
-    explicit DataStructureService(
-      Config* config, Server* server, Clock* clock, std::promise<void> shutdown_promise);
+    explicit DataStructureService(Config* config, Server* server, Clock* clock);
 
     ~DataStructureService();
+
+    std::future<void> GetShutdownFuture();
 
     void Cron();
 
@@ -94,6 +95,7 @@ private:
     bool using_external_clock_;
     Clock* clock_;
     std::promise<void> shutdown_promise_;
+    bool get_future_called_{false};
     CommandDictionary commands_;
     std::unique_ptr<MTSHashTable> data_ht_;
     std::unique_ptr<ExpireHashTable> expire_ht_;
