@@ -8,7 +8,8 @@ add_library(librdss client.cc client_manager.cc server.cc)
 target_compile_features(librdss PRIVATE cxx_std_20)
 target_link_libraries(
   librdss
-  PRIVATE io
+  PRIVATE base
+          io
           runtime
           service
           sys

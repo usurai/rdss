@@ -8,21 +8,23 @@
 
 namespace rdss {
 
-RingExecutor::RingExecutor(std::string name, RingConfig config, size_t cpu)
+RingExecutor::RingExecutor(size_t id, std::string name, RingConfig config)
   : name_(std::move(name))
   , config_(std::move(config)) {
     std::promise<void> promise;
     auto future = promise.get_future();
 
-    thread_ = std::thread([this, &promise, cpu]() {
+    thread_ = std::thread([this, &promise, cpu = id]() {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
         // only CPU i as set.
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        CPU_SET(cpu, &cpuset);
-        int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-        if (rc != 0) {
-            LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
+        if (cpu != std::numeric_limits<size_t>::max()) {
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(cpu, &cpuset);
+            int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+            if (rc != 0) {
+                LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
+            }
         }
 
         // auto ret = pthread_setname_np(pthread_self(), name_.c_str());
@@ -95,6 +97,28 @@ RingExecutor::~RingExecutor() {
     }
     io_uring_queue_exit(Ring());
     LOG(INFO) << "Executor " << name_ << " exiting.";
+}
+
+// static
+std::unique_ptr<RingExecutor>
+RingExecutor::Create(size_t id, std::string name, const Config& config) {
+    RingConfig rc{
+      .sqpoll = config.sqpoll,
+      .submit_batch_size = config.submit_batch_size,
+      .wait_batch_size = config.wait_batch_size,
+    };
+    return std::make_unique<RingExecutor>(id, std::move(name), std::move(rc));
+}
+
+// static
+std::vector<std::unique_ptr<RingExecutor>>
+RingExecutor::Create(size_t n, size_t start_id, std::string name_prefix, const Config& config) {
+    std::vector<std::unique_ptr<RingExecutor>> result;
+    result.reserve(n);
+    for (size_t i = start_id; i < start_id + n; ++i) {
+        result.emplace_back(RingExecutor::Create(i, name_prefix + std::to_string(i), config));
+    }
+    return result;
 }
 
 void RingExecutor::Shutdown() {

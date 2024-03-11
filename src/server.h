@@ -2,7 +2,10 @@
 
 #include "base/clock.h"
 #include "base/config.h"
+#include "io/listener.h"
+#include "client_manager.h"
 #include "io/promise.h"
+#include "runtime/ring_executor.h"
 #include "service/data_structure_service.h"
 
 #include <atomic>
@@ -18,15 +21,9 @@ struct ServerStats {
     std::atomic<uint64_t> rejected_connections{};
 };
 
-class ClientManager;
-class Listener;
-class RingExecutor;
-
 class Server {
 public:
     explicit Server(Config config);
-
-    ~Server();
 
     void Run();
 
@@ -38,7 +35,7 @@ public:
     /// 4. Release all the active clients by close the socket and delete them.
     void Shutdown();
 
-    ClientManager* GetClientManager() { return client_manager_.get(); }
+    ClientManager* GetClientManager() { return &client_manager_; }
 
     ServerStats& Stats() { return stats_; }
 
@@ -55,12 +52,11 @@ private:
 
     std::atomic<bool> active_ = true;
     std::unique_ptr<RingExecutor> dss_executor_;
-    // TODO: Make this config or something
     std::vector<std::unique_ptr<RingExecutor>> client_executors_;
     std::unique_ptr<Listener> listener_;
     DataStructureService service_;
     std::future<void> shutdown_future_;
-    std::unique_ptr<ClientManager> client_manager_;
+    ClientManager client_manager_;
 
     ServerStats stats_;
 };

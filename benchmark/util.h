@@ -1,5 +1,5 @@
-#include "../src/io/promise.h"
-#include "../src/runtime/ring_executor.h"
+#include "io/promise.h"
+#include "runtime/ring_executor.h"
 
 #include <benchmark/benchmark.h>
 
@@ -92,14 +92,16 @@ static void BenchSharded(benchmark::State& s) {
         config.sqpoll = sqpoll;
         config.wait_batch_size = batch_size;
 
-        RingExecutor main("", config);
-        RingExecutor service_executor("bench-service", config, num_client_executors);
-        std::vector<std::unique_ptr<RingExecutor>> client_executors;
-        client_executors.reserve(num_client_executors);
+        RingExecutor main(0, "main", config);
+        RingExecutor service_executor(1, "bench-service", config);
+        auto client_executors = RingExecutor::Create(
+          num_client_executors,
+          2,
+          "cli_exr_",
+          Config{.sqpoll = sqpoll, .wait_batch_size = static_cast<size_t>(batch_size)});
         std::vector<size_t> remaining_tasks(num_client_executors, 0);
         const auto total_tasks = num_client_executors * tasks_per_client;
         for (size_t i = 0; i < num_client_executors; ++i) {
-            client_executors.emplace_back(std::make_unique<RingExecutor>("bench-client", config, i));
             remaining_tasks[i] = total_tasks / num_client_executors
                                  + (i < (total_tasks % num_client_executors) ? 1 : 0);
         }

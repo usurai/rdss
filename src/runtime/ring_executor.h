@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/config.h"
+
 #include <glog/logging.h>
 
 #include <atomic>
@@ -85,7 +87,12 @@ struct RingConfig {
 
 class RingExecutor {
 public:
-    RingExecutor(std::string name = "", RingConfig config = RingConfig{}, size_t cpu = 0);
+    /// 'id' is used as CPU id when setting CPU affinity. If not specified(equals to unsigned long
+    /// max), CPU affinity of the worker thread will not be set.
+    RingExecutor(
+      size_t id = std::numeric_limits<size_t>::max(),
+      std::string name = "",
+      RingConfig config = RingConfig{});
 
     RingExecutor(const RingExecutor&) = delete;
     RingExecutor(RingExecutor&&) = delete;
@@ -93,6 +100,11 @@ public:
     RingExecutor& operator=(RingExecutor&&) = delete;
 
     ~RingExecutor();
+
+    static std::unique_ptr<RingExecutor> Create(size_t id, std::string name, const Config& config);
+
+    static std::vector<std::unique_ptr<RingExecutor>>
+    Create(size_t n, size_t start_id, std::string name_prefix, const Config& config);
 
     io_uring* Ring() { return &ring_; }
     int RingFD() const { return fd_; }

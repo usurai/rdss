@@ -1,5 +1,6 @@
 #include "io/listener.h"
 #include "io/promise.h"
+#include "runtime/ring_executor.h"
 #include "runtime/util.h"
 #include "sys/util.h"
 
@@ -77,12 +78,8 @@ Task<void> Echo(RingExecutor* src_exr, Connection* conn_ptr, std::atomic<size_t>
 
 class EchoServer {
 public:
-    EchoServer(int port, size_t num_executors) {
-        io_executors_.reserve(num_executors);
-        for (size_t i = 0; i < num_executors; ++i) {
-            io_executors_.emplace_back(std::make_unique<RingExecutor>(
-              "client_executor_" + std::to_string(i), RingConfig{}, i));
-        }
+    EchoServer(int port, size_t num_executors)
+      : io_executors_(RingExecutor::Create(num_executors, 0UL, "io_exr_", Config{})) {
         listener_ = Listener::Create(port, io_executors_[0].get());
     }
 

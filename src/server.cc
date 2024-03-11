@@ -1,12 +1,8 @@
 #include "server.h"
 
 #include "client.h"
-#include "client_manager.h"
-#include "io/listener.h"
-#include "runtime/ring_executor.h"
 #include "runtime/util.h"
 #include "service/command_registry.h"
-#include "service/data_structure_service.h"
 #include "sys/util.h"
 
 #include <chrono>
@@ -16,30 +12,10 @@ namespace rdss {
 
 Server::Server(Config config)
   : config_(std::move(config))
-  , dss_executor_(std::make_unique<RingExecutor>(
-      "dss_exr",
-      RingConfig{
-        .sqpoll = config_.sqpoll,
-        .async_sqe = false,
-        .submit_batch_size = config_.submit_batch_size,
-        .wait_batch_size = config_.wait_batch_size},
-      config_.client_executors))
+  , dss_executor_(RingExecutor::Create(0, "dss_exr", config_))
+  , client_executors_(RingExecutor::Create(config.client_executors, 1, "cli_exr_", config_))
   , service_(&config_, this, nullptr)
-  , shutdown_future_(service_.GetShutdownFuture())
-  , client_manager_(std::make_unique<ClientManager>()) {
-    // TODO: Into init list.
-    client_executors_.reserve(config_.client_executors);
-    for (size_t i = 0; i < config_.client_executors; ++i) {
-        client_executors_.emplace_back(std::make_unique<RingExecutor>(
-          "cli_exr_" + std::to_string(i),
-          RingConfig{
-            .sqpoll = config_.sqpoll,
-            .submit_batch_size = config_.submit_batch_size,
-            .wait_batch_size = config_.wait_batch_size,
-            .max_direct_descriptors = config_.max_direct_fds_per_exr},
-          i));
-    }
-
+  , shutdown_future_(service_.GetShutdownFuture()) {
     listener_ = Listener::Create(config_.port, client_executors_[0].get());
 
     RegisterCommands(&service_);
@@ -50,7 +26,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
     while (active_) {
         auto conn = co_await listener_->Accept(client_executors_[ce_index].get());
         stats_.connections_received.fetch_add(1, std::memory_order_relaxed);
-        if (client_manager_->ActiveClients() == config_.maxclients) {
+        if (client_manager_.ActiveClients() == config_.maxclients) {
             stats_.rejected_connections.fetch_add(1, std::memory_order_relaxed);
             // TODO: dtor will close
             conn->Close();
@@ -58,12 +34,10 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
             continue;
         }
         ce_index = (ce_index + 1) % client_executors_.size();
-        auto* client = client_manager_->AddClient(conn, &service_);
+        auto* client = client_manager_.AddClient(conn, &service_);
         client->Process(this_exr, dss_executor_.get(), config_.use_ring_buffer);
     }
 }
-
-Server::~Server() = default;
 
 void Server::Run() {
     SetNofileLimit(std::numeric_limits<uint16_t>::max());
@@ -118,13 +92,13 @@ void Server::Shutdown() {
     }
 
     LOG(INFO) << "Closing active connections.";
-    auto clients = client_manager_->GetClients();
+    auto clients = client_manager_.GetClients();
     for (auto client : clients) {
         if (client != nullptr) {
             client->Close();
         }
     }
-    assert(client_manager_->ActiveClients() == 0);
+    assert(client_manager_.ActiveClients() == 0);
 }
 
 } // namespace rdss
