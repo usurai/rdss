@@ -14,11 +14,23 @@ Server::Server(Config config)
   : config_(std::move(config))
   , dss_executor_(RingExecutor::Create(0, "dss_exr", config_))
   , client_executors_(RingExecutor::Create(config.client_executors, 1, "cli_exr_", config_))
+  , listener_(Listener::Create(config_.port, client_executors_[0].get()))
   , service_(&config_, this, nullptr)
   , shutdown_future_(service_.GetShutdownFuture()) {
-    listener_ = Listener::Create(config_.port, client_executors_[0].get());
+}
 
+void Server::Setup() {
     RegisterCommands(&service_);
+    SetNofileLimit(std::numeric_limits<uint16_t>::max());
+    stats_.start_time = Clock(true).Now();
+
+    auto ret = io_uring_queue_init(16, &ring_, 0);
+    if (ret) {
+        LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
+    }
+    if (config_.use_ring_buffer) {
+        SetupInitBufRing(&ring_, client_executors_);
+    }
 }
 
 Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
@@ -40,51 +52,28 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
 }
 
 void Server::Run() {
-    SetNofileLimit(std::numeric_limits<uint16_t>::max());
-    stats_.start_time = Clock(true).Now();
-
-    io_uring src_ring;
-    auto ret = io_uring_queue_init(16, &src_ring, 0);
-    if (ret) {
-        LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
-    }
-
-    if (config_.use_ring_buffer) {
-        SetupInitBufRing(&src_ring, client_executors_);
-    }
-
     // TODO: Change to something like
-    // 1. target_exr.Schedule(&src_ring, func)
-    // 2. target_exr.ScheduleRepeat(&src_ring, interval, func);
-    ScheduleOn(&src_ring, dss_executor_.get(), [dss = &service_, exr = dss_executor_.get()]() {
+    // 1. target_exr.Schedule(&ring_, func)
+    // 2. target_exr.ScheduleRepeat(&ring_, interval, func);
+    ScheduleOn(&ring_, dss_executor_.get(), [dss = &service_, exr = dss_executor_.get()]() {
         dss->Cron(exr);
     });
-    ScheduleOn(&src_ring, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
+    ScheduleOn(&ring_, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
         this->AcceptLoop(exr);
     });
 
-    io_uring_queue_exit(&src_ring);
-
     shutdown_future_.wait();
-    LOG(INFO) << "Shutting down the server";
     Shutdown();
 }
 
 void Server::Shutdown() {
+    LOG(INFO) << "Shutting down the server";
     LOG(INFO) << "Stopping executors.";
 
-    io_uring ring;
-    int ret = io_uring_queue_init(16, &ring, 0);
-    if (ret) {
-        LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
-    }
-
     for (auto& e : client_executors_) {
-        e->Deactivate(&ring);
+        e->Deactivate(&ring_);
     }
-    dss_executor_->Deactivate(&ring);
-
-    io_uring_queue_exit(&ring);
+    dss_executor_->Deactivate(&ring_);
 
     dss_executor_->Shutdown();
     for (auto& e : client_executors_) {
@@ -99,6 +88,8 @@ void Server::Shutdown() {
         }
     }
     assert(client_manager_.ActiveClients() == 0);
+
+    io_uring_queue_exit(&ring_);
 }
 
 } // namespace rdss

@@ -16,6 +16,7 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << server_config.ToString();
 
     rdss::Server s(std::move(server_config));
+    s.Setup();
     s.Run();
     return 0;
 }

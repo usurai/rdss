@@ -2,8 +2,8 @@
 
 #include "base/clock.h"
 #include "base/config.h"
-#include "io/listener.h"
 #include "client_manager.h"
+#include "io/listener.h"
 #include "io/promise.h"
 #include "runtime/ring_executor.h"
 #include "service/data_structure_service.h"
@@ -25,6 +25,14 @@ class Server {
 public:
     explicit Server(Config config);
 
+    /// 1. Registers commands to 'service_'.
+    /// 2. Tries to set limit of open file to 65536.
+    /// 3. Update start time of 'stats_'.
+    /// 4. Initialize 'ring_' that is used to send messages to executors.
+    /// 5. Setup buffer ring of client executors if enabled.
+    void Setup();
+
+    /// Blocking waits for 'service_' to shutdown.
     void Run();
 
     /// Actively shutdowns the server:
@@ -57,8 +65,8 @@ private:
     DataStructureService service_;
     std::future<void> shutdown_future_;
     ClientManager client_manager_;
-
     ServerStats stats_;
+    io_uring ring_;
 };
 
 } // namespace rdss
