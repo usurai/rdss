@@ -50,8 +50,11 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
             continue;
         }
         ce_index = (ce_index + 1) % client_executors_.size();
+
+        conn->SetUseRingBuf(config_.use_ring_buffer);
+
         auto* client = client_manager_.AddClient(conn, &service_);
-        client->Process(this_exr, dss_executor_.get(), config_.use_ring_buffer);
+        client->Process(this_exr, dss_executor_.get());
     }
     LOG(INFO) << "Exiting accept loop.";
 }

@@ -42,6 +42,10 @@ public:
 
     bool UsingDirectDescriptor() const { return descripor_index_ >= 0; }
 
+    void SetUseRingBuf(bool use) { use_ring_buf_ = use; }
+
+    bool UseRingBuf() const { return use_ring_buf_; }
+
     // Registration should be executed in the executor's thread.
     void TryRegisterFD() {
         assert(!UsingDirectDescriptor());
@@ -162,6 +166,7 @@ private:
     RingExecutor* executor_;
     // Index into 'executor_'s registered fds. Equals -1 if unregistered.
     int descripor_index_ = -1;
+    bool use_ring_buf_ = false;
 };
 
 } // namespace rdss

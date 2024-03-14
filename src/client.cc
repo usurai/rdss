@@ -51,11 +51,14 @@ Client::Client(Connection* conn, ClientManager* manager, DataStructureService* s
   , manager_(manager)
   , service_(service) {}
 
-Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor, bool use_ring_buf) {
+Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
     if (from != conn_->GetExecutor()) {
         co_await Transfer(from, conn_->GetExecutor());
     }
 
+    const auto use_ring_buf = conn_->UseRingBuf();
+
+    // TODO: move int Connection::Setup
     if (!conn_->UsingDirectDescriptor()) {
         conn_->TryRegisterFD();
     }
