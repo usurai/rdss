@@ -88,7 +88,12 @@ public:
     Task<void> AcceptLoop(RingExecutor* this_exr) {
         size_t ce_index{0};
         while (true) {
-            auto conn = co_await listener_->Accept(io_executors_[ce_index].get());
+            auto [error, conn] = co_await listener_->Accept(io_executors_[ce_index].get());
+            if (error) {
+                LOG(ERROR) << "accept:" << error.message();
+                continue;
+            }
+
             if (connections_.load(std::memory_order_relaxed) >= 10000) {
                 delete conn;
                 LOG(INFO) << "Reject connection since max connection has been reached.";
@@ -102,6 +107,7 @@ public:
                 Echo(this_exr, conn, connections_);
             }
         }
+        LOG(INFO) << "Exiting accept loop.";
     }
 
     void Run() {

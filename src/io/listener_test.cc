@@ -9,10 +9,14 @@ using namespace rdss;
 
 Task<void> AcceptLoop(Listener* listener, RingExecutor* client_executor) {
     while (true) {
-        auto connection = co_await listener->Accept(client_executor);
+        auto [err, conn] = co_await listener->Accept(client_executor);
+        if (err) {
+            LOG(ERROR) << "accept:" << err.message();
+            continue;
+        }
         LOG(INFO) << "new conn";
-        connection->Close();
-        delete connection;
+        conn->Close();
+        delete conn;
     }
 }
 

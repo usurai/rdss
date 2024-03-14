@@ -1,6 +1,7 @@
 #pragma once
 
 #include "connection.h"
+#include "sys/system_error.h"
 
 #include <memory>
 
@@ -23,11 +24,11 @@ public:
 
             bool IsIoOperation() const { return false; }
 
-            auto await_resume() {
+            auto await_resume() -> std::pair<std::error_code, Connection*> {
                 if (result > 0) {
-                    return new Connection(result, client_executor);
+                    return {{}, new Connection(result, client_executor)};
                 }
-                LOG(FATAL) << "io_uring accept: " << strerror(-result);
+                return {ErrnoToErrorCode(-result), nullptr};
             }
 
             RingExecutor* executor;

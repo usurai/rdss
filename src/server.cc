@@ -16,8 +16,7 @@ Server::Server(Config config)
   , client_executors_(RingExecutor::Create(config.client_executors, 1, "cli_exr_", config_))
   , listener_(Listener::Create(config_.port, client_executors_[0].get()))
   , service_(&config_, this, nullptr)
-  , shutdown_future_(service_.GetShutdownFuture()) {
-}
+  , shutdown_future_(service_.GetShutdownFuture()) {}
 
 void Server::Setup() {
     RegisterCommands(&service_);
@@ -36,7 +35,12 @@ void Server::Setup() {
 Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
     size_t ce_index{0};
     while (active_) {
-        auto conn = co_await listener_->Accept(client_executors_[ce_index].get());
+        auto [error, conn] = co_await listener_->Accept(client_executors_[ce_index].get());
+        if (error) {
+            LOG(ERROR) << "accept:" << error.message();
+            continue;
+        }
+
         stats_.connections_received.fetch_add(1, std::memory_order_relaxed);
         if (client_manager_.ActiveClients() == config_.maxclients) {
             stats_.rejected_connections.fetch_add(1, std::memory_order_relaxed);
@@ -49,6 +53,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         auto* client = client_manager_.AddClient(conn, &service_);
         client->Process(this_exr, dss_executor_.get(), config_.use_ring_buffer);
     }
+    LOG(INFO) << "Exiting accept loop.";
 }
 
 void Server::Run() {
