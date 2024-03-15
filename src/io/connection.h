@@ -6,6 +6,7 @@
 
 namespace rdss::detail {
 
+// TODO: Remove this.
 template<typename Impl>
 struct RingIO : public RingOperation<RingIO<Impl>> {
     RingIO(RingExecutor* executor, bool use_direct_fd)
@@ -21,6 +22,59 @@ struct RingIO : public RingOperation<RingIO<Impl>> {
         }
         return {ErrnoToErrorCode(-this->result), 0};
     }
+};
+
+struct Recv : public RingIO<Recv> {
+    Recv(
+      RingExecutor* executor,
+      bool use_direct_fd,
+      int fd,                          /* fd index if using direct fd, true fd othersise */
+      std::optional<int> buffer_group, /* has value means using buffer ring, nullopt otherwise */
+      Buffer* buffer)
+      : RingIO(executor, use_direct_fd)
+      , fd(fd)
+      , buffer_group(buffer_group)
+      , buffer(buffer) {}
+
+    void Prepare(io_uring_sqe* sqe) {
+        if (!UseRingBuf()) {
+            const auto sink = buffer->Sink();
+            io_uring_prep_recv(sqe, fd, sink.data(), sink.size(), 0);
+        } else {
+            io_uring_prep_recv(sqe, fd, nullptr, 0, 0);
+            sqe->buf_group = buffer_group.value();
+            io_uring_sqe_set_flags(sqe, IOSQE_BUFFER_SELECT);
+        }
+        sqe->ioprio |= IORING_RECVSEND_POLL_FIRST;
+    }
+
+    auto await_resume() -> std::pair<std::error_code, RingExecutor::BufferView> {
+        if (result == 0) {
+            return {};
+        }
+        if (result < 0) {
+            // TODO: Replenish if out of buffer.
+            // if (UseRingBuf() && !(flags & IORING_CQE_F_BUFFER)) {}
+            return {ErrnoToErrorCode(-result), {}};
+        }
+
+        if (UseRingBuf()) {
+            const uint32_t entry_id = flags >> IORING_CQE_BUFFER_SHIFT;
+            auto v = GetExecutor()->GetBufferView(entry_id, static_cast<size_t>(result));
+            buffer->Produce(v.view);
+            return {{}, v};
+        }
+        buffer->Produce(result);
+        auto output = buffer->Source();
+        return {{}, RingExecutor::BufferView{.view = output}};
+    }
+
+    bool UseRingBuf() const { return buffer_group != std::nullopt; }
+
+    bool use_direct_fd;
+    int fd;
+    std::optional<int> buffer_group;
+    Buffer* buffer;
 };
 
 } // namespace rdss::detail
@@ -42,7 +96,10 @@ public:
 
     bool UsingDirectDescriptor() const { return descripor_index_ >= 0; }
 
-    void SetUseRingBuf(bool use) { use_ring_buf_ = use; }
+    void SetUseRingBuf(bool use) {
+        use_ring_buf_ = use;
+        buffer_group_ = 0;
+    }
 
     bool UseRingBuf() const { return use_ring_buf_; }
 
@@ -52,6 +109,20 @@ public:
         descripor_index_ = executor_->RegisterFd(fd_);
     }
 
+    /// Buffer ring agnostic recv. Takes 'buffer' to fill the received data, returns [error,
+    /// buffer_view]. If 'this' uses ring buffer by setting 'SetUseRingBuf', performs buffer ring
+    /// based recv: now 'buffer' should be 'virtual_view'.
+    auto Recv(Buffer* buffer) {
+        return detail::Recv(
+          executor_,
+          // TODO: UseDirectFD()
+          descripor_index_ != -1,
+          (descripor_index_ == -1 ? fd_ : descripor_index_),
+          buffer_group_,
+          buffer);
+    }
+
+    // TODO: Remove this after echo_server can make use of Connection::Setup
     auto Recv(Buffer::SinkType buffer) {
         struct RingRecv : public detail::RingIO<RingRecv> {
             RingRecv(RingExecutor* executor, bool direct_fd, int fd, Buffer::SinkType buffer)
@@ -72,6 +143,7 @@ public:
                                   : RingRecv(executor_, false, fd_, buffer));
     }
 
+    // TODO: Remove this after echo_server can make use of Connection::Setup
     auto BufRecv(int buf_group_id) {
         struct RingBufferRecv : public detail::RingIO<RingBufferRecv> {
             RingBufferRecv(RingExecutor* executor, bool direct_fd, int fd, int buf_group_id)
@@ -160,6 +232,12 @@ public:
 
     RingExecutor* GetExecutor() { return executor_; }
 
+    void PutBufferView(RingExecutor::BufferView&& view) {
+        if (use_ring_buf_) {
+            executor_->PutBufferView(std::move(view));
+        }
+    }
+
 private:
     bool active_ = true;
     int fd_;
@@ -167,6 +245,7 @@ private:
     // Index into 'executor_'s registered fds. Equals -1 if unregistered.
     int descripor_index_ = -1;
     bool use_ring_buf_ = false;
+    std::optional<int> buffer_group_;
 };
 
 } // namespace rdss
