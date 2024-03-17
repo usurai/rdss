@@ -11,7 +11,7 @@ namespace rdss {
 class Buffer;
 class Result;
 
-bool NeedsScatter(Result& result);
+bool NeedsGather(Result& result);
 
 std::string_view ResultToStringView(Result& result, Buffer& buffer);
 

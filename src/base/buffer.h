@@ -53,6 +53,8 @@ public:
 
     ~Buffer() { MemoryTracker::GetInstance().Deallocate<MemCategory>(data_.capacity()); }
 
+    bool IsVirtual() const { return virtual_view_; }
+
     size_t Capacity() const { return data_.size(); }
 
     char* EnsureAvailable(size_t n, bool greedy);

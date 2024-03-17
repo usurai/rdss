@@ -42,7 +42,7 @@ size_t StrToIovecs(MTSPtr& str, Buffer::SinkType sink, std::vector<iovec>& iovec
 
 } // namespace detail
 
-bool NeedsScatter(Result& result) {
+bool NeedsGather(Result& result) {
     return result.type == Result::Type::kString || result.type == Result::Type::kStrings;
 }
 
