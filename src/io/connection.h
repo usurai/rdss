@@ -94,12 +94,17 @@ public:
         }
     }
 
-    bool UsingDirectDescriptor() const { return descripor_index_ >= 0; }
-
-    void SetUseRingBuf(bool use) {
-        use_ring_buf_ = use;
-        buffer_group_ = 0;
+    /// Sets the connection to use buffer ring if 'use_ring_buffer' is true, and registers this
+    /// connection's socket fd to the 'executor_'.
+    /// Note: This function should be run inside 'executor_' to avoid data racing.
+    void Setup(bool use_ring_buffer) {
+        SetUseRingBuf(use_ring_buffer);
+        if (!UsingDirectDescriptor()) {
+            TryRegisterFD();
+        }
     }
+
+    bool UsingDirectDescriptor() const { return descripor_index_ >= 0; }
 
     bool UseRingBuf() const { return use_ring_buf_; }
 
@@ -239,6 +244,15 @@ public:
     }
 
 private:
+    void SetUseRingBuf(bool use) {
+        use_ring_buf_ = use;
+        if (use) {
+            buffer_group_ = 0;
+        } else {
+            buffer_group_ = std::nullopt;
+        }
+    }
+
     bool active_ = true;
     int fd_;
     RingExecutor* executor_;

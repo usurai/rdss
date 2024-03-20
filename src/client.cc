@@ -57,11 +57,6 @@ Client::Client(Connection* conn, ClientManager* manager, DataStructureService* s
   , output_buffer_(kOutputBufferSize) {}
 
 Task<void> Client::Process(RingExecutor* dss_executor) {
-    // TODO: move int Connection::Setup
-    if (!conn_->UsingDirectDescriptor()) {
-        conn_->TryRegisterFD();
-    }
-
     while (true) {
         EnsureBuffer();
         auto [err, buffer_view] = co_await conn_->Recv(&query_buffer_);

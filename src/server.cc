@@ -53,9 +53,9 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         ce_index = (ce_index + 1) % client_executors_.size();
 
         cli_exr->Schedule(this_exr->Ring(), [this, conn]() {
-            // TODO: Move into Connection::setup
-            conn->SetUseRingBuf(config_.use_ring_buffer);
-
+            // Connection::Setup should be invoked before using the connection to create the client
+            // since client's query_buffer depends on connection's 'use_ring_buf_'.
+            conn->Setup(config_.use_ring_buffer);
             auto* client = client_manager_.AddClient(conn, &service_);
             client->Process(dss_executor_.get());
         });
