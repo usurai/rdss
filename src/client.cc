@@ -56,11 +56,7 @@ Client::Client(Connection* conn, ClientManager* manager, DataStructureService* s
                           : kIOGenericBufferSize)
   , output_buffer_(kOutputBufferSize) {}
 
-Task<void> Client::Process(RingExecutor* from, RingExecutor* dss_executor) {
-    // TODO: Move out.
-    if (from != conn_->GetExecutor()) {
-        co_await Transfer(from, conn_->GetExecutor());
-    }
+Task<void> Client::Process(RingExecutor* dss_executor) {
     // TODO: move int Connection::Setup
     if (!conn_->UsingDirectDescriptor()) {
         conn_->TryRegisterFD();

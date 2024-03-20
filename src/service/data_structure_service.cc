@@ -34,6 +34,7 @@ std::future<void> DataStructureService::GetShutdownFuture() {
     return shutdown_promise_.get_future();
 }
 
+// TODO: Make 'exr' data member.
 Task<void> DataStructureService::Cron(RingExecutor* exr) {
     // TODO: Adaptive hz
     const auto interval_in_millisecond = 1000 / config_->hz;
@@ -44,7 +45,6 @@ Task<void> DataStructureService::Cron(RingExecutor* exr) {
         if (++cnt < interval_in_millisecond) {
             continue;
         }
-        LOG(INFO) << "cron";
         cnt = 0;
         GetEvictor().RefreshLRUClock();
         GetExpirer().ActiveExpire();

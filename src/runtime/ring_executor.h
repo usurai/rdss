@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/config.h"
+#include "io/promise.h"
 
 #include <glog/logging.h>
 
@@ -122,6 +123,15 @@ public:
 
     template<typename Operation>
     void Initiate(Operation* operation);
+
+    template<typename FuncType>
+    Task<void> Schedule(io_uring* src_ring, FuncType func) {
+        if (src_ring != Ring()) {
+            ScheduleOn(src_ring, this, std::move(func));
+            co_return;
+        }
+        func();
+    }
 
     auto Timeout(std::chrono::nanoseconds nanoseconds) { return RingTimeout(this, nanoseconds); }
 

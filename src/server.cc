@@ -35,7 +35,8 @@ void Server::Setup() {
 Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
     size_t ce_index{0};
     while (active_) {
-        auto [error, conn] = co_await listener_->Accept(client_executors_[ce_index].get());
+        auto cli_exr = client_executors_[ce_index].get();
+        auto [error, conn] = co_await listener_->Accept(cli_exr);
         if (error) {
             LOG(ERROR) << "accept:" << error.message();
             continue;
@@ -51,24 +52,24 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         }
         ce_index = (ce_index + 1) % client_executors_.size();
 
-        conn->SetUseRingBuf(config_.use_ring_buffer);
+        cli_exr->Schedule(this_exr->Ring(), [this, conn]() {
+            // TODO: Move into Connection::setup
+            conn->SetUseRingBuf(config_.use_ring_buffer);
 
-        auto* client = client_manager_.AddClient(conn, &service_);
-        client->Process(this_exr, dss_executor_.get());
+            auto* client = client_manager_.AddClient(conn, &service_);
+            client->Process(dss_executor_.get());
+        });
     }
     LOG(INFO) << "Exiting accept loop.";
 }
 
 void Server::Run() {
-    // TODO: Change to something like
-    // 1. target_exr.Schedule(&ring_, func)
-    // 2. target_exr.ScheduleRepeat(&ring_, interval, func);
-    ScheduleOn(&ring_, dss_executor_.get(), [dss = &service_, exr = dss_executor_.get()]() {
-        dss->Cron(exr);
-    });
-    ScheduleOn(&ring_, client_executors_[0].get(), [this, exr = client_executors_[0].get()]() {
-        this->AcceptLoop(exr);
-    });
+    // TODO: Use thread-local ring to replace &ring_.
+    dss_executor_->Schedule(
+      &ring_, [dss = &service_, exr = dss_executor_.get()]() { dss->Cron(exr); });
+
+    client_executors_[0]->Schedule(
+      &ring_, [this, exr = client_executors_[0].get()]() { this->AcceptLoop(exr); });
 
     shutdown_future_.wait();
     Shutdown();
