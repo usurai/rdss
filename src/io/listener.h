@@ -12,6 +12,8 @@ public:
     static std::unique_ptr<Listener> Create(int port, RingExecutor* executor);
 
     /// Accepts and creates 'Connection' with its 'executor_' set as 'client_executor'.
+    /// TODO: Ditch this, defer the executor assignment to Connection::Setup, as Listener doesn't
+    /// need to know about it.
     auto Accept(RingExecutor* conn_executor) {
         struct RingAccept : public RingOperation<RingAccept> {
             RingAccept(RingExecutor* executor, int fd, RingExecutor* client_executor)

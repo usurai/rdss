@@ -27,12 +27,16 @@ void Server::Setup() {
     if (ret) {
         LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
     }
+
+    assert(tls_ring == nullptr);
+    tls_ring = &ring_;
+
     if (config_.use_ring_buffer) {
         SetupInitBufRing(&ring_, client_executors_);
     }
 }
 
-Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
+Task<void> Server::AcceptLoop() {
     size_t ce_index{0};
     while (active_) {
         auto cli_exr = client_executors_[ce_index].get();
@@ -52,7 +56,7 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
         }
         ce_index = (ce_index + 1) % client_executors_.size();
 
-        cli_exr->Schedule(this_exr->Ring(), [this, conn]() {
+        cli_exr->Schedule([this, conn]() {
             // Connection::Setup should be invoked before using the connection to create the client
             // since client's query_buffer depends on connection's 'use_ring_buf_'.
             conn->Setup(config_.use_ring_buffer);
@@ -64,12 +68,8 @@ Task<void> Server::AcceptLoop(RingExecutor* this_exr) {
 }
 
 void Server::Run() {
-    // TODO: Use thread-local ring to replace &ring_.
-    dss_executor_->Schedule(
-      &ring_, [dss = &service_, exr = dss_executor_.get()]() { dss->Cron(exr); });
-
-    client_executors_[0]->Schedule(
-      &ring_, [this, exr = client_executors_[0].get()]() { this->AcceptLoop(exr); });
+    dss_executor_->Schedule([dss = &service_]() { dss->Cron(); });
+    client_executors_[0]->Schedule([this]() { this->AcceptLoop(); });
 
     shutdown_future_.wait();
     Shutdown();

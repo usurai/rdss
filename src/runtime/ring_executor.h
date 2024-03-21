@@ -6,6 +6,7 @@
 #include <glog/logging.h>
 
 #include <atomic>
+#include <cassert>
 #include <chrono>
 #include <coroutine>
 #include <cstring>
@@ -14,6 +15,17 @@
 #include <thread>
 
 namespace rdss {
+
+class RingExecutor;
+
+/// Thread-local ring for sending ring message to other executors.
+/// - For RingExecutor's worker thread, this is set to RingExecutor's ring.
+/// - For main thread, this is set to Server's 'ring_'.
+inline thread_local io_uring* tls_ring = nullptr;
+
+/// Thread-local pointer to RingExecutor. Only RingExecutor's worker thread has this set to the
+/// corresponding RingExecutor.
+inline thread_local RingExecutor* tls_exr = nullptr;
 
 struct Continuation {
     uint32_t flags;
@@ -124,13 +136,24 @@ public:
     template<typename Operation>
     void Initiate(Operation* operation);
 
+    /// Schedules the execution of 'func' on this executor.
+    /// - If 'src_ring' is the ring of 'this', 'func' will be executed inline.
+    /// - Otherwise, 'func' will be captured as coroutine_handle and sent to 'this' via ring message
+    /// via 'src_ring', and executed after reapped.
     template<typename FuncType>
     Task<void> Schedule(io_uring* src_ring, FuncType func) {
+        assert(src_ring != nullptr);
         if (src_ring != Ring()) {
             ScheduleOn(src_ring, this, std::move(func));
             co_return;
         }
         func();
+    }
+
+    /// Similar to the above but using thread-local ring 'rls_ring' as 'src_ring'.
+    template<typename FuncType>
+    Task<void> Schedule(FuncType func) {
+        return Schedule(tls_ring, std::move(func));
     }
 
     auto Timeout(std::chrono::nanoseconds nanoseconds) { return RingTimeout(this, nanoseconds); }

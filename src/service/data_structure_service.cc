@@ -34,13 +34,14 @@ std::future<void> DataStructureService::GetShutdownFuture() {
     return shutdown_promise_.get_future();
 }
 
-// TODO: Make 'exr' data member.
-Task<void> DataStructureService::Cron(RingExecutor* exr) {
+Task<void> DataStructureService::Cron() {
+    assert(tls_exr != nullptr);
+
     // TODO: Adaptive hz
     const auto interval_in_millisecond = 1000 / config_->hz;
     size_t cnt{0};
     while (active_.load(std::memory_order_relaxed)) {
-        co_await exr->Timeout(std::chrono::milliseconds(1));
+        co_await tls_exr->Timeout(std::chrono::milliseconds(1));
         UpdateCommandTime();
         if (++cnt < interval_in_millisecond) {
             continue;

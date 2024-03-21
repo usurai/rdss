@@ -35,7 +35,7 @@ public:
 
     std::future<void> GetShutdownFuture();
 
-    Task<void> Cron(RingExecutor* exr);
+    Task<void> Cron();
 
     Server* GetServer() { return server_; }
 

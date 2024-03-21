@@ -83,6 +83,10 @@ RingExecutor::RingExecutor(size_t id, std::string name, RingConfig config)
             }
         }
 
+        assert(tls_ring == nullptr);
+        tls_ring = Ring();
+        tls_exr = this;
+
         promise.set_value();
         this->EventLoop();
     });
@@ -156,6 +160,7 @@ void RingExecutor::Deactivate(io_uring* ring) {
 }
 
 void RingExecutor::EventLoop() {
+    LOG(INFO) << gettid() << " ring:" << tls_ring << " exr:" << tls_exr;
     __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
     const auto wait_batch = std::max(1UL, config_.wait_batch_size);
     const auto submit_batch = std::max(1UL, config_.submit_batch_size);

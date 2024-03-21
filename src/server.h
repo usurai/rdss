@@ -48,13 +48,13 @@ public:
     ServerStats& Stats() { return stats_; }
 
 private:
-    // Operates an accept loop on the 'executor', which should be chosen from the set of
+    // Operates an accept loop on RingExecutor, which should be chosen from the set of
     // 'client_executors_'. Upon the arrival of a new connection, evaluates whether the current
     // active connections surpass the defined limit set by the 'maxclients' configuration. If the
     // threshold is exceeded, the connection is declined. Otherwise, a new client is instantiated
     // with the connection, and the client's processing is scheduled on one of the
     // 'client_executors_' in a round-robin manner.
-    Task<void> AcceptLoop(RingExecutor* executor);
+    Task<void> AcceptLoop();
 
     Config config_;
 
