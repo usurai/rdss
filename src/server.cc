@@ -39,8 +39,7 @@ void Server::Setup() {
 Task<void> Server::AcceptLoop() {
     size_t ce_index{0};
     while (active_) {
-        auto cli_exr = client_executors_[ce_index].get();
-        auto [error, conn] = co_await listener_->Accept(cli_exr);
+        auto [error, conn] = co_await listener_->Accept();
         if (error) {
             LOG(ERROR) << "accept:" << error.message();
             continue;
@@ -54,12 +53,14 @@ Task<void> Server::AcceptLoop() {
             delete conn;
             continue;
         }
+
+        auto cli_exr = client_executors_[ce_index].get();
         ce_index = (ce_index + 1) % client_executors_.size();
 
-        cli_exr->Schedule([this, conn]() {
+        cli_exr->Schedule([this, conn, cli_exr]() {
             // Connection::Setup should be invoked before using the connection to create the client
             // since client's query_buffer depends on connection's 'use_ring_buf_'.
-            conn->Setup(config_.use_ring_buffer);
+            conn->Setup(cli_exr, config_.use_ring_buffer);
             auto* client = client_manager_.AddClient(conn, &service_);
             client->Process(dss_executor_.get());
         });

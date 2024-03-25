@@ -10,14 +10,17 @@
 
 using namespace rdss;
 
-Task<void>
-RingBufferEcho(RingExecutor* src_exr, Connection* conn_ptr, std::atomic<size_t>& connections) {
-    if (src_exr != conn_ptr->GetExecutor()) {
-        co_await Transfer(src_exr, conn_ptr->GetExecutor());
+Task<void> RingBufferEcho(
+  RingExecutor* src_exr,
+  Connection* conn_ptr,
+  RingExecutor* exr,
+  std::atomic<size_t>& connections) {
+    if (src_exr != exr) {
+        co_await Transfer(src_exr, exr);
     }
+    conn_ptr->Setup(exr, false);
 
     std::unique_ptr<Connection> conn(conn_ptr);
-    conn->TryRegisterFD();
 
     std::error_code error;
     size_t bytes_written;
@@ -42,13 +45,17 @@ RingBufferEcho(RingExecutor* src_exr, Connection* conn_ptr, std::atomic<size_t>&
     connections.fetch_sub(1, std::memory_order_relaxed);
 }
 
-Task<void> Echo(RingExecutor* src_exr, Connection* conn_ptr, std::atomic<size_t>& connections) {
-    if (src_exr != conn_ptr->GetExecutor()) {
-        co_await Transfer(src_exr, conn_ptr->GetExecutor());
+Task<void> Echo(
+  RingExecutor* src_exr,
+  Connection* conn_ptr,
+  RingExecutor* exr,
+  std::atomic<size_t>& connections) {
+    if (src_exr != exr) {
+        co_await Transfer(src_exr, exr);
     }
+    conn_ptr->Setup(exr, false);
 
     std::unique_ptr<Connection> conn(conn_ptr);
-    conn->TryRegisterFD();
 
     std::array<char, 4096> buffer;
     std::error_code error;
@@ -88,7 +95,7 @@ public:
     Task<void> AcceptLoop(RingExecutor* this_exr) {
         size_t ce_index{0};
         while (true) {
-            auto [error, conn] = co_await listener_->Accept(io_executors_[ce_index].get());
+            auto [error, conn] = co_await listener_->Accept();
             if (error) {
                 LOG(ERROR) << "accept:" << error.message();
                 continue;
@@ -100,11 +107,14 @@ public:
                 continue;
             }
             connections_.fetch_add(1, std::memory_order_relaxed);
+
+            auto exr = io_executors_[ce_index].get();
             ce_index = (ce_index + 1) % io_executors_.size();
+
             if (use_buf_recv_) {
-                RingBufferEcho(this_exr, conn, connections_);
+                RingBufferEcho(this_exr, conn, exr, connections_);
             } else {
-                Echo(this_exr, conn, connections_);
+                Echo(this_exr, conn, exr, connections_);
             }
         }
         LOG(INFO) << "Exiting accept loop.";

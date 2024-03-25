@@ -83,6 +83,9 @@ namespace rdss {
 
 class Connection {
 public:
+    explicit Connection(int fd)
+      : fd_(fd) {}
+
     Connection(int fd, RingExecutor* executor)
       : fd_(fd)
       , executor_(executor) {}
@@ -94,10 +97,11 @@ public:
         }
     }
 
-    /// Sets the connection to use buffer ring if 'use_ring_buffer' is true, and registers this
-    /// connection's socket fd to the 'executor_'.
+    /// Sets the connection to use 'executor' as the executor to do I/O, and to use buffer ring if
+    /// 'use_ring_buffer' is true, registers this connection's socket fd to the 'executor_'.
     /// Note: This function should be run inside 'executor_' to avoid data racing.
-    void Setup(bool use_ring_buffer) {
+    void Setup(RingExecutor* executor, bool use_ring_buffer) {
+        executor_ = executor;
         SetUseRingBuf(use_ring_buffer);
         if (!UsingDirectDescriptor()) {
             TryRegisterFD();

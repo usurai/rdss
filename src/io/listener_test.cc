@@ -9,7 +9,7 @@ using namespace rdss;
 
 Task<void> AcceptLoop(Listener* listener, RingExecutor* client_executor) {
     while (true) {
-        auto [err, conn] = co_await listener->Accept(client_executor);
+        auto [err, conn] = co_await listener->Accept();
         if (err) {
             LOG(ERROR) << "accept:" << err.message();
             continue;
