@@ -20,8 +20,6 @@ public:
 
             void Prepare(io_uring_sqe* sqe) { io_uring_prep_accept(sqe, fd, nullptr, nullptr, 0); }
 
-            bool IsIoOperation() const { return false; }
-
             auto await_resume() -> std::pair<std::error_code, Connection*> {
                 if (result > 0) {
                     return {{}, new Connection(result)};

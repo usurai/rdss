@@ -12,8 +12,6 @@ struct RingIO : public RingOperation<RingIO<Impl>> {
     RingIO(RingExecutor* executor, bool use_direct_fd)
       : RingOperation<RingIO<Impl>>(executor, use_direct_fd) {}
 
-    bool IsIoOperation() const { return true; }
-
     void Prepare(io_uring_sqe* sqe) { static_cast<Impl*>(this)->Prepare(sqe); }
 
     auto await_resume() -> std::pair<std::error_code, size_t> {

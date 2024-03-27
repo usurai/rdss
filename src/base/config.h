@@ -23,8 +23,6 @@ struct Config {
     uint32_t active_expire_acceptable_stale_percent = 10;
     uint32_t active_expire_keys_per_loop = 20;
 
-    // TODO: Limit this according to CPU number.
-    size_t io_uring_wq_max_unbound_workers = 16;
     size_t client_executors = 2;
     bool sqpoll = false;
     size_t max_direct_fds_per_exr = 4096;

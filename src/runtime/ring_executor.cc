@@ -56,14 +56,6 @@ RingExecutor::RingExecutor(size_t id, std::string name, RingConfig config)
             LOG(WARNING) << "io_uring: No IORING_FEAT_FAST_POLL";
         }
 
-        if (config_.async_sqe) {
-            unsigned int max_workers[2] = {0, config_.max_unbound_workers};
-            ret = io_uring_register_iowq_max_workers(&ring_, max_workers);
-            if (ret != 0) {
-                LOG(ERROR) << "io_uring_register_iowq_max_workers:" << strerror(-ret);
-            }
-        }
-
         if (config_.max_direct_descriptors) {
             ret = io_uring_register_files_sparse(&ring_, config_.max_direct_descriptors);
             if (ret) {
