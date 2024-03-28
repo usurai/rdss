@@ -2,13 +2,13 @@
 
 #include "base/config.h"
 #include "io/promise.h"
+#include "runtime/continuation.h"
 
 #include <glog/logging.h>
 
 #include <atomic>
 #include <cassert>
 #include <chrono>
-#include <coroutine>
 #include <cstring>
 #include <liburing.h>
 #include <optional>
@@ -26,12 +26,6 @@ inline thread_local io_uring* tls_ring = nullptr;
 /// Thread-local pointer to RingExecutor. Only RingExecutor's worker thread has this set to the
 /// corresponding RingExecutor.
 inline thread_local RingExecutor* tls_exr = nullptr;
-
-struct Continuation {
-    uint32_t flags;
-    int result;
-    std::coroutine_handle<> handle;
-};
 
 template<typename Implementation>
 struct RingOperation
