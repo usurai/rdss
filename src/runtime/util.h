@@ -32,6 +32,7 @@ struct Awaitable
 
 namespace rdss {
 
+// TODO: Deprecate this after change to EchoServer.
 template<typename FuncType>
 Task<void> ScheduleOn(io_uring* src_ring, RingExecutor* dest_exr, FuncType func) {
     co_await detail::Awaitable{.ring = src_ring, .to_fd = dest_exr->RingFD(), .submit = true};

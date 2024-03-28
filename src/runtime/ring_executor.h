@@ -14,6 +14,35 @@
 #include <optional>
 #include <thread>
 
+namespace rdss::detail {
+
+struct RingTransfer
+  : public Continuation
+  , public std::suspend_always {
+    void await_suspend(std::coroutine_handle<> h) {
+        handle = std::move(h);
+        // TODO: GetSqe()
+        io_uring_sqe* sqe;
+        while ((sqe = io_uring_get_sqe(ring)) == nullptr) {
+        }
+
+        io_uring_prep_msg_ring(sqe, target_fd, 0, reinterpret_cast<uint64_t>(this), 0);
+        io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
+        if (submit) {
+            auto ret = io_uring_submit(ring);
+            if (ret < 0) {
+                LOG(FATAL) << "io_uring_submit:" << strerror(-ret);
+            }
+        }
+    }
+
+    io_uring* ring;
+    int target_fd;
+    bool submit;
+};
+
+} // namespace rdss::detail
+
 namespace rdss {
 
 class RingExecutor;
@@ -127,14 +156,7 @@ public:
     /// - Otherwise, 'func' will be captured as coroutine_handle and sent to 'this' via ring message
     /// via 'src_ring', and executed after reapped.
     template<typename FuncType>
-    Task<void> Schedule(io_uring* src_ring, FuncType func) {
-        assert(src_ring != nullptr);
-        if (src_ring != Ring()) {
-            ScheduleOn(src_ring, this, std::move(func));
-            co_return;
-        }
-        func();
-    }
+    Task<void> Schedule(io_uring* src_ring, FuncType func);
 
     /// Similar to the above but using thread-local ring 'rls_ring' as 'src_ring'.
     template<typename FuncType>
@@ -245,6 +267,15 @@ inline auto ResumeOn(RingExecutor* re) {
         RingExecutor* re;
     };
     return RingResume(re);
+}
+
+template<typename FuncType>
+Task<void> RingExecutor::Schedule(io_uring* src_ring, FuncType func) {
+    assert(src_ring != nullptr);
+    if (src_ring != Ring()) {
+        co_await detail::RingTransfer{.ring = src_ring, .target_fd = RingFD(), .submit = true};
+    }
+    func();
 }
 
 } // namespace rdss
