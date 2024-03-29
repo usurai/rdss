@@ -14,7 +14,7 @@ constexpr size_t kRepeat = 25'000'000;
 io_uring src_ring;
 io_uring dest_ring;
 
-namespace detail {
+namespace bench::detail {
 
 template<bool SingIssuer = false>
 static void SetupRingPair(const benchmark::State& s) {
@@ -133,7 +133,7 @@ void PrepareRingMsg(io_uring_sqe* sqe) {
     io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
 }
 
-} // namespace detail
+} // namespace bench::detail
 
 enum class ConsumeMethod {
     kWait,
@@ -145,13 +145,13 @@ enum class ConsumeMethod {
 auto ConsumeMethodFunction(ConsumeMethod m) {
     switch (m) {
     case ConsumeMethod::kWait:
-        return detail::RingConsumeWait;
+        return bench::detail::RingConsumeWait;
     case ConsumeMethod::kPeek:
-        return detail::RingConsumePeek;
+        return bench::detail::RingConsumePeek;
     case ConsumeMethod::kTimeoutWait:
-        return detail::RingConsumeTimeoutWait;
+        return bench::detail::RingConsumeTimeoutWait;
     case ConsumeMethod::kWaitCqes:
-        return detail::RingConsumeWaitCqes;
+        return bench::detail::RingConsumeWaitCqes;
     }
 }
 
@@ -207,78 +207,78 @@ static void Nop(benchmark::State& s) {
 }
 
 static void BenchRingMsgWait(benchmark::State& s) {
-    BenchRing(s, ConsumeMethod::kWait, &src_ring, &dest_ring, detail::PrepareRingMsg);
+    BenchRing(s, ConsumeMethod::kWait, &src_ring, &dest_ring, bench::detail::PrepareRingMsg);
 }
 
 static void BenchRingMsgPeek(benchmark::State& s) {
-    BenchRing(s, ConsumeMethod::kPeek, &src_ring, &dest_ring, detail::PrepareRingMsg);
+    BenchRing(s, ConsumeMethod::kPeek, &src_ring, &dest_ring, bench::detail::PrepareRingMsg);
 }
 
 static void BenchRingMsgTimeoutWait(benchmark::State& s) {
-    BenchRing(s, ConsumeMethod::kTimeoutWait, &src_ring, &dest_ring, detail::PrepareRingMsg);
+    BenchRing(s, ConsumeMethod::kTimeoutWait, &src_ring, &dest_ring, bench::detail::PrepareRingMsg);
 }
 
 static void BenchRingMsgWaitCqes(benchmark::State& s) {
-    BenchRing(s, ConsumeMethod::kWaitCqes, &src_ring, &dest_ring, detail::PrepareRingMsg);
+    BenchRing(s, ConsumeMethod::kWaitCqes, &src_ring, &dest_ring, bench::detail::PrepareRingMsg);
 }
 
 BENCHMARK(Nop<ConsumeMethod::kWaitCqes>)
   ->Name("NopNonSingleIssuerWaitCqes")
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(Nop<ConsumeMethod::kWaitCqes>)
   ->Name("NopSingleIssuerWaitCqes")
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<true>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<true>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(Nop<ConsumeMethod::kWait>)
   ->Name("NopNonSingleIssuerWait")
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(Nop<ConsumeMethod::kWait>)
   ->Name("NopSingleIssuerWait")
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<true>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<true>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgWait)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgPeek)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgTimeoutWait)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
 BENCHMARK(BenchRingMsgWaitCqes)
   ->UseManualTime()
-  ->Setup(detail::SetupRingPair<false>)
-  ->Teardown(detail::TeardownRingPair)
+  ->Setup(bench::detail::SetupRingPair<false>)
+  ->Teardown(bench::detail::TeardownRingPair)
   ->RangeMultiplier(4)
   ->Range(0, 1 << 12);
 
