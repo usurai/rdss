@@ -5,6 +5,23 @@
 
 namespace rdss::detail {
 
+struct Timeout : public RingOperation<Timeout> {
+    // TODO: Support generalized duration.
+    Timeout(RingExecutor* executor, std::chrono::nanoseconds nanoseconds)
+      : RingOperation<Timeout>(executor)
+      , ts_{.tv_sec = 0, .tv_nsec = nanoseconds.count()} {}
+
+    void Prepare(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 0, 0); }
+
+    void await_resume() {
+        if (result != -ETIME && result != 0) {
+            LOG(FATAL) << "io_uring timeout: " << strerror(-result);
+        }
+    }
+
+    __kernel_timespec ts_;
+};
+
 struct Awaitable
   : public Continuation
   , public std::suspend_always {
@@ -40,5 +57,9 @@ Task<void> ScheduleOn(io_uring* src_ring, RingExecutor* dest_exr, FuncType func)
 }
 
 void SetupInitBufRing(io_uring* src_ring, std::vector<std::unique_ptr<RingExecutor>>& exrs);
+
+inline auto WaitFor(RingExecutor* exr, std::chrono::nanoseconds duration) {
+    return detail::Timeout(exr, duration);
+}
 
 } // namespace rdss

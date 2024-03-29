@@ -86,22 +86,6 @@ private:
     const bool use_direct_fd_ = false;
 };
 
-struct RingTimeout : public RingOperation<RingTimeout> {
-    // TODO: Support generalized duration.
-    RingTimeout(RingExecutor* executor, std::chrono::nanoseconds nanoseconds)
-      : RingOperation<RingTimeout>(executor)
-      , ts_{.tv_sec = 0, .tv_nsec = nanoseconds.count()} {}
-
-    void Prepare(io_uring_sqe* sqe) { io_uring_prep_timeout(sqe, &ts_, 0, 0); }
-
-    void await_resume() {
-        if (result != -ETIME && result != 0) {
-            LOG(FATAL) << "io_uring timeout: " << strerror(-result);
-        }
-    }
-
-    __kernel_timespec ts_;
-};
 
 struct RingConfig {
     size_t sq_entries = 4096;
@@ -163,8 +147,6 @@ public:
     Task<void> Schedule(FuncType func) {
         return Schedule(tls_ring, std::move(func));
     }
-
-    auto Timeout(std::chrono::nanoseconds nanoseconds) { return RingTimeout(this, nanoseconds); }
 
     // Registers 'fd' into the executor. Returns the index into the registered fd if successful,
     // returns -1 otherwise.

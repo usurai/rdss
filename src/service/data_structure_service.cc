@@ -2,6 +2,7 @@
 
 #include "base/config.h"
 #include "runtime/ring_executor.h"
+#include "runtime/util.h"
 
 #include <glog/logging.h>
 
@@ -41,7 +42,7 @@ Task<void> DataStructureService::Cron() {
     const auto interval_in_millisecond = 1000 / config_->hz;
     size_t cnt{0};
     while (active_.load(std::memory_order_relaxed)) {
-        co_await tls_exr->Timeout(std::chrono::milliseconds(1));
+        co_await WaitFor(tls_exr, std::chrono::milliseconds(1));
         UpdateCommandTime();
         if (++cnt < interval_in_millisecond) {
             continue;
