@@ -1,5 +1,5 @@
 #include "io/promise.h"
-#include "runtime/ring_executor.h"
+#include "runtime/util.h"
 
 #include <benchmark/benchmark.h>
 

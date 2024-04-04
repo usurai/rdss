@@ -56,37 +56,7 @@ inline thread_local io_uring* tls_ring = nullptr;
 /// corresponding RingExecutor.
 inline thread_local RingExecutor* tls_exr = nullptr;
 
-template<typename Implementation>
-struct RingOperation
-  : public Continuation
-  , public std::suspend_always {
-    explicit RingOperation(RingExecutor* executor, bool use_direct_fd = false)
-      : executor_(executor)
-      , use_direct_fd_(use_direct_fd) {}
-
-    void await_suspend(std::coroutine_handle<> h);
-
-    auto await_resume() { return result; }
-
-    void Prepare(io_uring_sqe* sqe) {
-        Impl()->Prepare(sqe);
-        if (use_direct_fd_) {
-            sqe->flags |= IOSQE_FIXED_FILE;
-        }
-    }
-
-    RingExecutor* GetExecutor() { return executor_; }
-
-private:
-    Implementation* Impl() { return static_cast<Implementation*>(this); }
-
-    const Implementation* Impl() const { return static_cast<const Implementation*>(this); }
-
-    RingExecutor* executor_;
-    const bool use_direct_fd_ = false;
-};
-
-
+// TODO
 struct RingConfig {
     size_t sq_entries = 4096;
     size_t cq_entries = 4096 * 16;
@@ -209,46 +179,6 @@ void RingExecutor::Initiate(Operation* operation) {
 
     operation->Prepare(sqe);
     io_uring_sqe_set_data64(sqe, reinterpret_cast<uint64_t>(operation));
-}
-
-template<typename Implementation>
-void RingOperation<Implementation>::await_suspend(std::coroutine_handle<> h) {
-    handle = std::move(h);
-    executor_->Initiate(this);
-}
-
-/// Transfers the execution of the calling coroutine from executor 'from' to 'to'. Underlying, a
-/// ring message with the continuation of the calling coroutine set as user_data is sent from ring
-/// of 'from' to the ring of 'to'.
-inline auto Transfer(RingExecutor* src, RingExecutor* dest) {
-    struct RingTransfer : public RingOperation<RingTransfer> {
-        RingTransfer(RingExecutor* src, RingExecutor* dest)
-          : RingOperation<RingTransfer>(src)
-          , dest(dest) {}
-
-        void Prepare(io_uring_sqe* sqe) {
-            io_uring_prep_msg_ring(sqe, dest->RingFD(), 0, reinterpret_cast<uint64_t>(this), 0);
-            io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
-        }
-
-        RingExecutor* dest;
-    };
-    return RingTransfer(src, dest);
-}
-
-/// Resumes the execution from non-executor thread to executor 're'. This function should be called
-/// before 're' gettings active because underlying this works by submitting a nop with user_data set
-/// as Continuation of the coroutine. If 're' is active, data race happens.
-inline auto ResumeOn(RingExecutor* re) {
-    struct RingResume : public RingOperation<RingResume> {
-        RingResume(RingExecutor* re)
-          : RingOperation<RingResume>(re) {}
-
-        void Prepare(io_uring_sqe* sqe) { io_uring_prep_nop(sqe); }
-
-        RingExecutor* re;
-    };
-    return RingResume(re);
 }
 
 template<typename FuncType>

@@ -1,5 +1,5 @@
 #include "io/promise.h"
-#include "ring_executor.h"
+#include "runtime/util.h"
 
 #include <glog/logging.h>
 

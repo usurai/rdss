@@ -1,7 +1,7 @@
 #pragma once
 
 #include "base/buffer.h"
-#include "runtime/ring_executor.h"
+#include "runtime/ring_operation.h"
 #include "sys/system_error.h"
 
 namespace rdss::detail {

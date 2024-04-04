@@ -4,7 +4,7 @@
 #include "client_manager.h"
 #include "constants.h"
 #include "resp/replier.h"
-#include "runtime/ring_executor.h"
+#include "runtime/util.h"
 #include "service/data_structure_service.h"
 
 #include <glog/logging.h>

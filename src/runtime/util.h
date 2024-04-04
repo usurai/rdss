@@ -1,7 +1,6 @@
 #pragma once
 
-#include "io/promise.h"
-#include "ring_executor.h"
+#include "runtime/ring_operation.h"
 
 namespace rdss::detail {
 
@@ -60,6 +59,40 @@ void SetupInitBufRing(io_uring* src_ring, std::vector<std::unique_ptr<RingExecut
 
 inline auto WaitFor(RingExecutor* exr, std::chrono::nanoseconds duration) {
     return detail::Timeout(exr, duration);
+}
+
+/// Transfers the execution of the calling coroutine from executor 'from' to 'to'. Underlying, a
+/// ring message with the continuation of the calling coroutine set as user_data is sent from ring
+/// of 'from' to the ring of 'to'.
+inline auto Transfer(RingExecutor* src, RingExecutor* dest) {
+    struct RingTransfer : public RingOperation<RingTransfer> {
+        RingTransfer(RingExecutor* src, RingExecutor* dest)
+          : RingOperation<RingTransfer>(src)
+          , dest(dest) {}
+
+        void Prepare(io_uring_sqe* sqe) {
+            io_uring_prep_msg_ring(sqe, dest->RingFD(), 0, reinterpret_cast<uint64_t>(this), 0);
+            io_uring_sqe_set_flags(sqe, IOSQE_CQE_SKIP_SUCCESS);
+        }
+
+        RingExecutor* dest;
+    };
+    return RingTransfer(src, dest);
+}
+
+/// Resumes the execution from non-executor thread to executor 're'. This function should be called
+/// before 're' gettings active because underlying this works by submitting a nop with user_data set
+/// as Continuation of the coroutine. If 're' is active, data race happens.
+inline auto ResumeOn(RingExecutor* re) {
+    struct RingResume : public RingOperation<RingResume> {
+        RingResume(RingExecutor* re)
+          : RingOperation<RingResume>(re) {}
+
+        void Prepare(io_uring_sqe* sqe) { io_uring_prep_nop(sqe); }
+
+        RingExecutor* re;
+    };
+    return RingResume(re);
 }
 
 } // namespace rdss
