@@ -32,7 +32,7 @@ void Server::Setup() {
     tls_ring = &ring_;
 
     if (config_.use_ring_buffer) {
-        SetupInitBufRing(&ring_, client_executors_);
+        SetupInitBufRing(client_executors_);
     }
 }
 

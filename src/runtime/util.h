@@ -55,7 +55,8 @@ Task<void> ScheduleOn(io_uring* src_ring, RingExecutor* dest_exr, FuncType func)
     func();
 }
 
-void SetupInitBufRing(io_uring* src_ring, std::vector<std::unique_ptr<RingExecutor>>& exrs);
+/// Sets up 'exrs' to init buffer rings. Blocking waits all of them to finish setup before return.
+void SetupInitBufRing(std::vector<std::unique_ptr<RingExecutor>>& exrs);
 
 inline auto WaitFor(RingExecutor* exr, std::chrono::nanoseconds duration) {
     return detail::Timeout(exr, duration);

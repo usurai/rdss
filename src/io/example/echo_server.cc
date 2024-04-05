@@ -127,9 +127,10 @@ public:
         if (ret) {
             LOG(FATAL) << "io_uring_queue_init:" << strerror(-ret);
         }
+        tls_ring = &src_ring;
 
         if (use_buf_recv_) {
-            SetupInitBufRing(&src_ring, io_executors_);
+            SetupInitBufRing(io_executors_);
         }
 
         ScheduleOn(&src_ring, io_executors_[0].get(), [this, exr = io_executors_[0].get()]() {
