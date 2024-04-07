@@ -92,8 +92,8 @@ static void BenchSharded(benchmark::State& s) {
         config.sqpoll = sqpoll;
         config.wait_batch_size = batch_size;
 
-        RingExecutor main(0, "main", config);
-        RingExecutor service_executor(1, "bench-service", config);
+        RingExecutor main("main", config);
+        RingExecutor service_executor("bench-service", config, 1);
         auto client_executors = RingExecutor::Create(
           num_client_executors,
           2,

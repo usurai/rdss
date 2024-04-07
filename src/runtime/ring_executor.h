@@ -45,6 +45,7 @@ struct RingTransfer
 
 namespace rdss {
 
+// Forward declaration for 'tls_exr'.
 class RingExecutor;
 
 /// Thread-local ring for sending ring message to other executors.
@@ -67,14 +68,49 @@ struct RingConfig {
     bool register_ring_fd = true;
 };
 
+/// The io_uring-based executor offers versatile functionality for executing CPU-bound tasks or
+/// handling I/O operations efficiently using its underlying ring structure.
+///
+/// To initiate a task on
+/// the executor, one typically employs the `Schedule()` function. This function requires the
+/// pointer to an io_uring, referred to as `src_ring`, along with a callable representing the task.
+/// `Schedule()` utilizes io_uring's ring message mechanism to communicate between rings, and
+/// 'src_ring' is used to send ring message. Often, communication occurs between executors, with the
+/// caller of `Schedule()` being another executor. In such cases, a variant of `Schedule()` is
+/// utilized, accepting only the callable as a parameter. This variant utilizes a thread-local
+/// `tls_ring`, set as the caller executor's ring during its construction, for ring message
+/// transmission. Additionally, `Schedule()` can be invoked within the executor's thread itself,
+/// resulting in the inline execution of the callable.
+///
+/// For initiating I/O tasks within the executor, the `Initiate()` API is employed.
+/// `Initiate()` is a function template that takes an `Operation`, meeting two criteria:
+/// 1. It is derived from 'Continuation' and suspends its coroutine execution, awaiting the async
+/// I/O result via Continuation's `coroutine_handle`.
+/// 2. It can describe the desired I/O operation by providing a `Prepare()` function, which
+/// configures an `io_uring_sqe` for submission to the io_uring.
+/// Here's how `Initiate()` operates:
+/// 1. Upon invocation, the executor obtains an SQE from its ring and passes it to the `Prepare()`
+/// function of the `Operation`, detailing the intended action.
+/// 2. The executor sets the address of the `Operation` as the SQE's private data and submits it to
+/// the ring.
+/// 3. Upon completion of the task, a CQE (Completion Queue Event) is generated and subsequently
+/// processed by the executor.
+/// 4. The executor retrieves the associated `Operation` using private data, sets the CQE's result
+/// and flags to the `Continuation`, and invokes the `coroutine_handle` to resume the suspended
+/// execution.
+///
+/// It's important to note that there is no external synchronization during SQE submission, and only
+/// the executor's worker thread can submit to the ring. Therefore, `Initiate()` should only be
+/// called within the executor's worker thread. A typical approach involves using `Schedule()` to
+/// execute the function responsible for I/O submission on the executor, such as servicing a TCP
+/// connection.
 class RingExecutor {
 public:
-    /// 'id' is used as CPU id when setting CPU affinity. If not specified(equals to unsigned long
-    /// max), CPU affinity of the worker thread will not be set.
+    /// 'id' is used to set CPU affinity of the worker thread.
     RingExecutor(
-      size_t id = std::numeric_limits<size_t>::max(),
       std::string name = "",
-      RingConfig config = RingConfig{});
+      RingConfig config = RingConfig{},
+      std::optional<size_t> id = std::nullopt);
 
     RingExecutor(const RingExecutor&) = delete;
     RingExecutor(RingExecutor&&) = delete;
@@ -83,14 +119,19 @@ public:
 
     ~RingExecutor();
 
+    /// Factory method to create an executor with Server's config.
     static std::unique_ptr<RingExecutor> Create(size_t id, std::string name, const Config& config);
 
+    /// Factory method to create 'n' RingExecutors, with an increasing 'id' starting at 'start_id'.
+    /// The name of executors will be 'name_prefix' + 'id'.
     static std::vector<std::unique_ptr<RingExecutor>>
     Create(size_t n, size_t start_id, std::string name_prefix, const Config& config);
 
     io_uring* Ring() { return &ring_; }
+
     int RingFD() const { return fd_; }
 
+    // TODO
     /// To stop the executor, one needs to first call 'Deactivate()', which sets 'active_' flag of
     /// executor to false and then sends a ring msg with user_data set as 0 to wake the worker
     /// thread of the executor. This will terminate the worker thread. After that, one needs to call
@@ -118,7 +159,7 @@ public:
         return Schedule(tls_ring, std::move(func));
     }
 
-    // Registers 'fd' into the executor. Returns the index into the registered fd if successful,
+    // Registers 'fd' with the executor's ring. Returns the index into the registered fd if successful,
     // returns -1 otherwise.
     int RegisterFd(int fd);
 

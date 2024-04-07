@@ -8,7 +8,7 @@
 
 namespace rdss {
 
-RingExecutor::RingExecutor(size_t id, std::string name, RingConfig config)
+RingExecutor::RingExecutor(std::string name, RingConfig config, std::optional<size_t> id)
   : name_(std::move(name))
   , config_(std::move(config)) {
     std::promise<void> promise;
@@ -17,10 +17,10 @@ RingExecutor::RingExecutor(size_t id, std::string name, RingConfig config)
     thread_ = std::thread([this, &promise, cpu = id]() {
         // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
         // only CPU i as set.
-        if (cpu != std::numeric_limits<size_t>::max()) {
+        if (cpu.has_value()) {
             cpu_set_t cpuset;
             CPU_ZERO(&cpuset);
-            CPU_SET(cpu, &cpuset);
+            CPU_SET(cpu.value(), &cpuset);
             int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
             if (rc != 0) {
                 LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
@@ -103,7 +103,7 @@ RingExecutor::Create(size_t id, std::string name, const Config& config) {
       .submit_batch_size = config.submit_batch_size,
       .wait_batch_size = config.wait_batch_size,
     };
-    return std::make_unique<RingExecutor>(id, std::move(name), std::move(rc));
+    return std::make_unique<RingExecutor>(std::move(name), std::move(rc), id);
 }
 
 // static
