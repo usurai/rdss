@@ -92,7 +92,7 @@ public:
 
     void SetUseBufRecv() { use_buf_recv_ = true; }
 
-    Task<void> AcceptLoop(RingExecutor* this_exr) {
+    Task<void> AcceptLoop() {
         size_t ce_index{0};
         while (true) {
             auto [error, conn] = co_await listener_->Accept();
@@ -112,9 +112,9 @@ public:
             ce_index = (ce_index + 1) % io_executors_.size();
 
             if (use_buf_recv_) {
-                RingBufferEcho(this_exr, conn, exr, connections_);
+                RingBufferEcho(tls_exr, conn, exr, connections_);
             } else {
-                Echo(this_exr, conn, exr, connections_);
+                Echo(tls_exr, conn, exr, connections_);
             }
         }
         LOG(INFO) << "Exiting accept loop.";
@@ -132,10 +132,7 @@ public:
         if (use_buf_recv_) {
             SetupInitBufRing(io_executors_);
         }
-
-        ScheduleOn(&src_ring, io_executors_[0].get(), [this, exr = io_executors_[0].get()]() {
-            this->AcceptLoop(exr);
-        });
+        io_executors_[0]->Schedule([this]() { this->AcceptLoop(); });
 
         std::promise<void> p;
         p.get_future().wait();
