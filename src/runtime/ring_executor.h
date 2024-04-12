@@ -19,6 +19,8 @@ namespace rdss::detail {
 struct RingTransfer
   : public Continuation
   , public std::suspend_always {
+    bool await_ready() const { return no_transfer; }
+
     void await_suspend(std::coroutine_handle<> h) {
         handle = std::move(h);
         // TODO: GetSqe()
@@ -39,6 +41,7 @@ struct RingTransfer
     io_uring* ring;
     int target_fd;
     bool submit;
+    bool no_transfer{false};
 };
 
 } // namespace rdss::detail
@@ -159,8 +162,8 @@ public:
         return Schedule(tls_ring, std::move(func));
     }
 
-    // Registers 'fd' with the executor's ring. Returns the index into the registered fd if successful,
-    // returns -1 otherwise.
+    // Registers 'fd' with the executor's ring. Returns the index into the registered fd if
+    // successful, returns -1 otherwise.
     int RegisterFd(int fd);
 
     void UnregisterFd(int fd_slot_index);
