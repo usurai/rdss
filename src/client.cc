@@ -82,10 +82,9 @@ Task<void> Client::Process(RingExecutor* dss_executor) {
             break;
         case ParserState::kDone:
             assert(num_strings != 0);
-            // TODO: Add new Transfer that doesn't need to specify src executor. Like resume_on.
-            co_await Transfer(conn_->GetExecutor(), dss_executor);
+            co_await ResumeOn(dss_executor);
             service_->Invoke(std::span<StringView>(arguments_.begin(), num_strings), query_result_);
-            co_await Transfer(dss_executor, conn_->GetExecutor());
+            co_await ResumeOn(conn_->GetExecutor());
             break;
         }
         conn_->PutBufferView(std::move(buffer_view));

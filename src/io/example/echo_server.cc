@@ -15,9 +15,7 @@ Task<void> RingBufferEcho(
   Connection* conn_ptr,
   RingExecutor* exr,
   std::atomic<size_t>& connections) {
-    if (src_exr != exr) {
-        co_await Transfer(src_exr, exr);
-    }
+    co_await ResumeOn(exr);
     conn_ptr->Setup(exr, false);
 
     std::unique_ptr<Connection> conn(conn_ptr);
@@ -50,9 +48,7 @@ Task<void> Echo(
   Connection* conn_ptr,
   RingExecutor* exr,
   std::atomic<size_t>& connections) {
-    if (src_exr != exr) {
-        co_await Transfer(src_exr, exr);
-    }
+    co_await ResumeOn(exr);
     conn_ptr->Setup(exr, false);
 
     std::unique_ptr<Connection> conn(conn_ptr);

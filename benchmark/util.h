@@ -58,14 +58,14 @@ Task<void> ShardTask(
   std::atomic<size_t>& remaining_shards,
   std::promise<void>& finish_promise) {
     auto* client_executor = client_executors[shard_index].get();
-    co_await Transfer(main_executor, client_executor);
+    co_await ResumeOn(client_executor);
 
     size_t cnt{0};
     const auto num_shards = client_executors.size();
     do {
-        co_await Transfer(client_executor, service_executor);
+        co_await ResumeOn(service_executor);
         service_func(num_shards, shard_index, cnt);
-        co_await Transfer(service_executor, client_executor);
+        co_await ResumeOn(client_executor);
     } while (++cnt < repeat);
 
     if (--shard_remaining_tasks != 0) {
@@ -93,6 +93,7 @@ static void BenchSharded(benchmark::State& s) {
         config.wait_batch_size = batch_size;
 
         RingExecutor main("main", config);
+        tls_exr = &main;
         RingExecutor service_executor("bench-service", config, 1);
         auto client_executors = RingExecutor::Create(
           num_client_executors,
