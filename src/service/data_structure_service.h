@@ -49,11 +49,11 @@ public:
 
     void UpdateCommandTime() { command_time_snapshot_ = clock_->Now(); }
 
-    MTSHashTable* DataTable() { return data_ht_.get(); }
+    MTSHashTable* DataTable() { return &data_ht_; }
 
-    ExpireHashTable* ExpireTable() { return expire_ht_.get(); }
+    ExpireHashTable* ExpireTable() { return &expire_ht_; }
 
-    /// Find and return the entry of 'key' if it's valid. Expire the key if it's stale.
+    /// Finds and returns the entry of 'key' if it's valid. Expire the key if it's stale.
     MTSHashTable::EntryPointer FindOrExpire(std::string_view key);
 
     enum class SetMode {
@@ -64,18 +64,18 @@ public:
 
     enum class SetStatus { kNoOp, kInserted, kUpdated };
 
-    /// Set 'key' 'value' pair in data table with respect to 'set_mode'. Return the result of the
-    /// operation, the entry of 'key', and if 'get' is true and 'key' exists, return the old value
+    /// Sets 'key' 'value' pair in data table with respect to 'set_mode'. Returns the result of the
+    /// operation, the entry of 'key', and if 'get' is true and 'key' exists, returns the old value
     /// of 'key'.
     std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr>
     SetData(std::string_view key, std::string_view value, SetMode set_mode, bool get);
 
-    /// Erase key in both data and expire table.
+    /// Erases key in both data and expire table.
     void EraseKey(std::string_view key);
 
     auto GetLRUClock() const { return evictor_.GetLRUClock(); }
 
-    /// Try rehash data / expiry table for 'time_limit' duration if they are rehashing. This is
+    /// Tries rehash data / expiry table for 'time_limit' duration if they are rehashing. This is
     /// called at cron.
     void IncrementalRehashing(std::chrono::steady_clock::duration time_limit);
 
@@ -103,8 +103,8 @@ private:
     std::promise<void> shutdown_promise_;
     bool get_future_called_{false};
     CommandDictionary commands_;
-    std::unique_ptr<MTSHashTable> data_ht_;
-    std::unique_ptr<ExpireHashTable> expire_ht_;
+    MTSHashTable data_ht_;
+    ExpireHashTable expire_ht_;
     EvictionStrategy evictor_;
     ExpireStrategy expirer_;
     TimePoint command_time_snapshot_;

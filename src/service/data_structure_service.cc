@@ -16,8 +16,6 @@ DataStructureService::DataStructureService(Config* config, Server* server, Clock
   , server_(server)
   , using_external_clock_(clock != nullptr)
   , clock_(using_external_clock_ ? clock : new Clock(true))
-  , data_ht_(new MTSHashTable())
-  , expire_ht_(new ExpireHashTable())
   , evictor_(this)
   , expirer_(this) {}
 
@@ -81,30 +79,30 @@ void DataStructureService::Invoke(Command::CommandStrings command_strings, Resul
 }
 
 MTSHashTable::EntryPointer DataStructureService::FindOrExpire(std::string_view key) {
-    auto entry = data_ht_->Find(key);
+    auto entry = data_ht_.Find(key);
     if (entry == nullptr) {
         return nullptr;
     }
 
     // TODO: Add a FindEntryAndProceeding to save an additional Erase call on expired.
-    auto* expire_entry = expire_ht_->Find(key);
+    auto* expire_entry = expire_ht_.Find(key);
     const auto expire_found = (expire_entry != nullptr);
     if (!expire_found || GetCommandTimeSnapshot() < expire_entry->value) {
         return entry;
     }
 
-    data_ht_->Erase(key);
+    data_ht_.Erase(key);
     if (expire_found) {
-        expire_ht_->Erase(key);
+        expire_ht_.Erase(key);
     }
     return nullptr;
 }
 
 void DataStructureService::EraseKey(std::string_view key) {
-    if (!data_ht_->Erase(key)) {
+    if (!data_ht_.Erase(key)) {
         return;
     }
-    expire_ht_->Erase(key);
+    expire_ht_.Erase(key);
 }
 
 std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::SetData(
@@ -117,13 +115,13 @@ std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::
     case SetMode::kRegular: {
         bool exists{false};
         if (!get) {
-            auto upsert_result = data_ht_->Upsert(key, CreateMTSPtr(value));
+            auto upsert_result = data_ht_.Upsert(key, CreateMTSPtr(value));
             set_entry = upsert_result.first;
             exists = upsert_result.second;
         } else {
-            auto [entry, exists] = data_ht_->FindOrCreate(key, true);
+            auto [entry, exists] = data_ht_.FindOrCreate(key, true);
             if (exists) {
-                auto expire_entry = expire_ht_->Find(key);
+                auto expire_entry = expire_ht_.Find(key);
                 if (expire_entry == nullptr || expire_entry->value > GetCommandTimeSnapshot()) {
                     old_value = std::move(entry->value);
                     exists = true;
@@ -136,31 +134,31 @@ std::tuple<SetStatus, MTSHashTable::EntryPointer, MTSPtr> DataStructureService::
         break;
     }
     case SetMode::kNX: {
-        auto data_entry = data_ht_->Find(key);
+        auto data_entry = data_ht_.Find(key);
         if (data_entry != nullptr) {
-            auto expire_entry = expire_ht_->Find(key);
+            auto expire_entry = expire_ht_.Find(key);
             if (expire_entry != nullptr && expire_entry->value <= GetCommandTimeSnapshot()) {
                 data_entry->value = CreateMTSPtr(value);
-                expire_ht_->Erase(key);
+                expire_ht_.Erase(key);
                 set_entry = data_entry;
                 set_status = SetStatus::kInserted;
             }
         } else {
-            auto [entry, _] = data_ht_->Insert(key, CreateMTSPtr(value));
+            auto [entry, _] = data_ht_.Insert(key, CreateMTSPtr(value));
             set_entry = entry;
             set_status = SetStatus::kInserted;
         }
         break;
     }
     case SetMode::kXX: {
-        auto data_entry = data_ht_->Find(key);
+        auto data_entry = data_ht_.Find(key);
         if (data_entry == nullptr) {
             break;
         }
-        auto expire_entry = expire_ht_->Find(key);
+        auto expire_entry = expire_ht_.Find(key);
         if (expire_entry != nullptr && expire_entry->value <= GetCommandTimeSnapshot()) {
-            data_ht_->Erase(key);
-            expire_ht_->Erase(key);
+            data_ht_.Erase(key);
+            expire_ht_.Erase(key);
             break;
         }
         if (get) {
