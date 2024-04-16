@@ -44,7 +44,7 @@ private:
 
     ParserState state_ = ParserState::kInit;
     Buffer* buffer_;
-    int32_t args_ = 0;
+    size_t args_ = 0;
     size_t cur_arg_idx_ = 0;
 };
 

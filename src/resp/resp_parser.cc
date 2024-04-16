@@ -151,11 +151,13 @@ size_t MultiBulkParser::ParseArgNum(StringView src) {
     if (crlf == Buffer::View::npos) {
         return cursor;
     }
-    auto [_, ec] = std::from_chars(src.data() + 1, src.data() + crlf, args_);
-    if (ec != std::errc() || args_ < 0) {
+    int32_t parsed_args;
+    auto [_, ec] = std::from_chars(src.data() + 1, src.data() + crlf, parsed_args);
+    if (ec != std::errc() || parsed_args < 0) {
         state_ = ParserState::kError;
         return cursor;
     }
+    args_ = static_cast<size_t>(parsed_args);
     VLOG(2) << "args:" << args_;
     state_ = ParserState::kParsing;
     cursor = crlf + 2;
