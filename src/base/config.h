@@ -12,7 +12,7 @@ MaxmemoryPolicy MaxmemoryPolicyStrToEnum(const std::string& str);
 std::string MaxmemoryPolicyEnumToStr(MaxmemoryPolicy policy);
 
 struct Config {
-    uint32_t port = 6379;
+    uint16_t port = 6379U;
     uint32_t hz = 10;
     uint32_t maxclients = 10000;
     uint64_t maxmemory = 0;
@@ -23,12 +23,12 @@ struct Config {
     uint32_t active_expire_acceptable_stale_percent = 10;
     uint32_t active_expire_keys_per_loop = 20;
 
-    size_t client_executors = 2;
+    uint32_t client_executors = 2;
     bool sqpoll = false;
-    size_t max_direct_fds_per_exr = 4096;
+    uint32_t max_direct_fds_per_exr = 4096;
     bool use_ring_buffer = true;
-    size_t submit_batch_size = 32;
-    size_t wait_batch_size = 1;
+    uint32_t submit_batch_size = 32;
+    uint32_t wait_batch_size = 1;
 
     void ReadFromFile(const std::string& file_name);
 

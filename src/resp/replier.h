@@ -9,7 +9,7 @@
 namespace rdss {
 
 class Buffer;
-class Result;
+struct Result;
 
 bool NeedsGather(Result& result);
 

@@ -62,7 +62,7 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, std::optional<si
                 LOG(FATAL) << "io_uring_register_files_sparse:" << strerror(-ret);
             }
             fd_slot_indices_.reserve(config_.max_direct_descriptors);
-            for (size_t i = 0; i < config_.max_direct_descriptors; ++i) {
+            for (uint32_t i = 0; i < config_.max_direct_descriptors; ++i) {
                 fd_slot_indices_.push_back(i);
             }
         }
@@ -154,8 +154,8 @@ void RingExecutor::Deactivate(io_uring* ring) {
 void RingExecutor::EventLoop() {
     LOG(INFO) << gettid() << " ring:" << tls_ring << " exr:" << tls_exr;
     __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
-    const auto wait_batch = std::max(1UL, config_.wait_batch_size);
-    const auto submit_batch = std::max(1UL, config_.submit_batch_size);
+    const auto wait_batch = std::max(1U, config_.wait_batch_size);
+    const auto submit_batch = std::max(1U, config_.submit_batch_size);
     LOG(INFO) << name_ << " submit_batch: " << submit_batch << " wait_batch: " << wait_batch;
 
     io_uring_cqe* cqe;
@@ -207,20 +207,24 @@ int RingExecutor::RegisterFd(int fd) {
     if (ret != 1) {
         LOG(FATAL) << "io_uring_register_files_update:" << strerror(-ret);
     }
-    return index;
+    return static_cast<int>(index);
 }
 
-void RingExecutor::UnregisterFd(int fd_slot_index) { fd_slot_indices_.push_back(fd_slot_index); }
+void RingExecutor::UnregisterFd(int fd_slot_index) {
+    assert(fd_slot_index >= 0);
+    fd_slot_indices_.push_back(static_cast<uint32_t>(fd_slot_index));
+}
 
 void RingExecutor::InitBufRing() {
     // All exr use 0 as group id.
-    const auto buf_group_id = 0;
-    const size_t buf_size = ((config_.max_direct_descriptors == 0) ? 1024
-                                                                   : config_.max_direct_descriptors)
-                            * kIOGenericBufferSize;
+    const uint16_t buf_group_id = 0;
+    const uint32_t buf_size = ((config_.max_direct_descriptors == 0)
+                                 ? 1024
+                                 : config_.max_direct_descriptors)
+                              * kIOGenericBufferSize;
 
     assert(buf_size % buf_entry_size == 0);
-    buf_entries_ = buf_size / buf_entry_size;
+    buf_entries_ = static_cast<uint32_t>(buf_size / buf_entry_size);
     assert(buf_entries_ <= (1 << 15));
 
     // TODO: 1.alignment 2.mem tracking.
@@ -228,7 +232,7 @@ void RingExecutor::InitBufRing() {
     if (page_size < 0) {
         LOG(FATAL) << "sysconf(_SC_PAGESIZE)";
     }
-    if (posix_memalign(reinterpret_cast<void**>(&buf_), page_size, buf_size)) {
+    if (posix_memalign(reinterpret_cast<void**>(&buf_), static_cast<size_t>(page_size), buf_size)) {
         LOG(FATAL) << "posix_memalign";
     }
 
@@ -239,11 +243,17 @@ void RingExecutor::InitBufRing() {
     }
 
     char* ptr = buf_;
-    for (size_t i = 0; i < buf_entries_; ++i) {
-        io_uring_buf_ring_add(buf_ring_, ptr, buf_entry_size, i, buf_entries_ - 1, i);
+    for (uint32_t i = 0; i < buf_entries_; ++i) {
+        io_uring_buf_ring_add(
+          buf_ring_,
+          ptr,
+          buf_entry_size,
+          static_cast<uint16_t>(i),
+          static_cast<int32_t>(buf_entries_) - 1,
+          static_cast<int>(i));
         ptr += buf_entry_size;
     }
-    io_uring_buf_ring_advance(buf_ring_, buf_entries_);
+    io_uring_buf_ring_advance(buf_ring_, static_cast<int32_t>(buf_entries_));
     LOG(INFO) << name_ << " setups buffer ring of size " << buf_size << " with " << buf_entries_
               << " entries, each has size " << buf_entry_size;
 }
@@ -273,22 +283,19 @@ void RingExecutor::PutBufferView(RingExecutor::BufferView&& buffer_view) {
     if (buffer_view.separated_entry_id.has_value()) {
         start_entry_id = buffer_view.separated_entry_id.value();
     } else {
-        assert((buffer_view.view.data() - buf_) % buf_entry_size == 0);
-        start_entry_id = (buffer_view.view.data() - buf_) / buf_entry_size;
+        assert(buffer_view.view.data() >= buf_);
+        auto offset = buffer_view.view.data() - buf_;
+        assert(offset % buf_entry_size == 0);
+        start_entry_id = static_cast<uint32_t>(offset) / buf_entry_size;
     }
 
     auto remaining_length = buffer_view.view.length();
-    auto entry_id = start_entry_id;
-    size_t offset{0};
-    auto mask = io_uring_buf_ring_mask(buf_entries_);
+    uint16_t entry_id = static_cast<uint16_t>(start_entry_id);
+    int32_t offset{0};
+    const int32_t mask = static_cast<int32_t>(buf_entries_) - 1;
     while (remaining_length) {
         io_uring_buf_ring_add(
-          buf_ring_,
-          buf_ + entry_id * buf_entry_size,
-          buf_entry_size,
-          entry_id,
-          buf_entries_ - 1,
-          offset);
+          buf_ring_, buf_ + entry_id * buf_entry_size, buf_entry_size, entry_id, mask, offset);
         remaining_length -= (remaining_length < buf_entry_size) ? remaining_length : buf_entry_size;
         entry_id = (entry_id + 1) & (buf_entries_ - 1);
         ++offset;

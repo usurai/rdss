@@ -14,15 +14,15 @@ static const std::string kNilStr = "$-1\r\n"; // TODO: This is for RESP2, comple
 
 namespace detail {
 
-size_t IntToChars(int32_t val, Buffer::SinkType sink) {
+size_t IntToChars(auto val, Buffer::SinkType sink) {
     assert(sink.size() >= 13); // 13 is the most digits of int32_t + 2 (for CRLF).
 
     auto res = std::to_chars(sink.data(), sink.data() + sink.size(), val);
     assert(res.ec == std::errc{});
-    assert(res.ptr - sink.data() + 2 <= sink.size());
+    assert(res.ptr - sink.data() + 2 <= static_cast<int32_t>(sink.size()));
     *(res.ptr) = '\r';
     *(res.ptr + 1) = '\n';
-    return res.ptr + 2 - sink.data();
+    return static_cast<size_t>(res.ptr + 2 - sink.data());
 }
 
 size_t StrToIovecs(MTSPtr& str, Buffer::SinkType sink, std::vector<iovec>& iovecs) {
@@ -32,7 +32,7 @@ size_t StrToIovecs(MTSPtr& str, Buffer::SinkType sink, std::vector<iovec>& iovec
         return 0;
     }
     sink[0] = '$';
-    auto offset = IntToChars(str->size(), sink.subspan(1));
+    auto offset = IntToChars(static_cast<int32_t>(str->size()), sink.subspan(1));
     ++offset;
     iovecs.emplace_back(iovec{.iov_base = sink.data(), .iov_len = offset});
     iovecs.emplace_back(iovec{.iov_base = str->data(), .iov_len = str->size()});

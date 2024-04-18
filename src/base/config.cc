@@ -43,13 +43,13 @@ void Config::ReadFromFile(const std::string& file_name) {
 
     auto global_section = ini[""];
 
-    port = global_section["port"] | 6379;
+    port = static_cast<uint16_t>(global_section["port"] | 6379U);
 
-    hz = global_section["hz"] | 10;
+    hz = global_section["hz"] | 10U;
 
-    maxclients = global_section["maxclients"] | 10000;
-    if (maxclients == 0) {
-        maxclients = 10000;
+    maxclients = global_section["maxclients"] | 10000U;
+    if (maxclients == 0U) {
+        maxclients = 10000U;
     }
 
     maxmemory = global_section["maxmemory"] | maxmemory;
@@ -57,22 +57,22 @@ void Config::ReadFromFile(const std::string& file_name) {
     auto maxmemory_policy_str = global_section["maxmemory-policy"] | "noeviction";
     maxmemory_policy = MaxmemoryPolicyStrToEnum(maxmemory_policy_str);
 
-    maxmemory_samples = global_section["maxmemory-samples"] | 5;
+    maxmemory_samples = global_section["maxmemory-samples"] | 5U;
 
-    active_expire_cycle_time_percent = global_section["active_expire_cycle_time_percent"] | 25;
+    active_expire_cycle_time_percent = global_section["active_expire_cycle_time_percent"] | 25U;
     active_expire_acceptable_stale_percent
-      = global_section["active_expire_acceptable_stale_percent"] | 10;
-    active_expire_keys_per_loop = global_section["active_expire_keys_per_loop"] | 20;
+      = global_section["active_expire_acceptable_stale_percent"] | 10U;
+    active_expire_keys_per_loop = global_section["active_expire_keys_per_loop"] | 20U;
 
-    client_executors = global_section["client_executors"] | 2;
+    client_executors = global_section["client_executors"] | 2U;
     sqpoll = global_section["sqpoll"] | false;
-    max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096;
+    max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096U;
 
     use_ring_buffer = global_section["use_ring_buffer"] | true;
 
-    wait_batch_size = global_section["wait_batch_size"] | 1;
+    wait_batch_size = global_section["wait_batch_size"] | 1U;
 
-    submit_batch_size = global_section["submit_batch_size"] | 32;
+    submit_batch_size = global_section["submit_batch_size"] | 32U;
 }
 
 void Config::SanityCheck() {

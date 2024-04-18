@@ -26,8 +26,9 @@ struct Recv : public RingIO<Recv> {
     Recv(
       RingExecutor* executor,
       bool use_direct_fd,
-      int fd,                          /* fd index if using direct fd, true fd othersise */
-      std::optional<int> buffer_group, /* has value means using buffer ring, nullopt otherwise */
+      int fd, /* fd index if using direct fd, true fd othersise */
+      std::optional<uint16_t>
+        buffer_group, /* has value means using buffer ring, nullopt otherwise */
       Buffer* buffer)
       : RingIO(executor, use_direct_fd)
       , fd(fd)
@@ -62,7 +63,7 @@ struct Recv : public RingIO<Recv> {
             buffer->Produce(v.view);
             return {{}, v};
         }
-        buffer->Produce(result);
+        buffer->Produce(static_cast<size_t>(result));
         auto output = buffer->Source();
         return {{}, RingExecutor::BufferView{.view = output}};
     }
@@ -71,7 +72,7 @@ struct Recv : public RingIO<Recv> {
 
     bool use_direct_fd;
     int fd;
-    std::optional<int> buffer_group;
+    std::optional<uint16_t> buffer_group;
     Buffer* buffer;
 };
 
@@ -151,9 +152,9 @@ public:
     }
 
     // TODO: Remove this after echo_server can make use of Connection::Setup
-    auto BufRecv(int buf_group_id) {
+    auto BufRecv(uint16_t buf_group_id) {
         struct RingBufferRecv : public detail::RingIO<RingBufferRecv> {
-            RingBufferRecv(RingExecutor* executor, bool direct_fd, int fd, int buf_group_id)
+            RingBufferRecv(RingExecutor* executor, bool direct_fd, int fd, uint16_t buf_group_id)
               : RingIO<RingBufferRecv>(executor, direct_fd)
               , fd(fd)
               , buf_group_id(buf_group_id) {}
@@ -179,7 +180,7 @@ public:
             }
 
             int fd;
-            int buf_group_id;
+            uint16_t buf_group_id;
         };
 
         return (
@@ -214,7 +215,8 @@ public:
               , iovecs(iovecs) {}
 
             void Prepare(io_uring_sqe* sqe) {
-                io_uring_prep_writev(sqe, fd, iovecs.data(), iovecs.size(), 0);
+                io_uring_prep_writev(
+                  sqe, fd, iovecs.data(), static_cast<uint32_t>(iovecs.size()), 0);
             }
 
             int fd;

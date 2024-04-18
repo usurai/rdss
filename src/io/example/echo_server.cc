@@ -143,7 +143,6 @@ private:
 
 int main(int argc, char* argv[]) {
     google::InitGoogleLogging(argv[0]);
-    const auto non_flag_index = google::ParseCommandLineFlags(&argc, &argv, true);
     FLAGS_alsologtostderr = 1;
 
     if (argc < 2) {
@@ -154,7 +153,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const size_t num_io_executors = ((argc == 4) ? std::atoi(argv[3]) : 1);
+    const size_t num_io_executors = ((argc == 4) ? static_cast<size_t>(std::atol(argv[3])) : 1UL);
     EchoServer s(std::atoi(argv[1]), num_io_executors);
     if (argc >= 3 && argv[2][0] == '1') {
         s.SetUseBufRecv();

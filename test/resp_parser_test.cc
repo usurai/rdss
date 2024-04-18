@@ -195,7 +195,8 @@ TEST_F(RespParserTest, bufferExpansion) {
     arguments.reserve(num_argument);
 
     for (size_t i = 0; i < num_argument; ++i) {
-        arguments.push_back(GenRandomString(min_length + std::rand() % (max_length - min_length)));
+        arguments.push_back(GenRandomString(
+          min_length + static_cast<size_t>(std::rand()) % (max_length - min_length)));
         full_query += '$' + std::to_string(arguments.back().size()) + "\r\n" + arguments.back()
                       + "\r\n";
     }

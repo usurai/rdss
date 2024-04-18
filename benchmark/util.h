@@ -99,7 +99,7 @@ static void BenchSharded(benchmark::State& s) {
           num_client_executors,
           2,
           "cli_exr_",
-          Config{.sqpoll = sqpoll, .wait_batch_size = static_cast<size_t>(batch_size)});
+          Config{.sqpoll = sqpoll, .wait_batch_size = static_cast<uint32_t>(batch_size)});
         std::vector<size_t> remaining_tasks(num_client_executors, 0);
         const auto total_tasks = num_client_executors * tasks_per_client;
         for (size_t i = 0; i < num_client_executors; ++i) {

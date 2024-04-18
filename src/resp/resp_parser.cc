@@ -130,7 +130,7 @@ void MultiBulkParser::Reset() {
 
 void MultiBulkParser::BufferUpdate(const char* original, const char* updated, StringViews& result) {
     for (size_t i = 0; i < cur_arg_idx_; ++i) {
-        const size_t offset = result[i].data() - original;
+        const auto offset = result[i].data() - original;
         StringView new_sv(updated + offset, result[i].size());
         result[i].swap(new_sv);
     }

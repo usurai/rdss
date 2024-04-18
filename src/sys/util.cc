@@ -18,7 +18,7 @@ bool SetNofileLimit(uint32_t limit) {
     LOG(INFO) << "NOFILE rlimit: " << rlim.rlim_cur << ' ' << rlim.rlim_max;
 
     rlim.rlim_cur = limit;
-    rlim.rlim_max = std::max<uint32_t>(rlim.rlim_max, limit);
+    rlim.rlim_max = std::max<uint64_t>(rlim.rlim_max, limit);
     if ((ret = setrlimit(RLIMIT_NOFILE, &rlim)) != 0) {
         LOG(ERROR) << "setrlimit: " << strerror(errno);
         return false;

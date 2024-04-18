@@ -200,9 +200,9 @@ public:
 
         EntryPointer bucket{nullptr};
         while (bucket == nullptr) {
-            const auto rand = std::rand();
-            const int32_t bucket_index = rand % buckets_[0].size();
-            if (bucket_index >= rehash_index_) {
+            const size_t rand = static_cast<size_t>(std::rand());
+            const size_t bucket_index = rand % buckets_[0].size();
+            if (static_cast<int32_t>(bucket_index) >= rehash_index_) {
                 bucket = buckets_[0][bucket_index];
             } else {
                 assert(IsRehashing());
@@ -277,14 +277,14 @@ public:
     /// to the first.
     bool RehashSome(size_t buckets_to_rehash) {
         assert(IsRehashing());
-        assert(rehash_index_ != buckets_[0].size());
+        assert(rehash_index_ != static_cast<int32_t>(buckets_[0].size()));
         assert(buckets_to_rehash != 0);
 
         auto empty_buckets_allowed = buckets_to_rehash * 10;
         while (true) {
             const auto moved = RehashBucket(buckets_[0].begin() + rehash_index_);
 
-            if (++rehash_index_ == buckets_[0].size()) {
+            if (++rehash_index_ == static_cast<int32_t>(buckets_[0].size())) {
                 rehash_index_ = -1;
                 buckets_[0] = std::move(buckets_[1]);
                 return true;
@@ -331,7 +331,7 @@ private:
             return buckets_[0].begin() + index;
         }
         assert(index < static_cast<int32_t>(buckets_[1].size()));
-        return buckets_[1].begin() + (hash % buckets_[1].size());
+        return buckets_[1].begin() + static_cast<int32_t>(hash % buckets_[1].size());
     }
 
     EntryPointer FindEntryInBucket(BucketVector::iterator bucket, std::string_view key) {
@@ -356,7 +356,7 @@ private:
             ++bucket_length;
             entry = entry->next;
         }
-        const size_t target_entry = rand() % bucket_length;
+        const size_t target_entry = static_cast<size_t>(rand()) % bucket_length;
         entry = bucket;
         for (size_t i = 0; i < target_entry; ++i) {
             entry = entry->next;
@@ -431,8 +431,9 @@ private:
         size_t num_rehashed{0};
         while (entry) {
             auto* next_entry = entry->next;
-            const auto hash = Hash(entry->GetKey()->StringView());
-            auto target_bucket = buckets_[1].begin() + (hash % buckets_[1].size());
+            const uint64_t hash = Hash(entry->GetKey()->StringView());
+            auto target_bucket = buckets_[1].begin()
+                                 + static_cast<int32_t>(hash % buckets_[1].size());
             entry->next = *target_bucket;
             *target_bucket = entry;
             entry = next_entry;

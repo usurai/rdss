@@ -62,12 +62,12 @@ inline thread_local RingExecutor* tls_exr = nullptr;
 
 // TODO
 struct RingConfig {
-    size_t sq_entries = 4096;
-    size_t cq_entries = 4096 * 16;
+    uint32_t sq_entries = 4096U;
+    uint32_t cq_entries = 4096U * 16U;
     bool sqpoll = false;
-    size_t submit_batch_size = 32;
-    size_t wait_batch_size = 1;
-    size_t max_direct_descriptors = 4096;
+    uint32_t submit_batch_size = 32;
+    uint32_t wait_batch_size = 1;
+    uint32_t max_direct_descriptors = 4096U;
     bool register_ring_fd = true;
 };
 
@@ -196,13 +196,13 @@ private:
     io_uring ring_;
     int fd_;
     std::thread thread_;
-    std::vector<int> fd_slot_indices_;
+    std::vector<uint32_t> fd_slot_indices_;
 
     io_uring_buf_ring* buf_ring_{nullptr};
     char* buf_{nullptr};
     // TODO: 1. move somewhere 2. rename to kXXX
-    static constexpr size_t buf_entry_size = 2048 * 2;
-    size_t buf_entries_{0};
+    static constexpr uint32_t buf_entry_size = 2048 * 2;
+    uint32_t buf_entries_{0U};
     std::string concat_str_;
 };
 

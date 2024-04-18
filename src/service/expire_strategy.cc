@@ -12,7 +12,6 @@ ExpireStrategy::ExpireStrategy(DataStructureService* service)
   , keys_per_loop_(config_->active_expire_keys_per_loop) {}
 
 void ExpireStrategy::ActiveExpire() {
-    auto* data_ht = service_->DataTable();
     auto* expire_ht = service_->ExpireTable();
     const auto time_limit = std::chrono::steady_clock::duration{std::chrono::seconds{1}}
                             * config_->active_expire_cycle_time_percent / 100 / config_->hz;
@@ -33,8 +32,8 @@ void ExpireStrategy::ActiveExpire() {
             break;
         }
 
-        size_t sampled_this_iter{0};
-        size_t expired_this_iter{0};
+        uint32_t sampled_this_iter{0};
+        uint32_t expired_this_iter{0};
         while (sampled_this_iter < keys_to_sample) {
             bucket_index_ = expire_ht->TraverseBucket(
               bucket_index_,
@@ -68,7 +67,8 @@ void ExpireStrategy::ActiveExpire() {
         stats_.expired_stale_perc.store(
           static_cast<uint32_t>(expired_rate), std::memory_order_relaxed);
         const auto elapsed = std::chrono::steady_clock::now() - start_time;
-        stats_.elapsed_time.fetch_add(elapsed.count(), std::memory_order_relaxed);
+        stats_.elapsed_time.fetch_add(
+          static_cast<uint64_t>(elapsed.count()), std::memory_order_relaxed);
 
         VLOG(2) << "ActiveExpire loop | sampled:" << sampled_this_iter
                 << " expired:" << expired_this_iter << " expired rate:" << expired_rate

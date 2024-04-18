@@ -359,7 +359,7 @@ void SetRangeFunction(DataStructureService& service, Args args, Result& result) 
         }
     }
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    result.SetInt(entry->value->size());
+    result.SetInt(static_cast<int64_t>(entry->value->size()));
 }
 
 void StrlenFunction(DataStructureService& service, Args args, Result& result) {
@@ -373,7 +373,7 @@ void StrlenFunction(DataStructureService& service, Args args, Result& result) {
         result.SetInt(0);
         return;
     }
-    result.SetInt(entry->value->size());
+    result.SetInt(static_cast<int64_t>(entry->value->size()));
     entry->GetKey()->SetLRU(service.GetLRUClock());
 }
 
@@ -502,12 +502,13 @@ void GetRangeFunction(DataStructureService& service, Args args, Result& result) 
         return;
     }
 
-    auto transform_index = [size = entry->value->size()](int32_t index) {
+    auto transform_index =
+      [size = static_cast<int32_t>(entry->value->size())](int32_t index) -> size_t {
         if (index < 0) {
-            index = std::max<int32_t>(0, size + index);
+            index = std::max(0, size + index);
         }
-        index = std::min<int32_t>(size, index);
-        return index;
+        index = std::min(size, index);
+        return static_cast<size_t>(index);
     };
 
     const auto start_index = transform_index(start.value());
@@ -541,7 +542,7 @@ void AppendFunction(DataStructureService& service, Args args, Result& result) {
         entry->value->append(value);
     }
     entry->GetKey()->SetLRU(service.GetLRUClock());
-    result.SetInt(entry->value->size());
+    result.SetInt(static_cast<int64_t>(entry->value->size()));
 }
 
 void ExistsFunction(DataStructureService& service, Args args, Result& result) {

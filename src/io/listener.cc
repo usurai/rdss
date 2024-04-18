@@ -14,7 +14,7 @@ Listener::Listener(int listen_fd, RingExecutor* executor)
   , executor_(executor) {}
 
 std::unique_ptr<Listener> Listener::Create(int port, RingExecutor* executor) {
-    const auto fd = CreateListeningSocket(port);
+    const auto fd = CreateListeningSocket(static_cast<uint16_t>(port));
     if (fd == 0) {
         LOG(FATAL) << "Unable to create listener";
     }

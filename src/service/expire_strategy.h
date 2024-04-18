@@ -6,7 +6,7 @@
 namespace rdss {
 
 class DataStructureService;
-class Config;
+struct Config;
 
 struct ExpireStats {
     std::atomic<size_t> active_expired_keys{0};

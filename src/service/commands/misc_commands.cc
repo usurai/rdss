@@ -2,9 +2,9 @@
 
 #include "base/memory.h"
 #include "client_manager.h"
+#include "server.h"
 #include "service/command.h"
 #include "service/data_structure_service.h"
-#include "server.h"
 
 #include <sys/resource.h>
 #include <sys/sysinfo.h>
@@ -49,7 +49,7 @@ void CollectClientsInfo(DataStructureService& service, std::stringstream& stream
            << client_manager->Stats().max_output_buffer.load(std::memory_order_relaxed) << "\n\n";
 }
 
-void CollectMemoryInfo(DataStructureService& service, std::stringstream& stream) {
+void CollectMemoryInfo(DataStructureService&, std::stringstream& stream) {
     stream << "# Memory\n";
     stream << "used_memory:"
            << MemoryTracker::GetInstance().GetAllocated<MemoryTracker::Category::kAll>() << '\n';
