@@ -8,7 +8,6 @@ add_library(
   data_structure_service.cc
   eviction_strategy.cc
   expire_strategy.cc)
-target_compile_features(service PRIVATE cxx_std_20)
 target_link_libraries(
   service
   PRIVATE base

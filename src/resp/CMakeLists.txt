@@ -4,6 +4,5 @@ add_library(
   resp_parser.cc
   replier.cc
   result.cc)
-target_compile_features(resp PRIVATE cxx_std_20)
 target_include_directories(resp PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(resp PRIVATE base uring glog::glog)
