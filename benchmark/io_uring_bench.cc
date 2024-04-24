@@ -117,7 +117,7 @@ void RingConsumeWaitCqes(io_uring* ring) {
             LOG(FATAL) << "io_uring_wait_cqes:" << strerror(-ret);
         }
         unsigned head;
-        size_t i{0};
+        uint32_t i{0};
         io_uring_for_each_cqe(ring, head, cqe) {
             if (++cnt == kRepeat) {
                 finished = true;
@@ -168,13 +168,12 @@ static void BenchRing(
   FuncType prepare_sqe) {
     for (auto _ : s) {
         std::thread t(ConsumeMethodFunction(consume_method), consume_ring);
-        const size_t submit_batch = s.range(0);
+        const auto submit_batch = static_cast<uint32_t>(s.range(0));
         // TODO: get future when thread finishing setup
         std::this_thread::sleep_for(std::chrono::seconds(3));
         const auto start = steady_clock::now();
         io_uring_sqe* sqe;
         uint64_t get_sqe_fail{0};
-        const auto initial_sleep = std::chrono::milliseconds{1};
         for (size_t i = 0; i < kRepeat; ++i) {
             while ((sqe = io_uring_get_sqe(submit_ring)) == nullptr) {
                 ++get_sqe_fail;
@@ -190,13 +189,13 @@ static void BenchRing(
                 }
             }
         }
-        const auto submission_finish = steady_clock::now();
+        [[maybe_unused]] const auto submission_finish = steady_clock::now();
         t.join();
         const auto processing_finish = steady_clock::now();
         const auto iteration_time = duration_cast<duration<double>>(processing_finish - start);
         s.SetIterationTime(iteration_time.count());
         s.counters["op/s"] = static_cast<double>(kRepeat) / iteration_time.count();
-        s.counters["sqe_fail"] += get_sqe_fail;
+        s.counters["sqe_fail"] += static_cast<double>(get_sqe_fail);
     }
 }
 

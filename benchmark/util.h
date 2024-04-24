@@ -82,10 +82,10 @@ Task<void> ShardTask(
 template<typename TaskType>
 static void BenchSharded(benchmark::State& s) {
     for (auto _ : s) {
-        const auto batch_size = s.range(0);
-        const auto num_client_executors = s.range(1);
-        const auto tasks_per_client = s.range(2);
-        const size_t repeat = s.range(3);
+        const auto batch_size = static_cast<uint32_t>(s.range(0));
+        const auto num_client_executors = static_cast<size_t>(s.range(1));
+        const auto tasks_per_client = static_cast<size_t>(s.range(2));
+        const size_t repeat = static_cast<size_t>(s.range(3));
         const bool sqpoll = s.range(5);
 
         RingConfig config{};
@@ -127,7 +127,7 @@ static void BenchSharded(benchmark::State& s) {
                 ce_index = 0;
             }
         }
-        const auto submission_finish = steady_clock::now();
+        [[maybe_unused]] const auto submission_finish = steady_clock::now();
         future.wait();
         const auto processing_finish = steady_clock::now();
 

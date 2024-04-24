@@ -16,9 +16,10 @@ static void SetBenchSetup(const benchmark::State& s) {
     if (keys.empty()) {
         GenerateRandomKeys(keys, kKeys, key_prefix, std::to_string(kKeys).size());
     }
-    value = std::string(s.range(4), 'x');
-    if (commands.size() < s.range(1)) {
-        commands.resize(s.range(1), std::vector<std::string_view>{set_str, set_str, value});
+    value = std::string(static_cast<size_t>(s.range(4)), 'x');
+    if (commands.size() < static_cast<size_t>(s.range(1))) {
+        commands.resize(
+          static_cast<size_t>(s.range(1)), std::vector<std::string_view>{set_str, set_str, value});
     }
 
     service = std::make_unique<DataStructureService>(&config, nullptr, &sys_clock);
@@ -49,8 +50,9 @@ struct EmptyTask {
     }
 };
 
-static void SetBenchTeardown(const benchmark::State& state) {
-    assert(service->Stats().commands_processed >= state.range(0) * state.range(1));
+static void SetBenchTeardown([[maybe_unused]] const benchmark::State& state) {
+    assert(
+      static_cast<int64_t>(service->Stats().commands_processed) >= state.range(0) * state.range(1));
 }
 
 BENCHMARK(BenchSharded<EmptyTask>)

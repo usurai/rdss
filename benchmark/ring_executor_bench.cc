@@ -48,7 +48,7 @@ static void BenchTransfer(benchmark::State& s) {
         auto f = p.get_future();
         RingExecutor executor;
         size_t cnt{0};
-        const size_t submit_batch = s.range(0);
+        const auto submit_batch = static_cast<uint32_t>(s.range(0));
         if (submit_batch == 0) {
             SetupRingSqpoll(&src_ring);
         } else {
@@ -61,7 +61,7 @@ static void BenchTransfer(benchmark::State& s) {
                                 || (i == kRepeat - 1);
             benchmark::DoNotOptimize(TransferTo(&src_ring, &executor, submit, cnt, p));
         }
-        const auto submission_finish = steady_clock::now();
+        [[maybe_unused]] const auto submission_finish = steady_clock::now();
         f.wait();
         const auto processing_finish = steady_clock::now();
         const auto iteration_time = duration_cast<duration<double>>(processing_finish - start);
