@@ -19,16 +19,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf-4")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wconversion")
-# TODO: what's the difference between WConversion and Wsign-conversion
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wsign-conversion")
-# TODO: conditional
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-# TODO: gtest seems doesn't work with msan
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer")
-# TODO: https://stackoverflow.com/questions/11496942/understanding-weffc
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weffc++")
+option(ENABLE_SANITIZERS "Enable sanitizers (address, leak, undefined)" OFF)
+if(ENABLE_SANITIZERS)
+  add_compile_options(-fsanitize=address,leak,undefined)
+  add_link_options(-fsanitize=address,leak,undefined)
+endif()
 
 add_subdirectory(src)
 add_subdirectory(test)

@@ -1,0 +1,61 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-17",
+                "CMAKE_CXX_COMPILER": "clang++-17"
+            }
+        },
+        {
+            "name": "release-type",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "debug-type",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "sanitize",
+            "hidden": true,
+            "cacheVariables": {
+                "ENABLE_SANITIZERS": "ON"
+            }
+        },
+        {
+            "name": "release",
+            "inherits": [
+                "base",
+                "release-type"
+            ]
+        },
+        {
+            "name": "debug",
+            "inherits": [
+                "base",
+                "debug-type",
+                "sanitize"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release",
+            "configurePreset": "release"
+        },
+        {
+            "name": "debug",
+            "configurePreset": "debug"
+        }
+    ]
+}
