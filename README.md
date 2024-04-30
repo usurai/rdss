@@ -16,7 +16,7 @@ rdss is an experimental project and not production-ready. Its current limitation
 
 ## API Coverage
 
-Refer to [link TODO:commands readme] for detailed information on supported commands.
+Refer to [rdss Commands](./src/service/commands/README.md) for detailed information on supported commands.
 
 ## Architecture
 
