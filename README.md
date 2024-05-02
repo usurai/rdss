@@ -101,7 +101,7 @@ build/release/src/rdss rdss.ini
 
 ### Configuration
 
-rdss provides configurations to tweak to program, see (TODO: link) for the details.
+rdss provides configurations to tweak the program, see [rdss.ini](./rdss.ini) for the detailed information.
 
 ## License
 

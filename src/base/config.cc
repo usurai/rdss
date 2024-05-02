@@ -41,38 +41,40 @@ void Config::ReadFromFile(const std::string& file_name) {
     tortellini::ini ini;
     in >> ini;
 
-    auto global_section = ini[""];
+    auto redis_section = ini["redis"];
 
-    port = static_cast<uint16_t>(global_section["port"] | 6379U);
+    port = static_cast<uint16_t>(redis_section["port"] | 6379U);
 
-    hz = global_section["hz"] | 10U;
+    hz = redis_section["hz"] | 10U;
 
-    maxclients = global_section["maxclients"] | 10000U;
+    maxclients = redis_section["maxclients"] | 10000U;
     if (maxclients == 0U) {
         maxclients = 10000U;
     }
 
-    maxmemory = global_section["maxmemory"] | maxmemory;
+    maxmemory = redis_section["maxmemory"] | maxmemory;
 
-    auto maxmemory_policy_str = global_section["maxmemory-policy"] | "noeviction";
+    auto maxmemory_policy_str = redis_section["maxmemory-policy"] | "noeviction";
     maxmemory_policy = MaxmemoryPolicyStrToEnum(maxmemory_policy_str);
 
-    maxmemory_samples = global_section["maxmemory-samples"] | 5U;
+    maxmemory_samples = redis_section["maxmemory-samples"] | 5U;
 
-    active_expire_cycle_time_percent = global_section["active_expire_cycle_time_percent"] | 25U;
-    active_expire_acceptable_stale_percent
-      = global_section["active_expire_acceptable_stale_percent"] | 10U;
-    active_expire_keys_per_loop = global_section["active_expire_keys_per_loop"] | 20U;
+    active_expire_cycle_time_percent = redis_section["active_expire_cycle_time_percent"] | 25U;
+    active_expire_acceptable_stale_percent = redis_section["active_expire_acceptable_stale_percent"]
+                                             | 10U;
+    active_expire_keys_per_loop = redis_section["active_expire_keys_per_loop"] | 20U;
 
-    client_executors = global_section["client_executors"] | 2U;
-    sqpoll = global_section["sqpoll"] | false;
-    max_direct_fds_per_exr = global_section["max_direct_fds_per_exr"] | 4096U;
+    auto rdss_section = ini["rdss"];
 
-    use_ring_buffer = global_section["use_ring_buffer"] | true;
+    client_executors = rdss_section["client_executors"] | 2U;
+    sqpoll = rdss_section["sqpoll"] | false;
+    max_direct_fds_per_exr = rdss_section["max_direct_fds_per_exr"] | 4096U;
 
-    wait_batch_size = global_section["wait_batch_size"] | 1U;
+    use_ring_buffer = rdss_section["use_ring_buffer"] | true;
 
-    submit_batch_size = global_section["submit_batch_size"] | 32U;
+    wait_batch_size = rdss_section["wait_batch_size"] | 1U;
+
+    submit_batch_size = rdss_section["submit_batch_size"] | 32U;
 }
 
 void Config::SanityCheck() {
@@ -100,6 +102,8 @@ std::string Config::ToString() const {
     stream << "active_expire_keys_per_loop:" << active_expire_keys_per_loop << ",";
     stream << "client_executors:" << client_executors << ", ";
     stream << "sqpoll:" << sqpoll << ", ";
+    stream << "max_direct_fds_per_exr:" << max_direct_fds_per_exr << ", ";
+    stream << "use_ring_buffer:" << use_ring_buffer << ", ";
     stream << "submit_batch_size:" << submit_batch_size << ", ";
     stream << "wait_batch_size:" << wait_batch_size;
 
