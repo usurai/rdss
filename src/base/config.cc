@@ -111,4 +111,11 @@ std::string Config::ToString() const {
     return stream.str();
 }
 
+// static
+Config Config::DisableSqpoll(const Config& src) {
+    Config result{src};
+    result.sqpoll = false;
+    return result;
+}
+
 } // namespace rdss

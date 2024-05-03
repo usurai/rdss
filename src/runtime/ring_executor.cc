@@ -21,6 +21,9 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, std::optional<si
             cpu_set_t cpuset;
             CPU_ZERO(&cpuset);
             CPU_SET(cpu.value(), &cpuset);
+            if (config_.sqpoll) {
+                CPU_SET(cpu.value() + 1, &cpuset);
+            }
             int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
             if (rc != 0) {
                 LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
@@ -153,7 +156,7 @@ void RingExecutor::Deactivate(io_uring* ring) {
 
 void RingExecutor::EventLoop() {
     LOG(INFO) << gettid() << " ring:" << tls_ring << " exr:" << tls_exr;
-    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{1'000'000}.count()};
+    __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{25'000'000}.count()};
     const auto wait_batch = std::max(1U, config_.wait_batch_size);
     const auto submit_batch = std::max(1U, config_.submit_batch_size);
     LOG(INFO) << name_ << " submit_batch: " << submit_batch << " wait_batch: " << wait_batch;

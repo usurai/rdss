@@ -37,6 +37,10 @@ struct Config {
     void SanityCheck();
 
     std::string ToString() const;
+
+    /// Clones a config based on the given one but turns off sqpoll. Used for creating I/O
+    /// executors.
+    static Config DisableSqpoll(const Config&);
 };
 
 } // namespace rdss

@@ -13,7 +13,11 @@ namespace rdss {
 Server::Server(Config config)
   : config_(std::move(config))
   , dss_executor_(RingExecutor::Create(0, "dss_exr", config_))
-  , client_executors_(RingExecutor::Create(config.client_executors, 1, "cli_exr_", config_))
+  , client_executors_(RingExecutor::Create(
+      config.client_executors,
+      (config_.sqpoll ? 2 : 1),
+      "cli_exr_",
+      Config::DisableSqpoll(config_)))
   , listener_(Listener::Create(config_.port, client_executors_[0].get()))
   , service_(&config_, this, nullptr)
   , shutdown_future_(service_.GetShutdownFuture()) {}
