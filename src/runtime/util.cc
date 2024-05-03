@@ -12,7 +12,7 @@ detail::RingTransfer ResumeOn(RingExecutor* exr) {
     auto src_ring = tls_ring != nullptr ? tls_ring
                                         : (tls_exr != nullptr ? tls_exr->Ring() : nullptr);
     assert(src_ring != nullptr);
-    return detail::RingTransfer{.ring = src_ring, .target_fd = exr->RingFD(), .submit = true};
+    return detail::RingTransfer{.ring = src_ring, .target_fd = exr->RingFD(), .submit = false};
 }
 
 void SetupInitBufRing(std::vector<std::unique_ptr<RingExecutor>>& exrs) {
