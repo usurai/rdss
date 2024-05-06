@@ -95,13 +95,13 @@ BENCHMARK(BenchSharded<PingPong>)
   ->Name("PingPong")
   ->UseManualTime()
   ->ArgsProduct({
-    {1, 1 << 4, 1 << 6, 1 << 8, 1 << 10}, // wait batch
-    {1, 2, 4},                            // shard number
+    {1, 1 << 4, 1 << 6, 1 << 8, 1 << 10}, // submit batch
+    {1, 2, 4, 8, 12, 14},                 // shard number
     {20, 100},                            // tasks per shard
     {4'000},                              // repeats within each task
     {0, 1},                               // sqpoll
   })
-  ->ArgNames({"wait_batch", "shards", "tasks", "repeat_per_task", "sqpoll"});
+  ->ArgNames({"submit_batch", "shards", "tasks", "repeat_per_task", "sqpoll"});
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);

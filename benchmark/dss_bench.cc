@@ -58,14 +58,14 @@ static void SetBenchTeardown([[maybe_unused]] const benchmark::State& state) {
 BENCHMARK(BenchSharded<EmptyTask>)
   ->UseManualTime()
   ->ArgsProduct({
-    {1},                       // wait batch
+    {1},                       // submit batch
     {2, 4, 8, 10, 12, 16, 24}, // num of client executor
     {20, 100},                 // connections per client
     {4'000'000},               // num of op per connection
     {8},                       // value size
     {0},                       // sqpoll
   })
-  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
+  ->ArgNames({"submit_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
 
 BENCHMARK(BenchSharded<SetTask>)
   ->Name("specific")
@@ -73,28 +73,28 @@ BENCHMARK(BenchSharded<SetTask>)
   ->Setup(SetBenchSetup)
   ->Teardown(SetBenchTeardown)
   ->ArgsProduct({
-    {1},       // wait batch
-    {8},       // num of client executor
-    {20},      // connections per client
-    {400'000}, // num of op per connection
-    {8},       // value size
-    {0},       // sqpoll
+    {32},                         // submit batch
+    {1, 2, 4, 8, 10, 12, 14, 16}, // num of client executor
+    {20},                         // connections per client
+    {400'000},                    // num of op per connection
+    {8},                          // value size
+    {0},                          // sqpoll
   })
-  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
+  ->ArgNames({"submit_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
 
 BENCHMARK(BenchSharded<SetTask>)
   ->UseManualTime()
   ->Setup(SetBenchSetup)
   ->Teardown(SetBenchTeardown)
   ->ArgsProduct({
-    {1},                       // wait batch
+    {1, 64, 512},              // submit batch
     {2, 4, 8, 10, 12, 16, 24}, // num of client executor
-    {20, 100},                 // connections per client
-    {4'000'000},               // num of op per connection
+    {20},                      // connections per client
+    {4'000},                   // num of op per connection
     {8},                       // value size
     {0},                       // sqpoll
   })
-  ->ArgNames({"wait_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
+  ->ArgNames({"submit_batch:", "cli_exrs", "conns_per_cli", "op_per_conn", "val_size", "sqpoll"});
 
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);

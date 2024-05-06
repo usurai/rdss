@@ -39,7 +39,7 @@ void SetupRingSqpoll(io_uring* ring);
 
 /// Defines a shard of task that should be executed within a coroutine: For each client_executor,
 /// remainings[shard_index] tasks are assigned to them. First transfer the execution to
-/// client_executors[shard_index] using main_executor, optionally executes some logic that is
+/// client_executors[shard_index] using tls_ring, optionally executes some logic that is
 /// sharded. After that, transfer execution to service_executor to execute the logic should be
 /// single-threaded. Then transfer back the execution back to client_executors[shard_index]. Repeats
 /// this process for 'repeat' times. Then decrements remainings[shard_index] by one, if it's zero
@@ -49,7 +49,6 @@ void SetupRingSqpoll(io_uring* ring);
 template<typename ServiceFunc>
 Task<void> ShardTask(
   ServiceFunc service_func,
-  RingExecutor* main_executor,
   RingExecutor* service_executor,
   std::vector<std::unique_ptr<RingExecutor>>& client_executors,
   size_t shard_index,
@@ -90,16 +89,18 @@ static void BenchSharded(benchmark::State& s) {
 
         RingConfig config{};
         config.sqpoll = sqpoll;
-        config.wait_batch_size = batch_size;
+        config.submit_batch_size = batch_size;
 
-        RingExecutor main("main", config);
-        tls_exr = &main;
-        RingExecutor service_executor("bench-service", config, 1);
+        io_uring ring;
+        io_uring_queue_init(1024, &ring, 0);
+        tls_ring = &ring;
+
+        RingExecutor service_executor("bench-service", config, 0);
         auto client_executors = RingExecutor::Create(
           num_client_executors,
           2,
           "cli_exr_",
-          Config{.sqpoll = sqpoll, .wait_batch_size = static_cast<uint32_t>(batch_size)});
+          Config{.submit_batch_size = static_cast<uint32_t>(batch_size)});
         std::vector<size_t> remaining_tasks(num_client_executors, 0);
         const auto total_tasks = num_client_executors * tasks_per_client;
         for (size_t i = 0; i < num_client_executors; ++i) {
@@ -115,7 +116,6 @@ static void BenchSharded(benchmark::State& s) {
         std::atomic<size_t> remaining_shards = num_client_executors;
         for (size_t i = 0; i < total_tasks; ++i) {
             TaskType()(
-              &main,
               &service_executor,
               client_executors,
               ce_index,
@@ -135,16 +135,16 @@ static void BenchSharded(benchmark::State& s) {
         s.SetIterationTime(iteration_time.count());
         s.counters["op/s"] = static_cast<double>(total_tasks * repeat) / iteration_time.count();
 
-        main.Deactivate();
         service_executor.Deactivate();
         for (auto& e : client_executors) {
             e->Deactivate();
         }
-        main.Shutdown();
         service_executor.Shutdown();
         for (auto& e : client_executors) {
             e->Shutdown();
         }
+
+        io_uring_queue_exit(&ring);
     }
 }
 
