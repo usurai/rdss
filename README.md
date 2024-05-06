@@ -65,7 +65,13 @@ A simplified view of threading model is as follow:
 
 ## Benchmark
 
-[TODO]
+A set of benchmarks conducted on rdss reveals several notable findings:
+
+- In smaller GET workloads, rdss achieves approximately 1M ops/sec with 13 I/O threads. However, this throughput diminishes as the keyspace expands.
+- SET performance notably lags behind GET, highlighting the hash table's write performance as the primary bottleneck.
+- Each I/O thread maintains around 100K ops/sec until reaching 8 threads, after which throughput decreases to 85K ops/sec with 12 threads. This decline is attributed to contention at the service executor's completion queue lock.
+
+For the detailed infomation, see [Benchmarks](./doc/benchmarking.md).
 
 ## Getting Started
 
