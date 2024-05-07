@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "command_registry.h"
 
 #include "commands/client_commands.h"

@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "replier.h"
 
 #include "base/buffer.h"

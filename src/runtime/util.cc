@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "util.h"
 
 #include <future>

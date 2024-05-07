@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "io/async_operation_processor.h"
 
 #include "base/config.h"

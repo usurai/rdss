@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "key_commands.h"
 
 #include "service/command.h"

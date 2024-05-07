@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "base/config.h"
 #include "server.h"
 #include <cstring>

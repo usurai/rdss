@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "config.h"
 
 #include "external/tortellini.hh"

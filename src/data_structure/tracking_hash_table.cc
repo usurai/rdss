@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "data_structure/tracking_hash_table.h"
 
 #include "glog/logging.h"

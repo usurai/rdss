@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "expire_strategy.h"
 
 #include "base/config.h"

@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "data_structure_service.h"
 
 #include "base/config.h"

@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "misc_commands.h"
 
 #include "base/memory.h"

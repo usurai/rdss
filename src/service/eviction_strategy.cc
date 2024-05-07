@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "eviction_strategy.h"
 
 #include "data_structure_service.h"

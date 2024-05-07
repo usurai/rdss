@@ -1,3 +1,5 @@
+// Copyright (c) usurai.
+// Licensed under the MIT license.
 #include "ring_executor.h"
 
 #include "constants.h" // For kIOGenericBufferSize
