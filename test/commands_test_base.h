@@ -89,7 +89,7 @@ protected:
         if (entry != nullptr) {
             return (entry->value <= clock_.Now());
         }
-        return false;
+        return true;
     }
 
     void ExpectOk(Result result) { EXPECT_EQ(result.type, Result::Type::kOk); }
