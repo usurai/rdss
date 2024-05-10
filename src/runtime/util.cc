@@ -6,7 +6,7 @@
 
 namespace rdss {
 
-detail::RingTransfer ResumeOn(RingExecutor* exr) {
+detail::RingTransfer ResumeOn(RingExecutor* exr, bool submit) {
     if (exr == tls_exr) {
         return detail::RingTransfer{.no_transfer = true};
     }
@@ -14,7 +14,7 @@ detail::RingTransfer ResumeOn(RingExecutor* exr) {
     auto src_ring = tls_ring != nullptr ? tls_ring
                                         : (tls_exr != nullptr ? tls_exr->Ring() : nullptr);
     assert(src_ring != nullptr);
-    return detail::RingTransfer{.ring = src_ring, .target_fd = exr->RingFD(), .submit = false};
+    return detail::RingTransfer{.ring = src_ring, .target_fd = exr->RingFD(), .submit = submit};
 }
 
 void SetupInitBufRing(std::vector<std::unique_ptr<RingExecutor>>& exrs) {

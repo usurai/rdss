@@ -17,8 +17,10 @@ inline auto WaitFor(RingExecutor* exr, std::chrono::nanoseconds duration) {
 /// Returns an awaitable that suspends the execution of the current coroutine and resumes it on the
 /// specified executor, denoted as 'exr'. Internally, it leverages RingTransfer for this purpose. If
 /// the current execution is already on the specified executor ('exr'), the execution will not be
-/// suspended.
+/// suspended. If 'submit' is set, it will force the sending ring to submit the SQE, this is for
+/// non-executor ring. For normal executors whoes worker thread is submitting the queue timely, this
+/// might reduce the batching.
 /// Note: This must be invoked on the thread with either 'tls_ring' or 'tls_exr' set.
-detail::RingTransfer ResumeOn(RingExecutor* exr);
+detail::RingTransfer ResumeOn(RingExecutor* exr, bool submit = false);
 
 } // namespace rdss
