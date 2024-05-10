@@ -71,4 +71,16 @@ int CreateListeningSocket(uint16_t port) {
     return sock;
 }
 
+void SetThreadAffinity(std::vector<size_t> cpus) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (auto cpu : cpus) {
+        CPU_SET(cpu, &cpuset);
+    }
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
+    }
+}
+
 } // namespace rdss

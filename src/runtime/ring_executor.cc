@@ -3,6 +3,7 @@
 #include "ring_executor.h"
 
 #include "constants.h" // For kIOGenericBufferSize
+#include "sys/util.h"
 
 #include <cassert>
 #include <future>
@@ -17,19 +18,10 @@ RingExecutor::RingExecutor(std::string name, RingConfig config, std::optional<si
     auto future = promise.get_future();
 
     thread_ = std::thread([this, &promise, cpu = id]() {
-        // Create a cpu_set_t object representing a set of CPUs. Clear it and mark
-        // only CPU i as set.
         if (cpu.has_value()) {
-            cpu_set_t cpuset;
-            CPU_ZERO(&cpuset);
-            CPU_SET(cpu.value(), &cpuset);
-            if (config_.sqpoll) {
-                CPU_SET(cpu.value() + 1, &cpuset);
-            }
-            int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-            if (rc != 0) {
-                LOG(FATAL) << "Error calling pthread_setaffinity_np: " << rc;
-            }
+            SetThreadAffinity(
+              (config_.sqpoll ? std::vector<size_t>{cpu.value(), cpu.value() + 1}
+                              : std::vector<size_t>{cpu.value()}));
         }
 
         // auto ret = pthread_setname_np(pthread_self(), name_.c_str());
@@ -157,11 +149,9 @@ void RingExecutor::Deactivate(io_uring* ring) {
 }
 
 void RingExecutor::EventLoop() {
-    LOG(INFO) << gettid() << " ring:" << tls_ring << " exr:" << tls_exr;
     __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = std::chrono::nanoseconds{25'000'000}.count()};
     const auto wait_batch = std::max(1U, config_.wait_batch_size);
     const auto submit_batch = std::max(1U, config_.submit_batch_size);
-    LOG(INFO) << name_ << " submit_batch: " << submit_batch << " wait_batch: " << wait_batch;
 
     io_uring_cqe* cqe;
     while (active_.load(std::memory_order_relaxed)) {
