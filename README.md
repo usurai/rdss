@@ -3,16 +3,16 @@
 rdss is an experimental in-memory key-value server on Linux, it offers the following features:
 
 - It supports a subset of Redis' `String` commands, and utilizes the RESP wire protocol, making it compatible with some of Redis clients.
-- It's able to thread-scale the network I/O and protocol parsing with the help of the asynchronous library(TODO: link to io readme) that leverages io_uring and c++ coroutine efficiently.
+- It's able to thread-scale the network I/O and protocol parsing with the help of the [asynchronous library](.src/io/) that leverages io_uring and c++ coroutine efficiently.
 - Supports Redis' `maxmemory` directive by implementing key eviction, employing approximated LRU and randomized eviction policies to manage memory usage effectively.
 
 ## Limitations
 
 rdss is an experimental project and not production-ready. Its current limitations include:
 
-- Lack of Persistence: RDSS operates purely in-memory, lacking any persistence mechanism. Consequently, data loss occurs if the program crashes or the node fails.
-- Single-Node Limitation: RDSS functions solely as a single-node program, devoid of replication support or a cluster mode.
-- Limited Multi-Threading Benefits: Although RDSS supports multi-threaded I/O, its core, the hash table, remains single-threaded. As a result, scaling beyond 13 threads yields diminishing benefits.
+- Lack of Persistence: rdss operates purely in-memory, lacking any persistence mechanism. Consequently, data loss occurs if the program crashes or the node fails.
+- Single-Node Limitation: rdss functions solely as a single-node program, devoid of replication support or a cluster mode.
+- Limited Multi-Threading Benefits: Although rdss supports multi-threaded I/O, its core, the hash table, remains single-threaded. As a result, scaling beyond 13 threads yields diminishing benefits.
 
 ## API Coverage
 
